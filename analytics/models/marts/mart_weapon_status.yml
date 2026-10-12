@@ -39,19 +39,19 @@ unit_tests:
       - input: ref('fct_eval_runs')
         rows:
           # earned: 0.92 local, 0.95 cloud
-          - {stage: s1, role: megaman, run_id: s1-a, is_full_run: true, fixture_pass_rate: 0.92, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
+          - {stage: s1, role: mega-man, run_id: s1-a, is_full_run: true, fixture_pass_rate: 0.92, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
           - {stage: s1, role: bass, run_id: s1-b, is_full_run: true, fixture_pass_rate: 0.95, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
           # below threshold: latest full run 0.80; a later filtered 1.0 must not count
-          - {stage: s2, role: megaman, run_id: s2-a, is_full_run: true, fixture_pass_rate: 0.80, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
-          - {stage: s2, role: megaman, run_id: s2-f, is_full_run: false, fixture_pass_rate: 1.0, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-02 00:00:00"}
+          - {stage: s2, role: mega-man, run_id: s2-a, is_full_run: true, fixture_pass_rate: 0.80, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
+          - {stage: s2, role: mega-man, run_id: s2-f, is_full_run: false, fixture_pass_rate: 1.0, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-02 00:00:00"}
           - {stage: s2, role: bass, run_id: s2-b, is_full_run: true, fixture_pass_rate: 0.85, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
           # gap too wide: 0.91 local vs 1.0 cloud
-          - {stage: s3, role: megaman, run_id: s3-a, is_full_run: true, fixture_pass_rate: 0.91, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
+          - {stage: s3, role: mega-man, run_id: s3-a, is_full_run: true, fixture_pass_rate: 0.91, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
           - {stage: s3, role: bass, run_id: s3-b, is_full_run: true, fixture_pass_rate: 1.0, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
           # no baseline
-          - {stage: s4, role: megaman, run_id: s4-a, is_full_run: true, fixture_pass_rate: 0.99, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
+          - {stage: s4, role: mega-man, run_id: s4-a, is_full_run: true, fixture_pass_rate: 0.99, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
           # the stage's own bar overrides the vars: 0.86 clears a 0.85 floor, 0.12 gap fits 0.15
-          - {stage: s5, role: megaman, run_id: s5-a, is_full_run: true, fixture_pass_rate: 0.86, bar_min_fixture_rate: 0.85, bar_max_gap: 0.15, started_at: "2026-10-01 00:00:00"}
+          - {stage: s5, role: mega-man, run_id: s5-a, is_full_run: true, fixture_pass_rate: 0.86, bar_min_fixture_rate: 0.85, bar_max_gap: 0.15, started_at: "2026-10-01 00:00:00"}
           - {stage: s5, role: bass, run_id: s5-b, is_full_run: true, fixture_pass_rate: 0.98, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
     expect:
       rows:

@@ -18,7 +18,7 @@ clean-targets:
 
 vars:
   # Defaults for stages without a `bar:` (and runs made before bars were recorded).
-  # A stage's weapon is earned when the local generalist (role megaman) clears this
+  # A stage's weapon is earned when the local generalist (role mega-man) clears this
   # fixture pass rate (every sample of a fixture must pass) on its latest run...
   weapon_min_fixture_rate: 0.9
   # ...and trails the cloud baseline (role bass) by no more than this.

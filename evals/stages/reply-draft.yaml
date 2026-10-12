@@ -4,7 +4,7 @@
 # as-is, escalating to Auto when the message asks for work or an undecided decision.
 # Everything here is synthetic (nova, quill, ledger, Sam); see reply-draft.memory.md.
 #
-# Run:  just eval reply-draft megaman
+# Run:  just eval reply-draft mega-man
 stage: reply-draft
 robot: Rush
 memory_file: reply-draft.memory.md

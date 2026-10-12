@@ -72,7 +72,7 @@ uv run lab rush escalate <id>     # hand to Auto (`claude -p`); result stays loc
 Eval results:
 
 ```bash
-just eval reply-draft megaman 3   # fight; results land in var/evals, then var/lab.duckdb
+just eval reply-draft mega-man 3   # fight; results land in var/evals, then var/lab.duckdb
 just analytics                    # re-ingest var/evals and dbt build the marts
 just runs                         # recent runs from marts.fct_eval_runs
 ```

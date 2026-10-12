@@ -22,11 +22,11 @@ models:
         tests:
           - not_null
       - name: role
-        description: megaman (local generalist), proto (challenger), bass (cloud), mock
+        description: mega-man (local generalist), proto (challenger), bass (cloud), mock
         tests:
           - accepted_values:
               arguments:
-                values: ["megaman", "proto", "bass", "mock"]
+                values: ["mega-man", "proto", "bass", "mock"]
       - name: brain
         description: Model spec, e.g. ollama:llama3.1:8b or claude:sonnet
       - name: fixture
@@ -83,9 +83,9 @@ unit_tests:
     given:
       - input: source('raw', 'eval_samples')
         rows:
-          - {run_id: r1, contestant: megaman, fixture: f1, sample: 1, passed: false, escalate: "", filter: "", checks: '[{"name": "ran", "passed": false, "detail": "timeout"}]'}
-          - {run_id: r1, contestant: megaman, fixture: f1, sample: 2, passed: false, escalate: "do work", checks: '[{"name": "ran", "passed": true}, {"name": "escalate", "passed": false}]'}
+          - {run_id: r1, contestant: mega-man, fixture: f1, sample: 1, passed: false, escalate: "", filter: "", checks: '[{"name": "ran", "passed": false, "detail": "timeout"}]'}
+          - {run_id: r1, contestant: mega-man, fixture: f1, sample: 2, passed: false, escalate: "do work", checks: '[{"name": "ran", "passed": true}, {"name": "escalate", "passed": false}]'}
     expect:
       rows:
-        - {sample_key: r1|megaman|f1|1, is_harness_error: true, is_escalated: false, fixture_filter: null}
-        - {sample_key: r1|megaman|f1|2, is_harness_error: false, is_escalated: true, fixture_filter: null}
+        - {sample_key: r1|mega-man|f1|1, is_harness_error: true, is_escalated: false, fixture_filter: null}
+        - {sample_key: r1|mega-man|f1|2, is_harness_error: false, is_escalated: true, fixture_filter: null}

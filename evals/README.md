@@ -9,9 +9,9 @@ Bass at a fraction of the cost, he gets the weapon: the task class joins his `we
 ## Run
 
 ```bash
-just eval                                        # reply-draft, megaman, 3 samples per fixture
-just eval reply-draft megaman,proto,bass 3       # full fight
-just eval reply-draft megaman 3 -filter work,id  # categories or fixture id substrings
+just eval                                         # reply-draft, mega-man, 3 samples per fixture
+just eval reply-draft mega-man,proto,bass 3       # full fight
+just eval reply-draft mega-man 3 -filter work,id  # categories or fixture id substrings
 ```
 
 Real models run **locally only**, one model at a time on a laptop (`-concurrency 1`, the

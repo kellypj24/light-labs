@@ -183,7 +183,7 @@ func TestCommittedStages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"megaman", "proto", "proto-coder", "bass", "mock"} {
+	for _, name := range []string{"mega-man", "proto", "proto-coder", "bass", "mock"} {
 		if _, ok := cs[name]; !ok {
 			t.Errorf("contestants.yaml is missing %s", name)
 		}

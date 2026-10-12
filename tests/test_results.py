@@ -8,8 +8,8 @@ from light_labs.evals import results
 
 def sample(fixture, passed, n=1, **extra):
     return {
-        "contestant": "megaman",
-        "role": "megaman",
+        "contestant": "mega-man",
+        "role": "mega-man",
         "brain": "ollama:llama3.1:8b",
         "stage": "reply-draft",
         "fixture": fixture,

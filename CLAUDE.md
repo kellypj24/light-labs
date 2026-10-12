@@ -23,4 +23,8 @@ Start with `lab-workflow` before any commit, push or PR.
   staging → intermediate → marts, sqlfluff rules from there (duckdb dialect). The marts
   decide weapons, so robot-written models never replace them without PJ's merge, and a
   robot is never scored by models it wrote.
+- Naming: display names are canon ("Mega Man", "Guts Man"). Names of things we pick are
+  kebab-case (stages, skills, contestants, roles, commands, branches: `mega-man`,
+  `dbt-model`); code and keys inside things are snake_case (Python, SQL, fixture ids, data
+  fields: `guts_man`, `select_harness_errors`, `run_id`).
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.

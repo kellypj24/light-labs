@@ -2,7 +2,7 @@
 
 Each sample:
 1. `prepare()` builds the analytics project once over a seeded synthetic dataset (never
-   the lab's real results) and caches the DuckDB file, keyed by the project's contents.
+   the lab's real results) and caches the DuckDB file, keyed by this file and the project.
 2. The robot gets the task and the upstream models' columns, and writes the model's SQL.
 3. A throwaway copy of the project and database gets two models: the candidate
    (`<target>`) and the fixture's reference (`ref__<target>`). `dbt build` builds both.
@@ -27,7 +27,6 @@ from light_labs import config
 
 PROJECT = config.REPO / "analytics"
 CACHE = config.VAR / "evals" / "cache"
-DATA_VERSION = "3"  # bump when synthetic_samples() changes
 
 # DuckDB may not read or write files outside its database during a fight: candidate SQL
 # comes from a model.
@@ -73,22 +72,22 @@ STAGES = {
 }
 
 CONTESTANTS = {
-    "megaman": ("megaman", "ollama:llama3.1:8b", 1.4, 0.0),
+    "mega-man": ("mega-man", "ollama:llama3.1:8b", 1.4, 0.0),
     "proto": ("proto", "ollama:gemma3:4b", 0.8, 0.0),
     "bass": ("bass", "claude:sonnet", 4.3, 0.0075),
 }
 
 # (stage, day, contestants with samples per fixture, commit, dirty, filter, base pass rate)
 RUNS = [
-    ("reply-draft", 1, {"megaman": 3, "proto": 3}, None, None, None, 0.62),
-    ("reply-draft", 2, {"megaman": 3, "bass": 1}, "a1b2c3d", True, None, 0.75),
-    ("reply-draft", 3, {"megaman": 2}, "b2c3d4e", False, "work", 0.70),
-    ("reply-draft", 4, {"megaman": 3, "proto": 3, "bass": 1}, "c3d4e5f", False, None, 0.86),
-    ("summarize", 2, {"megaman": 3, "proto": 3}, "a1b2c3d", True, None, 0.55),
-    ("summarize", 5, {"megaman": 3, "bass": 1}, "d4e5f6a", False, None, 0.80),
+    ("reply-draft", 1, {"mega-man": 3, "proto": 3}, None, None, None, 0.62),
+    ("reply-draft", 2, {"mega-man": 3, "bass": 1}, "a1b2c3d", True, None, 0.75),
+    ("reply-draft", 3, {"mega-man": 2}, "b2c3d4e", False, "work", 0.70),
+    ("reply-draft", 4, {"mega-man": 3, "proto": 3, "bass": 1}, "c3d4e5f", False, None, 0.86),
+    ("summarize", 2, {"mega-man": 3, "proto": 3}, "a1b2c3d", True, None, 0.55),
+    ("summarize", 5, {"mega-man": 3, "bass": 1}, "d4e5f6a", False, None, 0.80),
 ]
 
-SKILL = {"megaman": 0.0, "proto": -0.25, "bass": 0.3}
+SKILL = {"mega-man": 0.0, "proto": -0.25, "bass": 0.3}
 HARDNESS = {"chat": 0.1, "question": 0.05, "work": -0.1, "decision": -0.2, "short": 0.05}
 
 
@@ -176,7 +175,8 @@ def _sample(rng, p, category, latency, cost, can_error=True):
 
 
 def _fingerprint():
-    h = hashlib.sha256(DATA_VERSION.encode())
+    """Cache key: this file (the synthetic data) and the project's models and macros."""
+    h = hashlib.sha256(Path(__file__).read_bytes())
     for path in sorted(PROJECT.rglob("*")):
         if path.is_file() and path.suffix in (".sql", ".yml") and "target" not in path.parts:
             h.update(str(path.relative_to(PROJECT)).encode())
