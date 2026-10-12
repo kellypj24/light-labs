@@ -147,7 +147,7 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(clean('"Hi alpha."'), "Hi alpha.")
 
     def test_clean_strips_prompt_echo(self):
-        # Shapes seen in the first Rock run on reply-draft.
+        # Shapes seen in the first Mega Man run on reply-draft.
         self.assertEqual(
             clean("Never sign as Sam.\nYou are writing as pj_agent.\nHappy to help, nova."),
             "Happy to help, nova.",

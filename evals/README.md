@@ -1,21 +1,21 @@
 # Boss fights
 
 Each task class a robot does is a **stage**. A stage has fixtures (inputs plus what a good
-output must do), and **contestants** fight it: Rock (the local model a robot runs on), Proto
-Man (a challenger local model), Bass (the cloud baseline). When Rock gets close enough to
+output must do), and **contestants** fight it: Mega Man (the local model a robot runs on), Proto
+Man (a challenger local model), Bass (the cloud baseline). When Mega Man gets close enough to
 Bass at a fraction of the cost, he gets the weapon: the task class joins his `weapons` in
 `dln.json` and that work stays local.
 
 ## Run
 
 ```bash
-just eval                                  # reply-draft, rock, 3 samples per fixture
-just eval reply-draft rock,proto,bass 3    # full fight
-just eval reply-draft rock 3 -filter work  # one category (or fixture id substring)
+just eval                                  # reply-draft, megaman, 3 samples per fixture
+just eval reply-draft megaman,proto,bass 3    # full fight
+just eval reply-draft megaman 3 -filter work  # one category (or fixture id substring)
 ```
 
 Real models run **locally only**, one model at a time on a laptop (`-concurrency 1`, the
-default). A full Rock run of reply-draft is 41 fixtures x 3 samples: about 10-15 minutes of
+default). A full Mega Man run of reply-draft is 41 fixtures x 3 samples: about 10-15 minutes of
 sustained GPU on an M1. Bass uses the `claude` CLI and costs subscription usage or API
 spend; the report shows it.
 

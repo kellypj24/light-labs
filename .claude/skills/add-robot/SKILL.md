@@ -9,7 +9,7 @@ A robot has one job. Check that no existing robot already does it before adding 
 1. **Number it.** Take the next free number in `dln.json` (ours start at DLN-100; canon
    numbers are left alone). Name it after a Mega Man character that fits the job: support
    robots (Rush, Beat, Roll, Auto, Eddie) for infrastructure, robot masters for task
-   specialists. Rock, Proto Man and Bass are reserved for the eval loop (see README).
+   specialists. Mega Man, Proto Man and Bass are reserved for the eval loop (see README).
 2. **Register it** in `dln.json`: `dln`, `name`, `role`, `job`, `model` (`ollama:<tag>`),
    `actor` if it posts anywhere, `status: "active"`, `commissioned` date, `skills: []`,
    `weapons: []`.

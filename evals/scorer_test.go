@@ -169,7 +169,7 @@ func TestCommittedStages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"rock", "proto", "bass", "mock"} {
+	for _, name := range []string{"megaman", "proto", "bass", "mock"} {
 		if _, ok := cs[name]; !ok {
 			t.Errorf("contestants.yaml is missing %s", name)
 		}

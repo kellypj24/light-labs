@@ -30,8 +30,8 @@ evals-check:
 
 # Boss fight with real models. Runs locally only; one at a time on a laptop.
 # Results land in var/evals/*.jsonl and are loaded into var/lab.duckdb.
-# just eval reply-draft rock,bass 3
-eval stage="reply-draft" contestants="rock" samples="3" *args="":
+# just eval reply-draft megaman,bass 3
+eval stage="reply-draft" contestants="megaman" samples="3" *args="":
     status=0; go -C evals run . -stage {{stage}} -contestants {{contestants}} -samples {{samples}} {{args}} || status=$?; uv run --locked lab evals ingest > /dev/null; exit $status
 
 # Recent eval runs from var/lab.duckdb
