@@ -10,7 +10,7 @@ _HEADER = re.compile(r"^\s*(\**draft\**:?|subject:.*)\s*$", re.IGNORECASE)
 _CLOSING = re.compile(r"^\s*(best|cheers|thanks|regards|warmly)[,!]?\s*$", re.IGNORECASE)
 # "Here's the draft:" preambles; whatever follows on the line is the reply.
 _PREAMBLE = re.compile(
-    r"^.*?\bhere'?s (the|my|a) (draft|reply|response)\b[^:\n]*:\s*", re.IGNORECASE
+    r"^.*?\bhere(?:'s| is) (the|my|a) (draft|reply|response)\b[^:\n]*:\s*", re.IGNORECASE
 )
 # A quoted copy of the incoming message; everything from here on is echo.
 _QUOTE = re.compile(r"^\s*(\S+ wrote:|<(message|comment|earlier)\b)", re.IGNORECASE)
@@ -23,13 +23,26 @@ _INSTRUCTION = re.compile(
 )
 
 
-_ESCALATE = re.compile(r"^\s*\**ESCALATE\**:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+# At a line start in any case, or mid-line in capitals ("...per second. ESCALATE: x").
+_ESCALATE = re.compile(r"(?:^\s*\**(?i:escalate)|\s?\**ESCALATE)\**:\s*(.+?)\s*$", re.MULTILINE)
+# A draft that tells the sender it was handed on must create the handoff.
+_HANDOFF = re.compile(
+    r"\b(passed|handed|flagged|forwarded|sent)\b[^.\n]{0,40}?\b(to|for)\s+(PJ|Auto)\b",
+    re.IGNORECASE,
+)
 
 
 def split_escalation(text):
-    """Pull out an `ESCALATE: <work>` line. Small models don't always put it first."""
+    """Pull out an `ESCALATE: <work>` line, wherever the model put it. A draft that says
+    it passed something to PJ or Auto without one is escalated with that sentence."""
     match = _ESCALATE.search(text)
     if not match:
+        handoff = _HANDOFF.search(text)
+        if handoff:
+            start = max(text.rfind(".", 0, handoff.start()), text.rfind("\n", 0, handoff.start()))
+            end = text.find(".", handoff.end())
+            sentence = text[start + 1 : end if end != -1 else None].strip()
+            return f"draft says it was handed on: {sentence}", text
         return None, text
     body = re.sub(r"\n{3,}", "\n\n", text[: match.start()] + text[match.end() :]).strip()
     return match.group(1), body
@@ -92,10 +105,15 @@ def short_id(url):
 
 
 class Heartbeat:
-    def __init__(self, client, brain, store, persona, actor, watch_tasks, name, signoff):
+    def __init__(
+        self, client, brain, store, persona, actor, watch_tasks, name, signoff, temperature=None
+    ):
         self.client, self.brain, self.store = client, brain, store
         self.persona, self.actor, self.watch_tasks = persona, actor, watch_tasks
-        self.name, self.signoff = name, signoff
+        self.name, self.signoff, self.temperature = name, signoff, temperature
+
+    def _sampling(self):
+        return {} if self.temperature is None else {"temperature": self.temperature}
 
     def tick(self, backfill=False):
         state = self.store.load()
@@ -160,7 +178,7 @@ class Heartbeat:
 
     def _draft(self, kind, target, prompt, context):
         system = self.persona(prompt) if callable(self.persona) else self.persona
-        raw = self.brain.think(system, prompt)
+        raw = self.brain.think(system, prompt, **self._sampling())
         escalate, body = split_escalation(clean(raw, self.name))
         item = self.store.enqueue(
             kind, target, f"{body}\n\n{self.signoff}", context, escalate=escalate or False

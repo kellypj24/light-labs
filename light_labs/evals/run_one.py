@@ -35,7 +35,9 @@ def reply_draft(brain, memory, inp):
         user = comment_prompt(rush.NAME, inp.get("title", ""), earlier, inp["sender"], content)
     else:
         user = reply_prompt(rush.NAME, inp["sender"], inp.get("summary"), content)
-    raw = brain.think(rush.system_prompt(user, memory_text=memory), user)
+    raw = brain.think(
+        rush.system_prompt(user, memory_text=memory), user, temperature=rush.TEMPERATURE
+    )
     escalate, body = split_escalation(clean(raw, rush.NAME))
     return {"raw": raw, "draft": body, "escalate": escalate}
 

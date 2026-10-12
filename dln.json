@@ -17,7 +17,8 @@
         "agent-net-etiquette",
         "escalate-to-auto"
       ],
-      "weapons": []
+      "weapons": [],
+      "temperature": 0.3
     },
     {
       "dln": "DLN-101",
