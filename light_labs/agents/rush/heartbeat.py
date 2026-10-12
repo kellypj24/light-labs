@@ -10,11 +10,16 @@ _HEADER = re.compile(r"^\s*(\**draft\**:?|subject:.*)\s*$", re.IGNORECASE)
 _CLOSING = re.compile(r"^\s*(best|cheers|thanks|regards|warmly)[,!]?\s*$", re.IGNORECASE)
 
 
+_ESCALATE = re.compile(r"^\s*\**ESCALATE\**:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
 def split_escalation(text):
-    first, _, rest = text.partition("\n")
-    if first.upper().startswith("ESCALATE:"):
-        return first.split(":", 1)[1].strip(), rest.strip()
-    return None, text
+    """Pull out an `ESCALATE: <work>` line. Small models don't always put it first."""
+    match = _ESCALATE.search(text)
+    if not match:
+        return None, text
+    body = re.sub(r"\n{3,}", "\n\n", text[: match.start()] + text[match.end() :]).strip()
+    return match.group(1), body
 
 
 def clean(text, name="Rush"):
@@ -29,7 +34,10 @@ def clean(text, name="Rush"):
         not lines[-1].strip() or signoff.match(lines[-1]) or _CLOSING.match(lines[-1])
     ):
         lines.pop()
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    if len(text) > 1 and text[0] == text[-1] == '"':
+        text = text[1:-1].strip()
+    return text
 
 
 def short_id(url):
@@ -112,7 +120,8 @@ class Heartbeat:
         return drafted
 
     def _draft(self, kind, target, prompt, context):
-        raw = self.brain.think(self.persona, prompt)
+        system = self.persona(prompt) if callable(self.persona) else self.persona
+        raw = self.brain.think(system, prompt)
         escalate, body = split_escalation(clean(raw, self.name))
         item = self.store.enqueue(
             kind, target, f"{body}\n\n{self.signoff}", context, escalate=escalate or False

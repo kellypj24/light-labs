@@ -1,4 +1,4 @@
-"""lab roster | lab rush {tick,queue,show,approve,reject,escalate}"""
+"""lab roster | lab skills | lab rush {tick,queue,show,approve,reject,escalate}"""
 
 import argparse
 import json
@@ -16,6 +16,19 @@ def cmd_roster(args):
         print(f"{r['dln']}  {r['name']:8} {r['status']:9} {r['model']:22} {r['job'][:60]}")
 
 
+def cmd_skills(args):
+    from light_labs.core import skills
+
+    carriers = {}
+    for r in config.roster():
+        for name in r.get("skills", []):
+            carriers.setdefault(name, []).append(r["name"])
+    for s in skills.discover().values():
+        who = ",".join(s.audience) or "-"
+        used = ",".join(carriers.get(s.name, [])) or "-"
+        print(f"{s.name:22} {who:12} load={s.load:9} robots={used:10} {s.description[:50]}")
+
+
 def rush_tick(args, store, rush):
     from light_labs.agents.rush.heartbeat import Heartbeat
 
@@ -23,7 +36,7 @@ def rush_tick(args, store, rush):
         Client(),
         Brain(rush.MODEL),
         store,
-        rush.system_prompt(),
+        rush.system_prompt,  # built per message so triggered skills load
         actor=rush.ACTOR,
         watch_tasks=rush.WATCH_TASKS,
         name=rush.NAME,
@@ -85,6 +98,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
+    sub.add_parser("skills", help="list skills, their audience and which robots carry them")
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
@@ -95,8 +109,8 @@ def main(argv=None):
         rcmd.add_parser(name).add_argument("id")
     args = p.parse_args(argv)
 
-    if args.robot == "roster":
-        cmd_roster(args)
+    if args.robot in ("roster", "skills"):
+        globals()[f"cmd_{args.robot}"](args)
         return
     from light_labs.agents import rush
 

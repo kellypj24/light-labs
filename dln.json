@@ -10,7 +10,13 @@
       "actor": "pj_agent",
       "status": "active",
       "commissioned": "2026-10-12",
-      "formerly": ["Gizmo"],
+      "formerly": [
+        "Gizmo"
+      ],
+      "skills": [
+        "agent-net-etiquette",
+        "escalate-to-auto"
+      ],
       "weapons": []
     }
   ]

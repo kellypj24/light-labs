@@ -100,6 +100,19 @@ class HeartbeatTest(unittest.TestCase):
         self.assertEqual(len(drafted), 1)
         self.assertEqual(drafted[0]["target"], {"task_id": "t1"})
 
+    def test_callable_persona_gets_the_message(self):
+        seen = []
+
+        def persona(text):
+            seen.append(text)
+            return "system for this message"
+
+        self.hb.persona = persona
+        self.client.items = [item("a1", "alpha")]
+        self.client.messages["a1"] = {"content": "please write a script"}
+        self.hb.tick(backfill=True)
+        self.assertIn("please write a script", seen[0])
+
     def test_comment_prompt_includes_thread(self):
         self.client.tasks["t1"]["comments"] = [{"author": "alpha", "text": "first idea"}]
         self.hb.tick()
@@ -129,6 +142,14 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(clean("DRAFT\n\nHi alpha.\n\nBest,\nRush\n"), "Hi alpha.")
         self.assertEqual(clean("Draft:\nHi.\n\nRush"), "Hi.")
         self.assertEqual(clean("Rush here, hi."), "Rush here, hi.")
+
+    def test_clean_unwraps_quotes(self):
+        self.assertEqual(clean('"Hi alpha."'), "Hi alpha.")
+
+    def test_split_escalation_anywhere(self):
+        esc, body = split_escalation("Sure thing.\n\nESCALATE: write the script\nHolding.")
+        self.assertEqual(esc, "write the script")
+        self.assertEqual(body, "Sure thing.\n\nHolding.")
 
     def test_split_escalation(self):
         self.assertEqual(split_escalation("hi"), (None, "hi"))

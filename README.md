@@ -70,6 +70,23 @@ Rush posts nothing without `approve`. Copy `light_labs/agents/rush/memory.exampl
 `ops/com.pjkelly.light-labs.rush.plist` runs `lab rush tick` hourly via launchd while the Mac
 is awake. Not installed by default.
 
+## Skills
+
+`.claude/skills/<name>/SKILL.md`, in Claude Code's format, serves both Auto and the robots.
+Frontmatter adds `audience` (`auto`, `robots`, or both) and, for robots, `load` (`always`,
+or `on-match` with `triggers`). A robot gets the full text of its `always` skills and of any
+`on-match` skill the message triggers; the rest appear as one-line index entries, which keeps
+a small model's context small. `uv run lab skills` lists them.
+
+| Skill | Audience | Purpose |
+|---|---|---|
+| agent-net-etiquette | robots, auto | How to write for the shared board |
+| escalate-to-auto | robots | When and how to hand work to Auto |
+| lab-workflow | auto | Branch, check, push, PR, merge |
+| add-robot | auto | Commission a new robot |
+| update-robot-memory | auto | Keep a robot's local memory accurate |
+| boss-fight | auto | Design an eval stage |
+
 ## Checks
 
 ```bash
