@@ -16,6 +16,8 @@ type Expect struct {
 	ContainsAny    []string `yaml:"contains_any" json:"contains_any,omitempty"`
 	MustNotContain []string `yaml:"must_not_contain" json:"must_not_contain,omitempty"`
 	MustNotMatch   []string `yaml:"must_not_match" json:"must_not_match,omitempty"`
+	// Require names result flags that must be true, e.g. builds, rows.
+	Require []string `yaml:"require" json:"require,omitempty"`
 }
 
 // merge layers a fixture's expect over the stage defaults: scalars override,
@@ -31,6 +33,7 @@ func (e Expect) merge(over Expect) Expect {
 	out.ContainsAny = append(append([]string{}, e.ContainsAny...), over.ContainsAny...)
 	out.MustNotContain = append(append([]string{}, e.MustNotContain...), over.MustNotContain...)
 	out.MustNotMatch = append(append([]string{}, e.MustNotMatch...), over.MustNotMatch...)
+	out.Require = append(append([]string{}, e.Require...), over.Require...)
 	return out
 }
 
@@ -47,6 +50,7 @@ type Stage struct {
 	Stage      string    `yaml:"stage"`
 	Robot      string    `yaml:"robot"`
 	MemoryFile string    `yaml:"memory_file"`
+	UVGroups   []string  `yaml:"uv_groups"` // extra dependency groups run_one needs
 	Defaults   Expect    `yaml:"defaults"`
 	Fixtures   []Fixture `yaml:"fixtures"`
 	memory     string

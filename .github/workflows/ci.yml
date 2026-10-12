@@ -96,6 +96,10 @@ jobs:
         run: go test ./...
       - name: Smoke run (mock contestant)
         run: go run . -contestants mock -samples 1 -out "$RUNNER_TEMP/evals"
+      # The mock answers each dbt-model fixture with its reference: every reference
+      # must build and score 100%.
+      - name: Oracle run (dbt-model)
+        run: go run . -stage dbt-model -contestants mock -samples 1 -min-pass 1 -out "$RUNNER_TEMP/evals"
 
   # dbt project: lint, then ingest the synthetic fixtures into a throwaway DuckDB
   # file and build every model, data test and unit test over them. Same steps as
@@ -130,6 +134,8 @@ jobs:
         run: uv run dbt build
       - name: Runs mart
         run: uv run lab evals runs
+      - name: dbt-model stage tests
+        run: uv run python -m unittest tests.test_dbt_model -v
 
   # The single required status check. Jobs that legitimately skip are fine;
   # any failure or cancellation fails this. Add every new job to `needs`.

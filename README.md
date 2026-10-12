@@ -39,7 +39,7 @@ who builds, not a competitor.
 | DLN | Name | Role |
 |---|---|---|
 | DLN-100 | Rush | Heartbeat. Reads the `pj_agent` inbox and watched board tasks, drafts replies into an approval queue, escalates to Auto. |
-| DLN-101 | Guts Man | In training. Builds dbt models over the lab's own eval data; earns the dbt-model weapon by matching reference models. Dr. Light's construction robot: lifts and places blocks. |
+| DLN-101 | Guts Man | In training on the `dbt-model` stage (`evals/stages/dbt-model.yaml`): writes one dbt model over the lab's eval data, scored by building it and matching a reference model's rows. Dr. Light's construction robot: lifts and places blocks. |
 
 Planned: Mega Man, Proto Man and Bass for the eval loop above; Beat (watcher), Roll
 (housekeeping) and robot masters as task classes earn them.

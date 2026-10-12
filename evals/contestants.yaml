@@ -10,6 +10,10 @@ contestants:
   - name: proto
     role: proto
     brain: ollama:gemma3:4b
+  # The challenger for code stages such as dbt-model.
+  - name: proto-coder
+    role: proto
+    brain: ollama:qwen2.5-coder:7b
   - name: bass
     role: bass
     brain: claude:sonnet

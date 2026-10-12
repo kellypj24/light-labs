@@ -27,7 +27,9 @@
       "model": "tbd: dbt-model fight",
       "status": "training",
       "commissioned": "2026-10-12",
-      "skills": [],
+      "skills": [
+        "dbt-model-sql"
+      ],
       "weapons": []
     }
   ]

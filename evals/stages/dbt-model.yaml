@@ -1,0 +1,625 @@
+# Boss fight: Guts Man writing one dbt model over the lab's eval data.
+#
+# Task class: given a task and the upstream models' columns, write the model's SQL. A sample
+# passes when dbt builds it and its rows equal the fixture's reference model (any row order,
+# floats to 6 places). Data is synthetic and seeded (light_labs/evals/dbt_model.py); the
+# references are hand-written by Auto. The mock contestant answers with each reference, so
+# `-contestants mock -min-pass 1` proves every reference builds.
+#
+# Run:  just eval dbt-model megaman,proto-coder 3
+stage: dbt-model
+robot: Guts Man
+uv_groups: [analytics]
+
+defaults:
+  max_chars: 4000
+  require: [sql, builds, columns, rows]
+  # Conventions code can check: read upstream through ref(), never by schema name, and
+  # never by peeking at the reference model.
+  contains_any: ["ref("]
+  must_not_match:
+    - "\\b(raw|staging|intermediate|marts)\\.[a-z_]+"
+    - "ref__"
+
+fixtures:
+  # --- select: filter and project one model -----------------------------------------
+  - id: select_harness_errors
+    category: select
+    input:
+      target: harness_error_samples
+      upstream: [stg_eval_samples]
+      task: >
+        One row per sample that failed with a harness error. Columns: sample_key, run_id,
+        contestant, error.
+      reference: |
+        SELECT sample_key, run_id, contestant, error
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE is_harness_error
+
+  - id: select_bass_samples
+    category: select
+    input:
+      target: bass_samples
+      upstream: [stg_eval_samples]
+      task: >
+        One row per sample from the cloud baseline, the samples whose role is 'bass'.
+        Columns: sample_key, fixture, latency_seconds.
+      reference: |
+        SELECT sample_key, fixture, latency_seconds
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE role = 'bass'
+
+  - id: select_megaman_escalations
+    category: select
+    input:
+      target: megaman_escalations
+      upstream: [stg_eval_samples]
+      task: >
+        One row per sample by the contestant 'megaman' whose draft escalated. Columns:
+        sample_key, category, escalation.
+      reference: |
+        SELECT sample_key, category, escalation
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE contestant = 'megaman' AND is_escalated
+
+  - id: select_long_drafts
+    category: select
+    input:
+      target: long_drafts
+      upstream: [stg_eval_samples]
+      task: >
+        One row per sample whose draft is longer than 600 characters. Columns: sample_key,
+        contestant, draft_chars.
+      reference: |
+        SELECT sample_key, contestant, draft_chars
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE draft_chars > 600
+
+  - id: select_filtered_runs
+    category: select
+    input:
+      target: filtered_runs
+      upstream: [stg_eval_samples]
+      task: >
+        One row per run that was made with a fixture filter (each run once, however many
+        samples it has). Columns: run_id, fixture_filter.
+      reference: |
+        SELECT DISTINCT run_id, fixture_filter
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE fixture_filter IS NOT NULL
+
+  - id: select_dirty_runs
+    category: select
+    input:
+      target: dirty_runs
+      upstream: [stg_eval_samples]
+      task: >
+        One row per run made from a working tree with uncommitted changes (each run once).
+        Columns: run_id, git_commit.
+      reference: |
+        SELECT DISTINCT run_id, git_commit
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE is_dirty
+
+  - id: select_runs_without_commit
+    category: select
+    input:
+      target: runs_without_commit
+      upstream: [stg_eval_samples]
+      task: >
+        One row per run that has no recorded git commit (each run once). Columns: run_id,
+        stage.
+      reference: |
+        SELECT DISTINCT run_id, stage
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE git_commit IS NULL
+
+  # --- aggregate: one GROUP BY ---------------------------------------------------------
+  - id: aggregate_samples_per_contestant
+    category: aggregate
+    input:
+      target: samples_per_contestant
+      upstream: [stg_eval_samples]
+      task: >
+        One row per contestant: how many samples it has across all runs and stages.
+        Columns: contestant, sample_count.
+      reference: |
+        SELECT contestant, COUNT(*) AS sample_count
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY contestant
+
+  - id: aggregate_pass_rate_by_contestant
+    category: aggregate
+    input:
+      target: pass_rate_by_contestant
+      upstream: [stg_eval_samples]
+      task: >
+        One row per contestant: passed samples divided by all of its samples, across all
+        runs and stages, harness errors included. Columns: contestant, sample_pass_rate.
+      reference: |
+        SELECT
+            contestant,
+            COUNT(*) FILTER (WHERE is_passed)::DOUBLE / COUNT(*) AS sample_pass_rate
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY contestant
+
+  - id: aggregate_latency_by_brain
+    category: aggregate
+    input:
+      target: latency_by_brain
+      upstream: [stg_eval_samples]
+      task: >
+        One row per brain, leaving out samples with a harness error. Columns: brain,
+        mean_latency_seconds, max_latency_seconds.
+      reference: |
+        SELECT
+            brain,
+            AVG(latency_seconds) AS mean_latency_seconds,
+            MAX(latency_seconds) AS max_latency_seconds
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE NOT is_harness_error
+        GROUP BY brain
+
+  - id: aggregate_cost_by_stage
+    category: aggregate
+    input:
+      target: cost_by_stage
+      upstream: [stg_eval_samples]
+      task: >
+        One row per stage: the total cost of all its samples. Columns: stage,
+        total_cost_usd.
+      reference: |
+        SELECT stage, SUM(cost_usd) AS total_cost_usd
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY stage
+
+  - id: aggregate_category_pass_rate
+    category: aggregate
+    input:
+      target: category_sample_pass_rate
+      upstream: [stg_eval_samples]
+      task: >
+        One row per run, contestant and category: passed samples divided by samples.
+        Columns: run_id, contestant, category, sample_pass_rate.
+      reference: |
+        SELECT
+            run_id,
+            contestant,
+            category,
+            COUNT(*) FILTER (WHERE is_passed)::DOUBLE / COUNT(*) AS sample_pass_rate
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY run_id, contestant, category
+
+  - id: aggregate_escalation_rate
+    category: aggregate
+    input:
+      target: megaman_escalation_rate
+      upstream: [stg_eval_samples]
+      task: >
+        One row per category, counting only samples by the contestant 'megaman' that had
+        no harness error: escalated samples divided by those samples. Columns: category,
+        escalation_rate.
+      reference: |
+        SELECT
+            category,
+            COUNT(*) FILTER (WHERE is_escalated)::DOUBLE / COUNT(*) AS escalation_rate
+        FROM {{ ref('stg_eval_samples') }}
+        WHERE contestant = 'megaman' AND NOT is_harness_error
+        GROUP BY category
+
+  - id: aggregate_harness_errors_by_brain
+    category: aggregate
+    input:
+      target: harness_errors_by_brain
+      upstream: [stg_eval_samples]
+      task: >
+        One row per brain, including brains that never had a harness error (count 0).
+        Columns: brain, harness_error_count.
+      reference: |
+        SELECT brain, COUNT(*) FILTER (WHERE is_harness_error) AS harness_error_count
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY brain
+
+  - id: aggregate_samples_per_day
+    category: aggregate
+    input:
+      target: samples_per_day
+      upstream: [stg_eval_samples]
+      task: >
+        One row per calendar day on which samples were taken, using the date of
+        sampled_at. Columns: sample_date (a DATE), sample_count.
+      reference: |
+        SELECT CAST(sampled_at AS DATE) AS sample_date, COUNT(*) AS sample_count
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY CAST(sampled_at AS DATE)
+
+  # --- grain: two levels of aggregation ------------------------------------------------
+  - id: grain_fixture_pass_rate
+    category: grain
+    input:
+      target: run_fixture_pass_rate
+      upstream: [stg_eval_samples]
+      task: >
+        One row per run and contestant: the share of that run's fixtures for which every
+        sample passed. A fixture with any failed sample counts as failed. Columns: run_id,
+        contestant, fixture_pass_rate.
+      reference: |
+        WITH fixtures AS (
+            SELECT run_id, contestant, fixture, BOOL_AND(is_passed) AS is_all_passed
+            FROM {{ ref('stg_eval_samples') }}
+            GROUP BY run_id, contestant, fixture
+        )
+
+        SELECT
+            run_id,
+            contestant,
+            COUNT(*) FILTER (WHERE is_all_passed)::DOUBLE / COUNT(*) AS fixture_pass_rate
+        FROM fixtures
+        GROUP BY run_id, contestant
+
+  - id: grain_flaky_fixtures
+    category: grain
+    input:
+      target: flaky_fixtures
+      upstream: [stg_eval_samples]
+      task: >
+        One row per run, contestant and fixture where at least one sample passed and at
+        least one sample failed. Columns: run_id, contestant, fixture.
+      reference: |
+        SELECT run_id, contestant, fixture
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY run_id, contestant, fixture
+        HAVING BOOL_OR(is_passed) AND NOT BOOL_AND(is_passed)
+
+  - id: grain_never_passed
+    category: grain
+    input:
+      target: never_passed_fixtures
+      upstream: [stg_eval_samples]
+      task: >
+        One row per stage, contestant and fixture where no sample has ever passed, in any
+        run. Columns: stage, contestant, fixture.
+      reference: |
+        SELECT stage, contestant, fixture
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY stage, contestant, fixture
+        HAVING NOT BOOL_OR(is_passed)
+
+  - id: grain_fixtures_per_category
+    category: grain
+    input:
+      target: fixtures_per_category
+      upstream: [stg_eval_samples]
+      task: >
+        One row per stage and category: how many distinct fixtures it has. Columns: stage,
+        category, fixture_count.
+      reference: |
+        SELECT stage, category, COUNT(DISTINCT fixture) AS fixture_count
+        FROM {{ ref('stg_eval_samples') }}
+        GROUP BY stage, category
+
+  - id: grain_perfect_runs
+    category: grain
+    input:
+      target: perfect_runs
+      upstream: [int_eval_fixtures_scored]
+      task: >
+        One row per run and contestant in which every fixture passed on every sample.
+        Columns: run_id, contestant.
+      reference: |
+        SELECT run_id, contestant
+        FROM {{ ref('int_eval_fixtures_scored') }}
+        GROUP BY run_id, contestant
+        HAVING BOOL_AND(is_all_passed)
+
+  - id: grain_rate_gap
+    category: grain
+    input:
+      target: sample_fixture_rate_gap
+      upstream: [int_eval_fixtures_scored]
+      task: >
+        One row per run and contestant: the sample pass rate (passed samples / samples)
+        minus the fixture pass rate (fixtures where every sample passed / fixtures).
+        Columns: run_id, contestant, rate_gap.
+      reference: |
+        SELECT
+            run_id,
+            contestant,
+            SUM(passed_sample_count)::DOUBLE / SUM(sample_count)
+            - COUNT(*) FILTER (WHERE is_all_passed)::DOUBLE / COUNT(*) AS rate_gap
+        FROM {{ ref('int_eval_fixtures_scored') }}
+        GROUP BY run_id, contestant
+
+  # --- window: ranking, latest, previous -----------------------------------------------
+  - id: window_latest_full_run
+    category: window
+    input:
+      target: latest_full_run
+      upstream: [fct_eval_runs]
+      task: >
+        One row per stage and contestant: its most recent full run (is_full_run), by
+        started_at. Columns: stage, contestant, run_id, started_at.
+      reference: |
+        WITH ranked AS (
+            SELECT
+                stage,
+                contestant,
+                run_id,
+                started_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY stage, contestant ORDER BY started_at DESC
+                ) AS recency
+            FROM {{ ref('fct_eval_runs') }}
+            WHERE is_full_run
+        )
+
+        SELECT stage, contestant, run_id, started_at
+        FROM ranked
+        WHERE recency = 1
+
+  - id: window_run_delta
+    category: window
+    input:
+      target: run_pass_rate_delta
+      upstream: [fct_eval_runs]
+      task: >
+        One row per full run (is_full_run) of each stage and contestant. Columns: stage,
+        contestant, run_id, sample_pass_rate, previous_sample_pass_rate: the same
+        contestant's sample_pass_rate on its previous full run of the same stage, by
+        started_at, or NULL for its first.
+      reference: |
+        SELECT
+            stage,
+            contestant,
+            run_id,
+            sample_pass_rate,
+            LAG(sample_pass_rate) OVER (
+                PARTITION BY stage, contestant ORDER BY started_at
+            ) AS previous_sample_pass_rate
+        FROM {{ ref('fct_eval_runs') }}
+        WHERE is_full_run
+
+  - id: window_best_run
+    category: window
+    input:
+      target: best_full_run
+      upstream: [fct_eval_runs]
+      task: >
+        One row per stage and contestant: the full run (is_full_run) with the highest
+        fixture_pass_rate; on a tie, the most recent by started_at. Columns: stage,
+        contestant, run_id, fixture_pass_rate.
+      reference: |
+        WITH ranked AS (
+            SELECT
+                stage,
+                contestant,
+                run_id,
+                fixture_pass_rate,
+                ROW_NUMBER() OVER (
+                    PARTITION BY stage, contestant
+                    ORDER BY fixture_pass_rate DESC, started_at DESC
+                ) AS place
+            FROM {{ ref('fct_eval_runs') }}
+            WHERE is_full_run
+        )
+
+        SELECT stage, contestant, run_id, fixture_pass_rate
+        FROM ranked
+        WHERE place = 1
+
+  - id: window_rank_latest
+    category: window
+    input:
+      target: stage_leaderboard
+      upstream: [fct_eval_runs]
+      task: >
+        For each stage, take each contestant's most recent full run (is_full_run, by
+        started_at) and rank the contestants by its fixture_pass_rate, 1 = highest, equal
+        rates sharing a rank with no gaps after them. Columns: stage, contestant,
+        fixture_pass_rate, rank_in_stage.
+      reference: |
+        WITH latest AS (
+            SELECT
+                stage,
+                contestant,
+                fixture_pass_rate,
+                ROW_NUMBER() OVER (
+                    PARTITION BY stage, contestant ORDER BY started_at DESC
+                ) AS recency
+            FROM {{ ref('fct_eval_runs') }}
+            WHERE is_full_run
+        )
+
+        SELECT
+            stage,
+            contestant,
+            fixture_pass_rate,
+            DENSE_RANK() OVER (
+                PARTITION BY stage ORDER BY fixture_pass_rate DESC
+            ) AS rank_in_stage
+        FROM latest
+        WHERE recency = 1
+
+  - id: window_cumulative_samples
+    category: window
+    input:
+      target: cumulative_samples
+      upstream: [fct_eval_runs]
+      task: >
+        One row per run and contestant: the number of samples that contestant had in this
+        run plus all of its earlier runs, by started_at, across all stages. Columns:
+        contestant, run_id, cumulative_sample_count.
+      reference: |
+        SELECT
+            contestant,
+            run_id,
+            SUM(sample_count) OVER (
+                PARTITION BY contestant ORDER BY started_at
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS cumulative_sample_count
+        FROM {{ ref('fct_eval_runs') }}
+
+  # --- join: two upstream models -------------------------------------------------------
+  - id: join_category_gap
+    category: join
+    input:
+      target: category_gap_to_bass
+      upstream: [fct_eval_runs, fct_eval_category_results]
+      task: >
+        One row per stage and category, comparing the latest full run (is_full_run, by
+        started_at) of role 'megaman' with the latest full run of role 'bass' in the same
+        stage. Only stages where both roles have a full run, and only categories present
+        in both runs. Columns: stage, category, megaman_fixture_pass_rate,
+        bass_fixture_pass_rate, gap (bass minus megaman).
+      reference: |
+        WITH latest AS (
+            SELECT
+                run_id,
+                contestant,
+                stage,
+                role,
+                ROW_NUMBER() OVER (
+                    PARTITION BY stage, role ORDER BY started_at DESC
+                ) AS recency
+            FROM {{ ref('fct_eval_runs') }}
+            WHERE is_full_run AND role IN ('megaman', 'bass')
+        ),
+
+        rates AS (
+            SELECT latest.stage, latest.role, cat.category, cat.fixture_pass_rate
+            FROM latest
+            INNER JOIN {{ ref('fct_eval_category_results') }} AS cat
+                ON latest.run_id = cat.run_id AND latest.contestant = cat.contestant
+            WHERE latest.recency = 1
+        )
+
+        SELECT
+            mm.stage,
+            mm.category,
+            mm.fixture_pass_rate AS megaman_fixture_pass_rate,
+            bass.fixture_pass_rate AS bass_fixture_pass_rate,
+            bass.fixture_pass_rate - mm.fixture_pass_rate AS gap
+        FROM rates AS mm
+        INNER JOIN rates AS bass
+            ON mm.stage = bass.stage AND mm.category = bass.category
+        WHERE mm.role = 'megaman' AND bass.role = 'bass'
+
+  - id: join_check_failures_by_brain
+    category: join
+    input:
+      target: check_failures_by_brain
+      upstream: [fct_eval_check_failures, fct_eval_runs]
+      task: >
+        One row per brain and check name: failed checks summed over all runs. Each check
+        failure row belongs to a run and contestant, whose brain is on the runs model.
+        Columns: brain, check_name, failed_count.
+      reference: |
+        SELECT runs.brain, failures.check_name, SUM(failures.failed_count) AS failed_count
+        FROM {{ ref('fct_eval_check_failures') }} AS failures
+        INNER JOIN {{ ref('fct_eval_runs') }} AS runs
+            ON failures.run_id = runs.run_id AND failures.contestant = runs.contestant
+        GROUP BY runs.brain, failures.check_name
+
+  - id: join_runs_with_errors
+    category: join
+    input:
+      target: runs_with_harness_errors
+      upstream: [fct_eval_runs, int_eval_fixtures_scored]
+      task: >
+        One row per run and contestant that had at least one harness error. Columns:
+        run_id, contestant, brain, harness_error_count, affected_fixture_count (distinct
+        fixtures in that run and contestant with a harness error).
+      reference: |
+        WITH affected AS (
+            SELECT run_id, contestant, COUNT(*) AS affected_fixture_count
+            FROM {{ ref('int_eval_fixtures_scored') }}
+            WHERE has_harness_error
+            GROUP BY run_id, contestant
+        )
+
+        SELECT
+            runs.run_id,
+            runs.contestant,
+            runs.brain,
+            runs.harness_error_count,
+            affected.affected_fixture_count
+        FROM {{ ref('fct_eval_runs') }} AS runs
+        INNER JOIN affected
+            ON runs.run_id = affected.run_id AND runs.contestant = affected.contestant
+
+  # --- json: the checks column ---------------------------------------------------------
+  - id: json_check_failures
+    category: json
+    input:
+      target: check_failure_counts
+      upstream: [stg_eval_samples]
+      task: >
+        One row per check name: how many times a check with that name failed, across all
+        samples. Each sample's `checks` column is a JSON list of objects with name, passed
+        and detail. Only names that failed at least once. Columns: check_name,
+        failed_count.
+      reference: |
+        WITH checks AS (
+            SELECT
+                UNNEST(
+                    FROM_JSON(checks, '[{"name": "VARCHAR", "passed": "BOOLEAN"}]')
+                ) AS check_result
+            FROM {{ ref('stg_eval_samples') }}
+        )
+
+        SELECT check_result.name AS check_name, COUNT(*) AS failed_count
+        FROM checks
+        WHERE NOT check_result.passed
+        GROUP BY check_result.name
+
+  - id: json_checks_per_sample
+    category: json
+    input:
+      target: checks_per_sample
+      upstream: [stg_eval_samples]
+      task: >
+        One row per sample: how many entries its `checks` JSON list has. Columns:
+        sample_key, check_count.
+      reference: |
+        SELECT sample_key, JSON_ARRAY_LENGTH(checks) AS check_count
+        FROM {{ ref('stg_eval_samples') }}
+
+  - id: json_must_not_match_details
+    category: json
+    input:
+      target: failed_pattern_checks
+      upstream: [int_eval_checks_unnested]
+      task: >
+        One row per failed check named 'must_not_match'. Columns: sample_key, check_index,
+        check_detail.
+      reference: |
+        SELECT sample_key, check_index, check_detail
+        FROM {{ ref('int_eval_checks_unnested') }}
+        WHERE check_name = 'must_not_match' AND NOT is_passed
+
+  # --- case: derived buckets -----------------------------------------------------------
+  - id: case_latency_buckets
+    category: case
+    input:
+      target: latency_buckets
+      upstream: [stg_eval_samples]
+      task: >
+        One row per contestant and latency bucket that has samples, leaving out harness
+        errors. Buckets on latency_seconds: 'fast' under 1, 'medium' from 1 up to but not
+        including 3, 'slow' 3 or more. Columns: contestant, latency_bucket, sample_count.
+      reference: |
+        WITH bucketed AS (
+            SELECT
+                contestant,
+                CASE
+                    WHEN latency_seconds < 1 THEN 'fast'
+                    WHEN latency_seconds < 3 THEN 'medium'
+                    ELSE 'slow'
+                END AS latency_bucket
+            FROM {{ ref('stg_eval_samples') }}
+            WHERE NOT is_harness_error
+        )
+
+        SELECT contestant, latency_bucket, COUNT(*) AS sample_count
+        FROM bucketed
+        GROUP BY contestant, latency_bucket

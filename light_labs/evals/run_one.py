@@ -6,10 +6,12 @@ Input:  {"stage": "reply-draft", "brain": "ollama:llama3.1:8b", "memory": "<text
          "input": {...stage-specific...}}
 Output: one JSON object on stdout, always, even on failure:
         {"ok": bool, "result": {...}, "stats": {...}, "error": str}
+        result: {"raw", "draft", "escalate"?, "flags"?: {name: bool}, "notes"?}
 The Go side scores `result`; this side never judges.
 """
 
 import argparse
+import contextlib
 import json
 import sys
 import traceback
@@ -38,7 +40,14 @@ def reply_draft(brain, memory, inp):
     return {"raw": raw, "draft": body, "escalate": escalate}
 
 
-STAGES = {"reply-draft": reply_draft}
+def dbt_model(brain, memory, inp):
+    """Guts Man writing one dbt model, built beside its reference and compared."""
+    from light_labs.evals import dbt_model as stage
+
+    return stage.run_sample(brain, inp)
+
+
+STAGES = {"reply-draft": reply_draft, "dbt-model": dbt_model}
 
 
 def run(payload):
@@ -46,7 +55,10 @@ def run(payload):
     if stage is None:
         raise ValueError(f"unknown stage {payload.get('stage')!r}; known: {', '.join(STAGES)}")
     brain = brain_for(payload["brain"])
-    result = stage(brain, payload.get("memory"), payload["input"])
+    # stdout carries only the envelope; anything a stage's tools print (dbt logs its
+    # errors there even with --quiet) goes to stderr.
+    with contextlib.redirect_stdout(sys.stderr):
+        result = stage(brain, payload.get("memory"), payload["input"])
     return result, brain.last
 
 

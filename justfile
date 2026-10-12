@@ -30,6 +30,8 @@ evals-check:
     go -C evals vet ./...
     go -C evals test ./...
     go -C evals run . -contestants mock -samples 1 -out "$(mktemp -d)" > /dev/null
+    # dbt-model's mock answers with each reference: every reference must build and match
+    go -C evals run . -stage dbt-model -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
 
 # Boss fight with real models. Runs locally only; one at a time on a laptop.
 # Results land in var/evals/*.jsonl and are loaded into var/lab.duckdb.
@@ -56,4 +58,5 @@ analytics-check:
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet
     cd ..
+    uv run --locked --group analytics python -m unittest tests.test_dbt_model
     LAB_VAR="$tmp" uv run --locked lab evals runs
