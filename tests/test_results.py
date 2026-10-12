@@ -60,9 +60,7 @@ class ResultsTest(unittest.TestCase):
 
     def test_older_files_use_their_file_name_as_run_id(self):
         path = self.write("reply-draft-20261012T172107Z.jsonl", [sample("chat_a", True)])
-        self.assertEqual(
-            results.ingest([path], db=self.db), {"reply-draft-20261012T172107Z": 1}
-        )
+        self.assertEqual(results.ingest([path], db=self.db), {"reply-draft-20261012T172107Z": 1})
         cols, rows = results.runs(contestant="rock", db=self.db)
         self.assertIsNone(dict(zip(cols, rows[0], strict=True))["commit"])
         self.assertEqual(results.runs(contestant="bass", db=self.db)[1], [])

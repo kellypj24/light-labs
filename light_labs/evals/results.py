@@ -110,7 +110,9 @@ def ingest(paths=None, db=None):
             )
             con.execute("DELETE FROM raw.eval_samples WHERE run_id IN (SELECT run_id FROM batch)")
             con.execute("INSERT INTO raw.eval_samples SELECT *, ? FROM batch", [path.name])
-            for run_id, n in con.execute("SELECT run_id, count(*) FROM batch GROUP BY 1").fetchall():
+            for run_id, n in con.execute(
+                "SELECT run_id, count(*) FROM batch GROUP BY 1"
+            ).fetchall():
                 loaded[run_id] = n
             con.execute("COMMIT")
     return loaded

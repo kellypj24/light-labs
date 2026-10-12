@@ -5,9 +5,9 @@ default: check
 # Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests
 check: hooks test evals-check
 
-# Every pre-commit hook over every file
+# Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
-    uvx pre-commit@4.6.2 run --all-files --show-diff-on-failure
+    git ls-files -z --cached --others --exclude-standard | xargs -0 uvx pre-commit@4.6.2 run --show-diff-on-failure --files
 
 test:
     uv run --locked python -m unittest discover -s tests -t .
