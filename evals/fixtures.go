@@ -52,7 +52,7 @@ type Stage struct {
 	memory     string
 }
 
-// Contestant is a model fighting a stage: Rock, Proto Man, Bass, or the mock.
+// Contestant is a model fighting a stage: Mega Man, Proto Man, Bass, or the mock.
 type Contestant struct {
 	Name  string `yaml:"name"`
 	Role  string `yaml:"role"`

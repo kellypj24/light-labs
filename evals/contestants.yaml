@@ -1,11 +1,11 @@
 # Who fights. Roles follow the README's eval loop:
-#   rock  - the local generalist: the model a robot runs on today
-#   proto - the challenger: a candidate local model trying to take Rock's slot
-#   bass  - the cloud baseline: the ceiling Rock is measured against
-#   mock  - no model; CI uses it to test the harness wiring only
+#   megaman - the local generalist: the model a robot runs on today
+#   proto   - the challenger: a candidate local model trying to take Mega Man's slot
+#   bass    - the cloud baseline: the ceiling Mega Man is measured against
+#   mock    - no model; CI uses it to test the harness wiring only
 contestants:
-  - name: rock
-    role: rock
+  - name: megaman
+    role: megaman
     brain: ollama:llama3.1:8b
   - name: proto
     role: proto

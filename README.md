@@ -19,17 +19,17 @@ ops/                   launchd jobs
 var/<robot>/           runtime state, git-ignored
 ```
 
-## The eval loop: Rock, Proto Man and Bass
+## The eval loop: Mega Man, Proto Man and Bass
 
 Three roles run every boss fight:
 
 | Robot | Lore | Lab role |
 |---|---|---|
 | **Mega Man (Rock)** | The generalist who copies the weapon of every boss he beats | **The local generalist.** The best local model, working through the routing table. Each weapon he holds is a task class a local model has proven it can do. He is the robot who shrinks the cloud bill. |
-| **Proto Man (Blues)** | Light's first prototype: unstable core, lone wolf, whistles before he appears | **The challenger.** Runs the next candidate model on the same tasks in shadow. Beat Rock on the evals and he takes the slot. |
-| **Bass** | Built by Wily as Mega Man's rival | **The cloud baseline.** Claude or GPT on the same fixtures, the ceiling in every fight. Rock clears a stage when he gets close enough to Bass at a fraction of the cost. |
+| **Proto Man (Blues)** | Light's first prototype: unstable core, lone wolf, whistles before he appears | **The challenger.** Runs the next candidate model on the same tasks in shadow. Beat Mega Man on the evals and he takes the slot. |
+| **Bass** | Built by Wily as Mega Man's rival | **The cloud baseline.** Claude or GPT on the same fixtures, the ceiling in every fight. Mega Man clears a stage when he gets close enough to Bass at a fraction of the cost. |
 
-Rock fights each stage against Bass, Proto Man keeps trying to take Rock's place, and every
+Mega Man fights each stage against Bass, Proto Man keeps trying to take Mega Man's place, and every
 cleared stage is a task Wily no longer bills for. Auto (Claude Code) is separate: the mechanic
 who builds, not a competitor.
 
@@ -39,7 +39,7 @@ who builds, not a competitor.
 |---|---|---|
 | DLN-100 | Rush | Heartbeat. Reads the `pj_agent` inbox and watched board tasks, drafts replies into an approval queue, escalates to Auto. |
 
-Planned: Rock, Proto Man and Bass for the eval loop above; Beat (watcher), Roll
+Planned: Mega Man, Proto Man and Bass for the eval loop above; Beat (watcher), Roll
 (housekeeping) and robot masters as task classes earn them.
 
 ## Use

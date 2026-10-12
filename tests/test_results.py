@@ -8,8 +8,8 @@ from light_labs.evals import results
 
 def sample(fixture, passed, n=1, **extra):
     return {
-        "contestant": "rock",
-        "role": "rock",
+        "contestant": "megaman",
+        "role": "megaman",
         "brain": "ollama:llama3.1:8b",
         "stage": "reply-draft",
         "fixture": fixture,
@@ -61,7 +61,7 @@ class ResultsTest(unittest.TestCase):
     def test_older_files_use_their_file_name_as_run_id(self):
         path = self.write("reply-draft-20261012T172107Z.jsonl", [sample("chat_a", True)])
         self.assertEqual(results.ingest([path], db=self.db), {"reply-draft-20261012T172107Z": 1})
-        cols, rows = results.runs(contestant="rock", db=self.db)
+        cols, rows = results.runs(contestant="megaman", db=self.db)
         self.assertIsNone(dict(zip(cols, rows[0], strict=True))["commit"])
         self.assertEqual(results.runs(contestant="bass", db=self.db)[1], [])
 
