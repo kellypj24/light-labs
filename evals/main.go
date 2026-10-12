@@ -5,10 +5,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +19,9 @@ import (
 
 // Sample is one scored run of one fixture by one contestant.
 type Sample struct {
+	RunID      string    `json:"run_id"`
+	Commit     string    `json:"commit,omitempty"`
+	Dirty      bool      `json:"dirty"`
 	Contestant string    `json:"contestant"`
 	Role       string    `json:"role"`
 	Brain      string    `json:"brain"`
@@ -88,6 +93,9 @@ func main() {
 	fmt.Fprintf(os.Stderr, "stage %s: %d fixtures x %d samples x %d contestants = %d runs\n",
 		st.Stage, len(fixtures), *samples, len(contestants), len(jobs))
 
+	runID := fmt.Sprintf("%s-%s", st.Stage, time.Now().UTC().Format("20060102T150405Z"))
+	commit, dirty := gitState(root)
+
 	results := make([]Sample, len(jobs))
 	sem := make(chan struct{}, max(1, *concurrency))
 	var wg sync.WaitGroup
@@ -103,7 +111,7 @@ func main() {
 			defer cancel()
 			start := time.Now()
 			run, runErr := runSample(ctx, root, st, j.c, j.f)
-			s := Sample{Contestant: j.c.Name, Role: j.c.Role, Brain: j.c.Brain, Stage: st.Stage,
+			s := Sample{RunID: runID, Commit: commit, Dirty: dirty, Contestant: j.c.Name, Role: j.c.Role, Brain: j.c.Brain, Stage: st.Stage,
 				Fixture: j.f.ID, Category: j.f.Category, N: j.n, At: start.UTC()}
 			if runErr != nil {
 				s.Error = runErr.Error()
@@ -142,7 +150,7 @@ func main() {
 	if dir == "" {
 		dir = filepath.Join(root, "var", "evals")
 	}
-	path, err := writeResults(dir, st.Stage, results)
+	path, err := writeResults(dir, runID, results)
 	exitOn(err)
 
 	ok := report(os.Stdout, st, contestants, results, *minPass)
@@ -150,6 +158,16 @@ func main() {
 	if !ok {
 		os.Exit(1)
 	}
+}
+
+// gitState records which code produced a run: prompts and skills change between runs.
+func gitState(root string) (commit string, dirty bool) {
+	out, err := exec.Command("git", "-C", root, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "", false
+	}
+	status, _ := exec.Command("git", "-C", root, "status", "--porcelain").Output()
+	return strings.TrimSpace(string(out)), len(bytes.TrimSpace(status)) > 0
 }
 
 func exitOn(err error) {

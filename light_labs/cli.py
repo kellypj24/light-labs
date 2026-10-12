@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab rush {tick,queue,show,approve,reject,escalate}"""
+"""lab roster | lab skills | lab evals {ingest,runs} | lab rush {tick,queue,...}"""
 
 import argparse
 import json
@@ -27,6 +27,23 @@ def cmd_skills(args):
         who = ",".join(s.audience) or "-"
         used = ",".join(carriers.get(s.name, [])) or "-"
         print(f"{s.name:22} {who:12} load={s.load:9} robots={used:10} {s.description[:50]}")
+
+
+def evals_ingest(args):
+    from light_labs.evals import results
+
+    for run_id, n in results.ingest(args.paths).items():
+        print(f"loaded {run_id} ({n} samples)")
+    print(f"db: {results.DB}")
+
+
+def evals_runs(args):
+    from light_labs.evals import results
+
+    cols, rows = results.runs(args.stage, args.contestant, args.limit)
+    widths = [max(len(str(v)) for v in [c, *(r[i] for r in rows)]) for i, c in enumerate(cols)]
+    for row in [cols, *rows]:
+        print("  ".join(str(v).ljust(w) for v, w in zip(row, widths, strict=True)).rstrip())
 
 
 def rush_tick(args, store, rush):
@@ -99,6 +116,15 @@ def main(argv=None):
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
     sub.add_parser("skills", help="list skills, their audience and which robots carry them")
+    evals_p = sub.add_parser("evals", help="eval results in DuckDB (var/lab.duckdb)")
+    ecmd = evals_p.add_subparsers(dest="cmd", required=True)
+    ecmd.add_parser("ingest", help="load var/evals/*.jsonl (idempotent)").add_argument(
+        "paths", nargs="*", help="specific JSONL files (default: all)"
+    )
+    runs_p = ecmd.add_parser("runs", help="recent runs, newest first")
+    runs_p.add_argument("--stage")
+    runs_p.add_argument("--contestant")
+    runs_p.add_argument("--limit", type=int, default=20)
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
@@ -111,6 +137,9 @@ def main(argv=None):
 
     if args.robot in ("roster", "skills"):
         globals()[f"cmd_{args.robot}"](args)
+        return
+    if args.robot == "evals":
+        globals()[f"evals_{args.cmd}"](args)
         return
     from light_labs.agents import rush
 

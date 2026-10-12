@@ -3,7 +3,9 @@ name = "light-labs"
 version = "0.1.0"
 description = "PJ's local AI lab: robots on local models, evals to decide what leaves the cloud"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "duckdb>=1.4",
+]
 
 [project.scripts]
 lab = "light_labs.cli:main"
