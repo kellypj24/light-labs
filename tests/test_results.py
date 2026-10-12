@@ -37,33 +37,41 @@ class ResultsTest(unittest.TestCase):
         path.write_text("".join(json.dumps(r) + "\n" for r in rows))
         return path
 
-    def test_ingest_is_idempotent_and_rates_add_up(self):
+    def count(self, sql):
+        with results.connect(self.db) as con:
+            return con.execute(sql).fetchone()[0]
+
+    def test_ingest_is_idempotent(self):
         stamp = {"run_id": "reply-draft-1", "commit": "abc1234", "dirty": False}
         path = self.write(
             "reply-draft-1.jsonl",
-            [
-                sample("chat_a", True, 1, **stamp),
-                sample("chat_a", False, 2, **stamp),
-                sample("work_b", True, 1, **stamp),
-                sample("work_b", True, 2, **stamp),
-            ],
+            [sample("chat_a", True, 1, **stamp), sample("chat_a", False, 2, **stamp)],
         )
-        self.assertEqual(results.ingest([path], db=self.db), {"reply-draft-1": 4})
+        self.assertEqual(results.ingest([path], db=self.db), {"reply-draft-1": 2})
         results.ingest([path], db=self.db)
-        cols, rows = results.runs(db=self.db)
-        run = dict(zip(cols, rows[0], strict=True))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(run["samples"], 4)
-        self.assertEqual(run["pass_rate"], 0.75)
-        self.assertEqual(run["fixture_rate"], 0.5)  # chat_a failed one sample
-        self.assertEqual(run["commit"], "abc1234")
+        self.assertEqual(self.count("SELECT count(*) FROM raw.eval_samples"), 2)
+        self.assertEqual(
+            self.count("SELECT any_value(source) FROM raw.eval_samples"), "reply-draft-1.jsonl"
+        )
 
     def test_older_files_use_their_file_name_as_run_id(self):
         path = self.write("reply-draft-20261012T172107Z.jsonl", [sample("chat_a", True)])
         self.assertEqual(results.ingest([path], db=self.db), {"reply-draft-20261012T172107Z": 1})
-        cols, rows = results.runs(contestant="megaman", db=self.db)
-        self.assertIsNone(dict(zip(cols, rows[0], strict=True))["commit"])
-        self.assertEqual(results.runs(contestant="bass", db=self.db)[1], [])
+        self.assertIsNone(self.count('SELECT any_value("commit") FROM raw.eval_samples'))
+
+    def test_new_columns_migrate_into_an_old_table(self):
+        import duckdb
+
+        with duckdb.connect(str(self.db)) as con:
+            con.execute("CREATE SCHEMA raw")
+            con.execute("CREATE TABLE raw.eval_samples (run_id VARCHAR, source VARCHAR NOT NULL)")
+        path = self.write("r.jsonl", [sample("chat_a", True, run_id="r", filter="chat")])
+        results.ingest([path], db=self.db)
+        self.assertEqual(self.count('SELECT any_value("filter") FROM raw.eval_samples'), "chat")
+
+    def test_runs_needs_the_dbt_marts(self):
+        with self.assertRaisesRegex(LookupError, "just analytics"):
+            results.runs(db=self.db)
 
 
 if __name__ == "__main__":

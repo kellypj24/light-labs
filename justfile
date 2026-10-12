@@ -1,9 +1,12 @@
 # Same checks as CI. Run `just check` before pushing.
 
+# profiles.yml lives in analytics/, not ~/.dbt
+export DBT_PROFILES_DIR := justfile_directory() / "analytics"
+
 default: check
 
 # Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests
-check: hooks test evals-check
+check: hooks test evals-check analytics-check
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
@@ -32,8 +35,25 @@ evals-check:
 # Results land in var/evals/*.jsonl and are loaded into var/lab.duckdb.
 # just eval reply-draft megaman,bass 3
 eval stage="reply-draft" contestants="megaman" samples="3" *args="":
-    status=0; go -C evals run . -stage {{stage}} -contestants {{contestants}} -samples {{samples}} {{args}} || status=$?; uv run --locked lab evals ingest > /dev/null; exit $status
+    status=0; go -C evals run . -stage {{stage}} -contestants {{contestants}} -samples {{samples}} {{args}} || status=$?; just analytics > /dev/null; exit $status
 
-# Recent eval runs from var/lab.duckdb
+# Recent eval runs from marts.fct_eval_runs
 runs *args="":
     uv run --locked lab evals runs {{args}}
+
+# Load var/evals into var/lab.duckdb, then build the dbt project over it
+analytics:
+    uv run --locked lab evals ingest
+    cd analytics && uv run --locked --group analytics dbt build
+
+# dbt lint and build on the synthetic fixtures in a throwaway database (same as CI)
+analytics-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    LAB_VAR="$tmp" uv run --locked lab evals ingest analytics/fixtures/*.jsonl
+    cd analytics
+    uv run --locked --group analytics sqlfluff lint models macros
+    DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet
+    cd ..
+    LAB_VAR="$tmp" uv run --locked lab evals runs

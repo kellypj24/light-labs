@@ -18,6 +18,17 @@
         "escalate-to-auto"
       ],
       "weapons": []
+    },
+    {
+      "dln": "DLN-101",
+      "name": "Guts Man",
+      "role": "robot-master",
+      "job": "Builds dbt models in analytics/ over the lab's own eval data. In training: earns the dbt-model weapon by matching reference models on the dbt-model stage.",
+      "model": "tbd: dbt-model fight",
+      "status": "training",
+      "commissioned": "2026-10-12",
+      "skills": [],
+      "weapons": []
     }
   ]
 }

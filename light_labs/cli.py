@@ -40,7 +40,10 @@ def evals_ingest(args):
 def evals_runs(args):
     from light_labs.evals import results
 
-    cols, rows = results.runs(args.stage, args.contestant, args.limit)
+    try:
+        cols, rows = results.runs(args.stage, args.contestant, args.limit)
+    except LookupError as e:
+        sys.exit(str(e))
     widths = [max(len(str(v)) for v in [c, *(r[i] for r in rows)]) for i, c in enumerate(cols)]
     for row in [cols, *rows]:
         print("  ".join(str(v).ljust(w) for v, w in zip(row, widths, strict=True)).rstrip())
@@ -121,7 +124,7 @@ def main(argv=None):
     ecmd.add_parser("ingest", help="load var/evals/*.jsonl (idempotent)").add_argument(
         "paths", nargs="*", help="specific JSONL files (default: all)"
     )
-    runs_p = ecmd.add_parser("runs", help="recent runs, newest first")
+    runs_p = ecmd.add_parser("runs", help="recent runs from marts.fct_eval_runs, newest first")
     runs_p.add_argument("--stage")
     runs_p.add_argument("--contestant")
     runs_p.add_argument("--limit", type=int, default=20)

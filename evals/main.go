@@ -22,6 +22,7 @@ type Sample struct {
 	RunID      string    `json:"run_id"`
 	Commit     string    `json:"commit,omitempty"`
 	Dirty      bool      `json:"dirty"`
+	Filter     string    `json:"filter,omitempty"`
 	Contestant string    `json:"contestant"`
 	Role       string    `json:"role"`
 	Brain      string    `json:"brain"`
@@ -111,7 +112,7 @@ func main() {
 			defer cancel()
 			start := time.Now()
 			run, runErr := runSample(ctx, root, st, j.c, j.f)
-			s := Sample{RunID: runID, Commit: commit, Dirty: dirty, Contestant: j.c.Name, Role: j.c.Role, Brain: j.c.Brain, Stage: st.Stage,
+			s := Sample{RunID: runID, Commit: commit, Dirty: dirty, Filter: *filter, Contestant: j.c.Name, Role: j.c.Role, Brain: j.c.Brain, Stage: st.Stage,
 				Fixture: j.f.ID, Category: j.f.Category, N: j.n, At: start.UTC()}
 			if runErr != nil {
 				s.Error = runErr.Error()

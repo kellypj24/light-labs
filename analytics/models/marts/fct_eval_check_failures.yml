@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: fct_eval_check_failures
+    description: One row per scorer check name per contestant per run.
+    columns:
+      - name: run_check_key
+        description: run_id | contestant | check_name
+        tests:
+          - unique
+          - not_null
+      - name: failed_count
+        description: Checks of this name that failed
+      - name: failure_rate
+        description: failed_count / check_count
+      - name: failed_fixture_count
+        description: Distinct fixtures with at least one failure of this check

@@ -97,6 +97,40 @@ jobs:
       - name: Smoke run (mock contestant)
         run: go run . -contestants mock -samples 1 -out "$RUNNER_TEMP/evals"
 
+  # dbt project: lint, then ingest the synthetic fixtures into a throwaway DuckDB
+  # file and build every model, data test and unit test over them. Same steps as
+  # `just analytics-check`.
+  analytics:
+    name: Analytics (dbt)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      DBT_PROFILES_DIR: ${{ github.workspace }}/analytics
+      LAB_VAR: ${{ github.workspace }}/var-ci
+      DUCKDB_PATH: ${{ github.workspace }}/var-ci/lab.duckdb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: Sync
+        run: uv sync --group analytics
+      - name: sqlfluff
+        working-directory: analytics
+        run: uv run sqlfluff lint models macros
+      - name: Ingest fixtures
+        run: uv run lab evals ingest analytics/fixtures/*.jsonl
+      - name: dbt build
+        working-directory: analytics
+        run: uv run dbt build
+      - name: Runs mart
+        run: uv run lab evals runs
+
   # The single required status check. Jobs that legitimately skip are fine;
   # any failure or cancellation fails this. Add every new job to `needs`.
   ci-success:
@@ -105,7 +139,7 @@ jobs:
     if: always()
     timeout-minutes: 5
     permissions: {}
-    needs: [hooks, test, evals]
+    needs: [hooks, test, evals, analytics]
     steps:
       - name: Fail if any required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: int_eval_checks_unnested
+    description: One row per scorer check per sample.
+    columns:
+      - name: check_key
+        description: sample_key | check_index
+        tests:
+          - unique
+          - not_null
+      - name: sample_key
+        description: The sample the check belongs to
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_eval_samples')
+                field: sample_key
+      - name: check_index
+        description: 1-based position in the scorer's check list
+      - name: check_name
+        description: ran, escalate, non_empty, max_chars, contains_any, must_not_contain, must_not_match
+        tests:
+          - not_null
+      - name: is_passed
+        description: The check passed
+      - name: check_detail
+        description: What failed, e.g. the matched text or "want true, got false"

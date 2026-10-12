@@ -19,4 +19,8 @@ Start with `lab-workflow` before any commit, push or PR.
 - Robot memory goes stale fast; follow `update-robot-memory` after acting as a robot's actor.
 - Robots on small models: keep their `always` skills short and test prompt changes against
   the live model, several samples per case, before shipping.
+- `analytics/` follows `~/data-engineering/transformation/dbt`: one `.yml` per model,
+  staging → intermediate → marts, sqlfluff rules from there (duckdb dialect). The marts
+  decide weapons, so robot-written models never replace them without PJ's merge, and a
+  robot is never scored by models it wrote.
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.

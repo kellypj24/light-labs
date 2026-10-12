@@ -1,0 +1,9 @@
+light_labs:
+  target: duckdb
+  outputs:
+    # The lab's own database: `lab evals ingest` writes raw.*, dbt builds the rest
+    # beside it. DUCKDB_PATH points CI and tests at a throwaway file.
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../var/lab.duckdb') }}"
+      threads: 4

@@ -9,9 +9,9 @@ Bass at a fraction of the cost, he gets the weapon: the task class joins his `we
 ## Run
 
 ```bash
-just eval                                  # reply-draft, megaman, 3 samples per fixture
-just eval reply-draft megaman,proto,bass 3    # full fight
-just eval reply-draft megaman 3 -filter work  # one category (or fixture id substring)
+just eval                                        # reply-draft, megaman, 3 samples per fixture
+just eval reply-draft megaman,proto,bass 3       # full fight
+just eval reply-draft megaman 3 -filter work,id  # categories or fixture id substrings
 ```
 
 Real models run **locally only**, one model at a time on a laptop (`-concurrency 1`, the
@@ -19,8 +19,10 @@ default). A full Mega Man run of reply-draft is 41 fixtures x 3 samples: about 1
 sustained GPU on an M1. Bass uses the `claude` CLI and costs subscription usage or API
 spend; the report shows it.
 
-Every sample is written to `var/evals/<stage>-<time>.jsonl` (draft, escalation, checks,
-latency, cost) for later comparison.
+Every sample is written to `var/evals/<run_id>.jsonl` (draft, escalation, checks, latency,
+cost, plus the commit, dirty flag and `-filter` that produced it). `just eval` then loads
+the files into `raw.eval_samples` in `var/lab.duckdb` and builds the dbt marts in
+`analytics/`; `just runs` lists recent runs. A filtered run never counts toward a weapon.
 
 ## How it works
 

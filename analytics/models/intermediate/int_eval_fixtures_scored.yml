@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: int_eval_fixtures_scored
+    description: One row per fixture per contestant per run.
+    columns:
+      - name: fixture_result_key
+        description: run_id | contestant | fixture
+        tests:
+          - unique
+          - not_null
+      - name: sample_count
+        description: Samples of this fixture in the run
+      - name: passed_sample_count
+        description: Samples that passed
+      - name: is_all_passed
+        description: Every sample passed
+        tests:
+          - not_null
+      - name: has_harness_error
+        description: At least one sample failed before scoring
