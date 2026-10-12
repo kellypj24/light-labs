@@ -15,14 +15,14 @@ WITH ranked AS (
             PARTITION BY stage, role ORDER BY started_at DESC
         ) AS recency
     FROM {{ ref('fct_eval_runs') }}
-    WHERE is_full_run AND role IN ('megaman', 'bass')
+    WHERE is_full_run AND role IN ('mega-man', 'bass')
 
 ),
 
 local_runs AS (
 
     SELECT * FROM ranked
-    WHERE role = 'megaman' AND recency = 1
+    WHERE role = 'mega-man' AND recency = 1
 
 ),
 

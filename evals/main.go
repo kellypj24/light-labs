@@ -1,7 +1,7 @@
 // Command evals runs light-labs boss fights: each contestant model against a
 // stage's fixtures, several samples each, scored deterministically.
 //
-//	go -C evals run . -stage reply-draft -contestants megaman -samples 3
+//	go -C evals run . -stage reply-draft -contestants mega-man -samples 3
 package main
 
 import (
@@ -46,7 +46,7 @@ type Sample struct {
 
 func main() {
 	stageName := flag.String("stage", "reply-draft", "stage to fight (evals/stages/<stage>.yaml)")
-	names := flag.String("contestants", "megaman", "comma-separated contestant names from contestants.yaml")
+	names := flag.String("contestants", "mega-man", "comma-separated contestant names from contestants.yaml")
 	samples := flag.Int("samples", 3, "samples per fixture (local models are nondeterministic)")
 	filter := flag.String("filter", "", "only fixtures whose id or category contains one of these comma-separated terms")
 	concurrency := flag.Int("concurrency", 1, "parallel samples; keep 1 for local models on a laptop")

@@ -6,7 +6,7 @@
 # references are hand-written by Auto. The mock contestant answers with each reference, so
 # `-contestants mock -min-pass 1` proves every reference builds.
 #
-# Run:  just eval dbt-model megaman,proto-coder 3
+# Run:  just eval dbt-model mega-man,proto-coder 3
 stage: dbt-model
 robot: Guts Man
 uv_groups: [analytics]
@@ -57,18 +57,18 @@ fixtures:
         FROM {{ ref('stg_eval_samples') }}
         WHERE role = 'bass'
 
-  - id: select_megaman_escalations
+  - id: select_mega_man_escalations
     category: select
     input:
-      target: megaman_escalations
+      target: mega_man_escalations
       upstream: [stg_eval_samples]
       task: >
-        One row per sample by the contestant 'megaman' whose draft escalated. Columns:
+        One row per sample by the contestant 'mega-man' whose draft escalated. Columns:
         sample_key, category, escalation.
       reference: |
         SELECT sample_key, category, escalation
         FROM {{ ref('stg_eval_samples') }}
-        WHERE contestant = 'megaman' AND is_escalated
+        WHERE contestant = 'mega-man' AND is_escalated
 
   - id: select_long_drafts
     category: select
@@ -201,10 +201,10 @@ fixtures:
   - id: aggregate_escalation_rate
     category: aggregate
     input:
-      target: megaman_escalation_rate
+      target: mega_man_escalation_rate
       upstream: [stg_eval_samples]
       task: >
-        One row per category, counting only samples by the contestant 'megaman' that had
+        One row per category, counting only samples by the contestant 'mega-man' that had
         no harness error: escalated samples divided by those samples. Columns: category,
         escalation_rate.
       reference: |
@@ -212,7 +212,7 @@ fixtures:
             category,
             COUNT(*) FILTER (WHERE is_escalated)::DOUBLE / COUNT(*) AS escalation_rate
         FROM {{ ref('stg_eval_samples') }}
-        WHERE contestant = 'megaman' AND NOT is_harness_error
+        WHERE contestant = 'mega-man' AND NOT is_harness_error
         GROUP BY category
 
   - id: aggregate_harness_errors_by_brain
@@ -475,10 +475,10 @@ fixtures:
       upstream: [fct_eval_runs, fct_eval_category_results]
       task: >
         One row per stage and category, comparing the latest full run (is_full_run, by
-        started_at) of role 'megaman' with the latest full run of role 'bass' in the same
+        started_at) of role 'mega-man' with the latest full run of role 'bass' in the same
         stage. Only stages where both roles have a full run, and only categories present
-        in both runs. Columns: stage, category, megaman_fixture_pass_rate,
-        bass_fixture_pass_rate, gap (bass minus megaman).
+        in both runs. Columns: stage, category, mega_man_fixture_pass_rate,
+        bass_fixture_pass_rate, gap (bass minus mega-man).
       reference: |
         WITH latest AS (
             SELECT
@@ -490,7 +490,7 @@ fixtures:
                     PARTITION BY stage, role ORDER BY started_at DESC
                 ) AS recency
             FROM {{ ref('fct_eval_runs') }}
-            WHERE is_full_run AND role IN ('megaman', 'bass')
+            WHERE is_full_run AND role IN ('mega-man', 'bass')
         ),
 
         rates AS (
@@ -504,13 +504,13 @@ fixtures:
         SELECT
             mm.stage,
             mm.category,
-            mm.fixture_pass_rate AS megaman_fixture_pass_rate,
+            mm.fixture_pass_rate AS mega_man_fixture_pass_rate,
             bass.fixture_pass_rate AS bass_fixture_pass_rate,
             bass.fixture_pass_rate - mm.fixture_pass_rate AS gap
         FROM rates AS mm
         INNER JOIN rates AS bass
             ON mm.stage = bass.stage AND mm.category = bass.category
-        WHERE mm.role = 'megaman' AND bass.role = 'bass'
+        WHERE mm.role = 'mega-man' AND bass.role = 'bass'
 
   - id: join_check_failures_by_brain
     category: join
