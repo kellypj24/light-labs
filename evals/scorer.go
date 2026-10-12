@@ -42,6 +42,17 @@ func score(run *RunResult, ex Expect) []Check {
 			Detail: fmt.Sprintf("want %v, got %v", *ex.Escalate, got),
 		})
 	}
+	noted := false // the stage's note explains the first failed flag; later ones follow from it
+	for _, name := range ex.Require {
+		c := Check{Name: name, Passed: run.Result.Flags[name]}
+		if !c.Passed {
+			c.Detail = "after an earlier failure"
+			if !noted {
+				c.Detail, noted = run.Result.Notes, true
+			}
+		}
+		checks = append(checks, c)
+	}
 	if strings.TrimSpace(draft) == "" {
 		checks = append(checks, Check{Name: "non_empty", Detail: "empty draft"})
 	}

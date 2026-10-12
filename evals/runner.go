@@ -12,9 +12,11 @@ import (
 type RunResult struct {
 	OK     bool `json:"ok"`
 	Result struct {
-		Raw      string  `json:"raw"`
-		Draft    string  `json:"draft"`
-		Escalate *string `json:"escalate"`
+		Raw      string          `json:"raw"`
+		Draft    string          `json:"draft"`
+		Escalate *string         `json:"escalate"`
+		Flags    map[string]bool `json:"flags"` // stage-specific pass/fail facts, e.g. builds
+		Notes    string          `json:"notes"`
 	} `json:"result"`
 	Stats struct {
 		LatencyS     float64  `json:"latency_s"`
@@ -35,12 +37,16 @@ func runSample(ctx context.Context, root string, st *Stage, c Contestant, f Fixt
 	if err != nil {
 		return nil, fmt.Errorf("marshal input: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, "uv", "run", "--locked", "python", "-m",
-		"light_labs.evals.run_one", "--input-json", string(payload))
+	args := []string{"run", "--locked"}
+	for _, g := range st.UVGroups {
+		args = append(args, "--group", g)
+	}
+	args = append(args, "python", "-m", "light_labs.evals.run_one", "--input-json", string(payload))
+	cmd := exec.CommandContext(ctx, "uv", args...)
 	cmd.Dir = root
 	out, runErr := cmd.Output()
 	var res RunResult
-	if jsonErr := json.Unmarshal(out, &res); jsonErr == nil {
+	if jsonErr := json.Unmarshal(lastLine(out), &res); jsonErr == nil {
 		return &res, nil
 	}
 	if ee, ok := runErr.(*exec.ExitError); ok {
@@ -50,4 +56,11 @@ func runSample(ctx context.Context, root string, st *Stage, c Contestant, f Fixt
 		return nil, fmt.Errorf("runner failed: %w", runErr)
 	}
 	return nil, fmt.Errorf("runner printed no JSON envelope")
+}
+
+// lastLine is the envelope: run_one prints it last, on one line, after anything a
+// tool may have written to stdout despite the redirect.
+func lastLine(out []byte) []byte {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return []byte(lines[len(lines)-1])
 }

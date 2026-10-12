@@ -145,33 +145,68 @@ func TestIdentityPatterns(t *testing.T) {
 	}
 }
 
-// The committed stages must load, meet the fixture floor, and make every fixture
-// assert something beyond the stage defaults.
+// The committed stages must load, meet the fixture floor, and give every fixture
+// something to check beyond the stage defaults.
 func TestCommittedStages(t *testing.T) {
-	st, err := loadStage(".", "reply-draft")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(st.Fixtures) < 30 {
-		t.Fatalf("reply-draft has %d fixtures; the floor is 30", len(st.Fixtures))
-	}
-	if st.memory == "" {
-		t.Fatal("reply-draft memory did not load")
-	}
-	for _, f := range st.Fixtures {
-		own := f.Expect.Escalate != nil || len(f.Expect.ContainsAny) > 0 ||
-			len(f.Expect.MustNotMatch) > len(st.Defaults.MustNotMatch)
-		if !own {
-			t.Errorf("%s asserts nothing beyond the defaults", f.ID)
+	for _, name := range []string{"reply-draft", "dbt-model"} {
+		st, err := loadStage(".", name)
+		if err != nil {
+			t.Fatal(err)
 		}
+		if len(st.Fixtures) < 30 {
+			t.Errorf("%s has %d fixtures; the floor is 30", name, len(st.Fixtures))
+		}
+		for _, f := range st.Fixtures {
+			switch name {
+			case "reply-draft":
+				own := f.Expect.Escalate != nil || len(f.Expect.ContainsAny) > 0 ||
+					len(f.Expect.MustNotMatch) > len(st.Defaults.MustNotMatch)
+				if !own {
+					t.Errorf("%s asserts nothing beyond the defaults", f.ID)
+				}
+			case "dbt-model":
+				for _, key := range []string{"target", "task", "upstream", "reference"} {
+					if f.Input[key] == nil {
+						t.Errorf("%s: input needs %s", f.ID, key)
+					}
+				}
+			}
+		}
+	}
+	st, _ := loadStage(".", "reply-draft")
+	if st.memory == "" {
+		t.Error("reply-draft memory did not load")
 	}
 	cs, err := loadContestants(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"megaman", "proto", "bass", "mock"} {
+	for _, name := range []string{"megaman", "proto", "proto-coder", "bass", "mock"} {
 		if _, ok := cs[name]; !ok {
 			t.Errorf("contestants.yaml is missing %s", name)
 		}
+	}
+}
+
+func TestRequireFlags(t *testing.T) {
+	r := run("SELECT 1", nil)
+	r.Result.Flags = map[string]bool{"builds": true, "rows": false}
+	r.Result.Notes = "rows differ"
+	checks := score(r, Expect{Require: []string{"builds", "rows", "missing"}})
+	if c := checkNamed(checks, "builds"); c == nil || !c.Passed {
+		t.Fatal("a true flag should pass")
+	}
+	if c := checkNamed(checks, "rows"); c == nil || c.Passed || c.Detail != "rows differ" {
+		t.Fatalf("the first failed flag should carry the notes: %+v", c)
+	}
+	if c := checkNamed(checks, "missing"); c == nil || c.Passed || c.Detail == "rows differ" {
+		t.Fatalf("later failed flags should not repeat the notes: %+v", c)
+	}
+}
+
+func TestLastLineIsTheEnvelope(t *testing.T) {
+	out := []byte("dbt noise\n\x1b[0m more noise\n{\"ok\": true}\n\n")
+	if got := string(lastLine(out)); got != `{"ok": true}` {
+		t.Fatalf("lastLine = %q", got)
 	}
 }
