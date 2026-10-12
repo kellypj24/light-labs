@@ -70,8 +70,11 @@ Rush posts nothing without `approve`. Copy `light_labs/agents/rush/memory.exampl
 `ops/com.pjkelly.light-labs.rush.plist` runs `lab rush tick` hourly via launchd while the Mac
 is awake. Not installed by default.
 
-## Tests
+## Checks
 
 ```bash
-python3 -m unittest discover -s tests -t .
+just check          # pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests, same as CI
+just install-hooks  # run the hooks on every local commit
 ```
+
+CI, repository settings and what is deliberately left out: [docs/ci-cd.md](docs/ci-cd.md).

@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Keeps SHA-pinned actions current; dependabot rewrites the SHA and the version comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Only take releases that have been public for a week: a compromised release
+    # (tj-actions style) is usually caught and pulled within days.
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # uv ecosystem so uv.lock moves with pyproject.toml.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
