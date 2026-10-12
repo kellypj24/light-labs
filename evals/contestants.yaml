@@ -1,0 +1,18 @@
+# Who fights. Roles follow the README's eval loop:
+#   rock  - the local generalist: the model a robot runs on today
+#   proto - the challenger: a candidate local model trying to take Rock's slot
+#   bass  - the cloud baseline: the ceiling Rock is measured against
+#   mock  - no model; CI uses it to test the harness wiring only
+contestants:
+  - name: rock
+    role: rock
+    brain: ollama:llama3.1:8b
+  - name: proto
+    role: proto
+    brain: ollama:gemma3:4b
+  - name: bass
+    role: bass
+    brain: claude:sonnet
+  - name: mock
+    role: mock
+    brain: mock

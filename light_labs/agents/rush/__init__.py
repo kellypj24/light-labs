@@ -24,15 +24,18 @@ HOME = config.VAR / "rush"
 MEMORY = HERE / "memory.md"
 
 
-def system_prompt(text=""):
-    """Persona + memory + skills; on-match skills load when `text` triggers them."""
-    memory = MEMORY if MEMORY.exists() else HERE / "memory.example.md"
+def system_prompt(text="", memory_text=None):
+    """Persona + memory + skills; on-match skills load when `text` triggers them.
+
+    `memory_text` replaces memory.md (evals use synthetic memory)."""
+    if memory_text is None:
+        memory_text = (MEMORY if MEMORY.exists() else HERE / "memory.example.md").read_text()
     loaded = skills.for_robot(ENTRY.get("skills", []))
     return "\n\n".join(
         part
         for part in (
             (HERE / "persona.md").read_text(),
-            memory.read_text(),
+            memory_text,
             skills.render(loaded, text),
         )
         if part

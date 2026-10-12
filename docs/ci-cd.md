@@ -5,7 +5,7 @@ hardening plan, sized for a small public repo with one owner.
 
 ## Local == CI
 
-`just check` runs the same pre-commit hooks and unit tests as CI, at the same versions.
+`just check` runs the same pre-commit hooks, unit tests and eval-harness checks as CI, at the same versions.
 `just install-hooks` makes them run on every commit. A hook that would rewrite a file fails
 instead of fixing, so CI can't pass on an auto-fix.
 
@@ -22,6 +22,7 @@ instead of fixing, so CI can't pass on an auto-fix.
 |---|---|
 | Hooks | `pre-commit run --all-files` over the full history |
 | Tests | unit tests on Python 3.12 and 3.13, `uv sync` with `UV_LOCKED=1` so a stale `uv.lock` fails |
+| Eval harness | `gofmt`, `go vet`, `go test`, and a smoke run of the `reply-draft` stage against the `mock` contestant (fails only if a sample could not run) |
 | CI Success | fan-in: the single required check; fails if any job failed or was cancelled |
 
 Triggers: PRs into `main`, every push to `main` (a post-merge backstop), manual dispatch.
@@ -46,7 +47,7 @@ Idempotent; re-run after changing it.
 
 ## Dependencies (`.github/dependabot.yml`)
 
-Weekly, grouped, with a 7-day cooldown on both ecosystems: a release has to have been public
+Weekly, grouped, with a 7-day cooldown on every ecosystem (github-actions, uv, and gomod for `evals/`): a release has to have been public
 for a week before it is proposed. `github-actions` keeps the SHA pins current; `uv` moves
 `uv.lock` with `pyproject.toml`.
 

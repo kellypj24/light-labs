@@ -14,7 +14,7 @@ when its local model passes a task class. Dr. Wily is the cloud bill.
 dln.json               robot registry
 light_labs/core/       Agent Net client, Ollama backend, per-robot store (queue, journal, state)
 light_labs/agents/     one package per robot: config, persona, memory, behaviour
-evals/                 boss fights: fixtures + scoring per task class (stub)
+evals/                 boss fights: Go runner, stages (fixtures), contestants
 ops/                   launchd jobs
 var/<robot>/           runtime state, git-ignored
 ```
@@ -90,7 +90,8 @@ a small model's context small. `uv run lab skills` lists them.
 ## Checks
 
 ```bash
-just check          # pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests, same as CI
+just check          # pre-commit hooks, unit tests and eval-harness checks, same as CI
+just eval           # boss fight with real local models (see evals/README.md)
 just install-hooks  # run the hooks on every local commit
 ```
 
