@@ -19,26 +19,29 @@ import (
 
 // Sample is one scored run of one fixture by one contestant.
 type Sample struct {
-	RunID      string    `json:"run_id"`
-	Commit     string    `json:"commit,omitempty"`
-	Dirty      bool      `json:"dirty"`
-	Filter     string    `json:"filter,omitempty"`
-	Contestant string    `json:"contestant"`
-	Role       string    `json:"role"`
-	Brain      string    `json:"brain"`
-	Stage      string    `json:"stage"`
-	Fixture    string    `json:"fixture"`
-	Category   string    `json:"category"`
-	N          int       `json:"sample"`
-	Passed     bool      `json:"passed"`
-	Checks     []Check   `json:"checks"`
-	Draft      string    `json:"draft"`
-	Escalate   string    `json:"escalate,omitempty"`
-	LatencyS   float64   `json:"latency_s"`
-	CostUSD    float64   `json:"cost_usd"`
-	Isolated   *bool     `json:"isolated,omitempty"`
-	Error      string    `json:"error,omitempty"`
-	At         time.Time `json:"at"`
+	RunID  string `json:"run_id"`
+	Commit string `json:"commit,omitempty"`
+	Dirty  bool   `json:"dirty"`
+	Filter string `json:"filter,omitempty"`
+	// The stage's bar when the run was made, so a later change can't rewrite history.
+	BarMinFixtureRate *float64  `json:"bar_min_fixture_rate,omitempty"`
+	BarMaxGap         *float64  `json:"bar_max_gap,omitempty"`
+	Contestant        string    `json:"contestant"`
+	Role              string    `json:"role"`
+	Brain             string    `json:"brain"`
+	Stage             string    `json:"stage"`
+	Fixture           string    `json:"fixture"`
+	Category          string    `json:"category"`
+	N                 int       `json:"sample"`
+	Passed            bool      `json:"passed"`
+	Checks            []Check   `json:"checks"`
+	Draft             string    `json:"draft"`
+	Escalate          string    `json:"escalate,omitempty"`
+	LatencyS          float64   `json:"latency_s"`
+	CostUSD           float64   `json:"cost_usd"`
+	Isolated          *bool     `json:"isolated,omitempty"`
+	Error             string    `json:"error,omitempty"`
+	At                time.Time `json:"at"`
 }
 
 func main() {
@@ -129,6 +132,9 @@ func main() {
 				}
 				s.Isolated = run.Stats.Isolated
 				s.Error = run.Error
+			}
+			if st.Bar != nil {
+				s.BarMinFixtureRate, s.BarMaxGap = &st.Bar.MinFixtureRate, &st.Bar.MaxGap
 			}
 			s.Passed = passed(s.Checks)
 			results[i] = s

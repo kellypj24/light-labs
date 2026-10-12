@@ -45,12 +45,21 @@ type Fixture struct {
 	Expect   Expect         `yaml:"expect"`
 }
 
+// Bar is what "close enough to Bass" means for a stage, fixed before the first run
+// (see the boss-fight skill). Zero values fall back to the dbt project's defaults.
+type Bar struct {
+	MinFixtureRate float64 `yaml:"min_fixture_rate"` // Mega Man's floor, every sample of a fixture passing
+	MaxGap         float64 `yaml:"max_gap"`          // how far below Bass he may be
+	Reason         string  `yaml:"reason"`           // why these numbers, in a sentence
+}
+
 // Stage is one boss fight: a task class with its fixtures.
 type Stage struct {
 	Stage      string    `yaml:"stage"`
 	Robot      string    `yaml:"robot"`
 	MemoryFile string    `yaml:"memory_file"`
 	UVGroups   []string  `yaml:"uv_groups"` // extra dependency groups run_one needs
+	Bar        *Bar      `yaml:"bar"`
 	Defaults   Expect    `yaml:"defaults"`
 	Fixtures   []Fixture `yaml:"fixtures"`
 	memory     string
@@ -86,6 +95,9 @@ func loadStage(dir, name string) (*Stage, error) {
 		}
 		seen[f.ID] = true
 		st.Fixtures[i].Expect = st.Defaults.merge(f.Expect)
+	}
+	if b := st.Bar; b != nil && (b.MinFixtureRate <= 0 || b.MinFixtureRate > 1 || b.MaxGap < 0 || b.Reason == "") {
+		return nil, fmt.Errorf("%s: bar needs min_fixture_rate in (0, 1], max_gap >= 0 and a reason", path)
 	}
 	sort.SliceStable(st.Fixtures, func(i, j int) bool { return st.Fixtures[i].ID < st.Fixtures[j].ID })
 	if st.MemoryFile != "" {

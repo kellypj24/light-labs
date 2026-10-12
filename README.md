@@ -30,6 +30,18 @@ Three roles run every boss fight:
 | **Proto Man (Blues)** | Light's first prototype: unstable core, lone wolf, whistles before he appears | **The challenger.** Runs the next candidate model on the same tasks in shadow. Beat Mega Man on the evals and he takes the slot. |
 | **Bass** | Built by Wily as Mega Man's rival | **The cloud baseline.** Claude or GPT on the same fixtures, the ceiling in every fight. Mega Man clears a stage when he gets close enough to Bass at a fraction of the cost. |
 
+Mega Man, Proto Man and Bass are model slots (local best, local challenger, cloud). A robot
+master is a task class: its persona, skills, prompt and stage. When Mega Man clears a robot
+master's stage he gets its weapon: that robot master switches to his brain and runs locally
+instead of escalating to Auto. You still invoke the robot master; the weapon is recorded
+on its `dln.json` entry (stage, brain, run_id). Routing is per stage, so a challenger that
+wins one stage takes only that robot master.
+
+"Close enough" is a per-stage bar fixed before the first run: a floor on Mega Man's fixture
+pass rate and a maximum gap to Bass, with a written reason (`bar:` in each
+`evals/stages/<stage>.yaml`; procedure in the `boss-fight` skill). Bass is the canon
+spelling; "Base" in older notes and call transcripts means the same cloud baseline.
+
 Mega Man fights each stage against Bass, Proto Man keeps trying to take Mega Man's place, and every
 cleared stage is a task Wily no longer bills for. Auto (Claude Code) is separate: the mechanic
 who builds, not a competitor.

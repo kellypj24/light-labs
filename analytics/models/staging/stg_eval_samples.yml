@@ -61,6 +61,10 @@ models:
         description: Short commit the run was made from; NULL before the runner recorded it
       - name: is_dirty
         description: The working tree had uncommitted changes during the run
+      - name: bar_min_fixture_rate
+        description: The stage's bar floor when the run was made; NULL means the dbt default
+      - name: bar_max_gap
+        description: The stage's allowed gap to Bass when the run was made; NULL means the dbt default
       - name: fixture_filter
         description: The runner's -filter; NULL for a full-stage run
       - name: checks

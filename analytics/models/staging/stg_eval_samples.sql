@@ -27,6 +27,8 @@ renamed AS (
         isolated AS is_isolated,
         "commit" AS git_commit,  -- noqa: RF06
         dirty AS is_dirty,
+        bar_min_fixture_rate,
+        bar_max_gap,
         checks,
         "at" AS sampled_at,  -- noqa: RF06
         source AS source_file,

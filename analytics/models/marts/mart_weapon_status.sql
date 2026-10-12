@@ -1,9 +1,10 @@
 {#
     One row per stage: has the local generalist earned the stage's weapon?
     Compares Mega Man's latest full run with Bass's latest full run. Earned when
-    Mega Man's fixture pass rate clears `weapon_min_fixture_rate` and trails Bass
-    by no more than `weapon_max_gap`. No Bass run, no weapon: the ceiling must
-    be measured, not assumed.
+    Mega Man's fixture pass rate clears the stage's floor and trails Bass by no
+    more than its gap. The bar is the one recorded on Mega Man's run (the stage
+    YAML's `bar:` at the time), else the `weapon_*` vars. No Bass run, no weapon:
+    the ceiling must be measured, not assumed.
 #}
 
 WITH ranked AS (
@@ -50,7 +51,11 @@ compared AS (
         cloud_runs.fixture_pass_rate AS cloud_fixture_pass_rate,
         cloud_runs.mean_latency_seconds AS cloud_mean_latency_seconds,
         cloud_runs.total_cost_usd AS cloud_cost_usd,
-        cloud_runs.fixture_pass_rate - local_runs.fixture_pass_rate AS fixture_rate_gap
+        cloud_runs.fixture_pass_rate - local_runs.fixture_pass_rate AS fixture_rate_gap,
+        COALESCE(
+            local_runs.bar_min_fixture_rate, {{ var('weapon_min_fixture_rate') }}
+        ) AS bar_min_fixture_rate,
+        COALESCE(local_runs.bar_max_gap, {{ var('weapon_max_gap') }}) AS bar_max_gap
     FROM local_runs
     LEFT JOIN cloud_runs ON local_runs.stage = cloud_runs.stage
 
@@ -59,8 +64,8 @@ compared AS (
 SELECT
     *,
     COALESCE(
-        local_fixture_pass_rate >= {{ var('weapon_min_fixture_rate') }}
-        AND fixture_rate_gap <= {{ var('weapon_max_gap') }},
+        local_fixture_pass_rate >= bar_min_fixture_rate
+        AND fixture_rate_gap <= bar_max_gap,
         FALSE
     ) AS is_weapon_earned
 FROM compared

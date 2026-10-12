@@ -20,6 +20,8 @@ COLUMNS = {
     "commit": "VARCHAR",
     "dirty": "BOOLEAN",
     "filter": "VARCHAR",
+    "bar_min_fixture_rate": "DOUBLE",
+    "bar_max_gap": "DOUBLE",
     "contestant": "VARCHAR",
     "role": "VARCHAR",
     "brain": "VARCHAR",

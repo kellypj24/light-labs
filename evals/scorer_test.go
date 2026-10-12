@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -208,5 +210,32 @@ func TestLastLineIsTheEnvelope(t *testing.T) {
 	out := []byte("dbt noise\n\x1b[0m more noise\n{\"ok\": true}\n\n")
 	if got := string(lastLine(out)); got != `{"ok": true}` {
 		t.Fatalf("lastLine = %q", got)
+	}
+}
+
+func TestBarValidation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "stages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(bar string) error {
+		body := "stage: s\nrobot: r\n" + bar + "fixtures:\n  - {id: a, category: c, input: {x: 1}}\n"
+		if err := os.WriteFile(filepath.Join(dir, "stages", "s.yaml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := loadStage(dir, "s")
+		return err
+	}
+	if err := write(""); err != nil {
+		t.Fatalf("no bar is allowed: %v", err)
+	}
+	if err := write("bar: {min_fixture_rate: 0.9, max_gap: 0.05, reason: why}\n"); err != nil {
+		t.Fatalf("a full bar should load: %v", err)
+	}
+	if write("bar: {min_fixture_rate: 0.9, max_gap: 0.05}\n") == nil {
+		t.Fatal("a bar without a reason should fail")
+	}
+	if write("bar: {min_fixture_rate: 1.5, max_gap: 0.05, reason: why}\n") == nil {
+		t.Fatal("a rate above 1 should fail")
 	}
 }
