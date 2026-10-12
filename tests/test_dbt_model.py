@@ -50,6 +50,8 @@ class BuilderTest(unittest.TestCase):
         prompt = model_prompt("x_counts", "Count x.", upstream)
         self.assertIn("`x_counts`", prompt)
         self.assertIn("- x_id VARCHAR: Key", prompt)
+        self.assertIn("### {{ ref('stg_x') }}", prompt)
+        self.assertIn("FROM {{ ref('stg_x') }}", prompt)
         self.assertIn("models/x_counts.sql", prompt)
 
 

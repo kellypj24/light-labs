@@ -16,7 +16,7 @@ live numbers.
 | Stage | Robot | Fixtures | Mega Man (llama3.1:8b) | Proto Man | Bass (Claude Sonnet) | Weapon |
 |---|---|---|---|---|---|---|
 | `reply-draft` | Rush | 41 | 0.805 | 0.512 (gemma3:4b) | 0.976 | not earned |
-| `dbt-model` | Guts Man | 33 | 0.000 | 0.000 (qwen2.5-coder:7b) | 0.970 | not earned |
+| `dbt-model` | Guts Man | 33 | 0.182 | 0.485 (qwen2.5-coder:7b) | 0.970 | not earned |
 
 Rates are fixture pass rates: a fixture counts only when every sample passed (3 samples for
 local models, 1 for Bass). The bar for both stages is 0.90 and within 0.05 of Bass.

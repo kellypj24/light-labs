@@ -422,8 +422,9 @@ fixtures:
       upstream: [fct_eval_runs]
       task: >
         For each stage, take each contestant's most recent full run (is_full_run, by
-        started_at) and rank the contestants by its fixture_pass_rate, 1 = highest, equal
-        rates sharing a rank with no gaps after them. Columns: stage, contestant,
+        started_at) and rank the contestants by its fixture_pass_rate with DENSE_RANK:
+        1 = highest, equal rates get the same rank, the next lower rate gets the next
+        number. Columns: stage, contestant,
         fixture_pass_rate, rank_in_stage.
       reference: |
         WITH latest AS (
