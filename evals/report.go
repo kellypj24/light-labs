@@ -8,15 +8,14 @@ import (
 	"path/filepath"
 	"sort"
 	"text/tabwriter"
-	"time"
 )
 
-// writeResults appends nothing: one JSONL file per run, named by stage and time.
-func writeResults(dir, stage string, samples []Sample) (string, error) {
+// writeResults appends nothing: one JSONL file per run, named by run id.
+func writeResults(dir, runID string, samples []Sample) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, fmt.Sprintf("%s-%s.jsonl", stage, time.Now().UTC().Format("20060102T150405Z")))
+	path := filepath.Join(dir, runID+".jsonl")
 	f, err := os.Create(path)
 	if err != nil {
 		return "", err
