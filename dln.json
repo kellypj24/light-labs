@@ -1,0 +1,17 @@
+{
+  "_note": "Dr. Light Numbers for this lab. Canon uses DLN-000 to DLN-08x; ours start at DLN-100.",
+  "robots": [
+    {
+      "dln": "DLN-100",
+      "name": "Rush",
+      "role": "support",
+      "job": "Heartbeat: reads the pj_agent inbox and watched board tasks, drafts replies into an approval queue, flags escalations for Auto (Claude Code).",
+      "model": "ollama:llama3.1:8b",
+      "actor": "pj_agent",
+      "status": "active",
+      "commissioned": "2026-10-12",
+      "formerly": ["Gizmo"],
+      "weapons": []
+    }
+  ]
+}

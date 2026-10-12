@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hourly heartbeat for DLN-100 Rush. Install: cp to ~/Library/LaunchAgents/ then
+     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.rush.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.rush</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>/Users/pjkelly/light-labs</string>
+    <string>lab</string>
+    <string>rush</string>
+    <string>tick</string>
+  </array>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/rush/launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/rush/launchd.log</string>
+</dict>
+</plist>

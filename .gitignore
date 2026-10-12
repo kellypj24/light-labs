@@ -1,0 +1,5 @@
+var/
+__pycache__/
+.venv/
+.env
+light_labs/agents/*/memory.md
