@@ -1,67 +1,93 @@
 # light-labs
 
 PJ's local AI lab. Robots (agents) run on local models wherever evals show they are good
-enough; work that local models can't yet handle goes to Auto (Claude Code). The point is to
-measure, task by task, what can leave paid cloud models and when local compute pays for itself.
+enough; work local models can't yet handle goes to Auto (Claude Code). The lab measures,
+task by task, what can leave paid cloud models and when local compute pays for itself.
 
 Mega Man theme: PJ is Dr. Light, each robot has a Dr. Light Number in `dln.json` (ours start
-at DLN-100 to stay clear of canon), eval suites are boss fights, and a robot earns a weapon
-when its local model passes a task class. Dr. Wily is the cloud bill.
+at DLN-100, clear of canon), eval stages are boss fights, and a robot earns a weapon when a
+local model passes its stage. Dr. Wily is the cloud bill.
+
+## Where it stands
+
+As of 2026-10-12, on a 16 GB M1 Pro. `just runs` and `marts.mart_weapon_status` have the
+live numbers.
+
+| Stage | Robot | Fixtures | Mega Man (llama3.1:8b) | Proto Man | Bass (Claude Sonnet) | Weapon |
+|---|---|---|---|---|---|---|
+| `reply-draft` | Rush | 41 | 0.805 | 0.512 (gemma3:4b) | 0.976 | not earned |
+| `dbt-model` | Guts Man | 33 | 0.000 | 0.000 (qwen2.5-coder:7b) | 0.970 | not earned |
+
+Rates are fixture pass rates: a fixture counts only when every sample passed (3 samples for
+local models, 1 for Bass). The bar for both stages is 0.90 and within 0.05 of Bass.
+
+## How it works
+
+1. **A robot master is a task class**: persona, skills, prompt builder, output cleaning.
+   Rush drafts board replies; Guts Man writes dbt models.
+2. **A stage is its boss fight**: 30+ fixtures in `evals/stages/<stage>.yaml`, run through
+   the robot's real pipeline and scored deterministically by code. No judge model.
+3. **Contestants are model slots**, not robots:
+
+   | Slot | Lore | Lab role |
+   |---|---|---|
+   | **Mega Man (Rock)** | The generalist who copies the weapon of every boss he beats | The best local model. |
+   | **Proto Man (Blues)** | Light's first prototype; lone wolf | A challenger local model. Beat Mega Man on a stage and he takes it. |
+   | **Bass** | Built by Wily as Mega Man's rival | The cloud baseline, the ceiling in every fight. ("Base" in older notes is the same.) |
+
+4. **The bar is fixed before the first run**: `bar:` in the stage YAML (floor on Mega Man's
+   fixture pass rate, maximum gap to Bass, a written reason). Every sample records it, so
+   changing a bar never rewrites a past verdict. Procedure: the `boss-fight` skill.
+5. **Weapon get**: when Mega Man clears the bar, the robot master switches to his brain and
+   runs locally instead of escalating to Auto. The weapon is recorded on the robot's
+   `dln.json` entry. Routing is per stage: a challenger that wins one stage takes only that
+   robot master.
+
+Auto (Claude Code) is the mechanic: it builds the lab, writes the reference answers, and takes
+whatever a robot escalates. It never competes.
+
+## Robots
+
+| DLN | Name | Status | Job |
+|---|---|---|---|
+| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies into an approval queue, escalates work to Auto. Posts nothing without PJ's approval. |
+| DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
+
+Planned: Beat (watcher, likely the orchestrator), Roll (housekeeping), and robot masters as
+new task classes get stages.
 
 ## Layout
 
 ```
 dln.json               robot registry
-light_labs/core/       Agent Net client, Ollama backend, per-robot store (queue, journal, state)
-light_labs/agents/     one package per robot: config, persona, memory, behaviour
-evals/                 boss fights: Go runner, stages (fixtures), contestants
-analytics/             dbt-duckdb project over the eval results (raw → staging → marts)
-ops/                   launchd jobs
-var/<robot>/           runtime state, git-ignored
+.claude/skills/        skills shared by Auto and the robots (audience in frontmatter)
+light_labs/core/       Agent Net client, model backends (Ollama, Claude CLI, mock), skills, store
+light_labs/agents/     one package per robot: persona, prompt builders, behaviour
+light_labs/evals/      run_one (one sample through a robot's pipeline), results ingest, stages
+evals/                 Go runner, stages (fixtures + bar), contestants
+analytics/             dbt-duckdb project: raw eval samples → staging → marts
+tests/                 unit tests (no network, no models)
+ops/                   launchd job for Rush, GitHub settings
+var/                   runtime state, results and the lab database; git-ignored
 ```
 
-## The eval loop: Mega Man, Proto Man and Bass
+## Requirements
 
-Three roles run every boss fight:
-
-| Robot | Lore | Lab role |
-|---|---|---|
-| **Mega Man (Rock)** | The generalist who copies the weapon of every boss he beats | **The local generalist.** The best local model, working through the routing table. Each weapon he holds is a task class a local model has proven it can do. He is the robot who shrinks the cloud bill. |
-| **Proto Man (Blues)** | Light's first prototype: unstable core, lone wolf, whistles before he appears | **The challenger.** Runs the next candidate model on the same tasks in shadow. Beat Mega Man on the evals and he takes the slot. |
-| **Bass** | Built by Wily as Mega Man's rival | **The cloud baseline.** Claude or GPT on the same fixtures, the ceiling in every fight. Mega Man clears a stage when he gets close enough to Bass at a fraction of the cost. |
-
-Mega Man, Proto Man and Bass are model slots (local best, local challenger, cloud). A robot
-master is a task class: its persona, skills, prompt and stage. When Mega Man clears a robot
-master's stage he gets its weapon: that robot master switches to his brain and runs locally
-instead of escalating to Auto. You still invoke the robot master; the weapon is recorded
-on its `dln.json` entry (stage, brain, run_id). Routing is per stage, so a challenger that
-wins one stage takes only that robot master.
-
-"Close enough" is a per-stage bar fixed before the first run: a floor on Mega Man's fixture
-pass rate and a maximum gap to Bass, with a written reason (`bar:` in each
-`evals/stages/<stage>.yaml`; procedure in the `boss-fight` skill). Bass is the canon
-spelling; "Base" in older notes and call transcripts means the same cloud baseline.
-
-Mega Man fights each stage against Bass, Proto Man keeps trying to take Mega Man's place, and every
-cleared stage is a task Wily no longer bills for. Auto (Claude Code) is separate: the mechanic
-who builds, not a competitor.
-
-## Robots
-
-| DLN | Name | Role |
-|---|---|---|
-| DLN-100 | Rush | Heartbeat. Reads the `pj_agent` inbox and watched board tasks, drafts replies into an approval queue, escalates to Auto. |
-| DLN-101 | Guts Man | In training on the `dbt-model` stage (`evals/stages/dbt-model.yaml`): writes one dbt model over the lab's eval data, scored by building it and matching a reference model's rows. Dr. Light's construction robot: lifts and places blocks. |
-
-Planned: Mega Man, Proto Man and Bass for the eval loop above; Beat (watcher), Roll
-(housekeeping) and robot masters as task classes earn them.
+- [uv](https://docs.astral.sh/uv/), [just](https://just.systems), Go (see `evals/go.mod`)
+- [Ollama](https://ollama.com) with `llama3.1:8b`; for challengers, `gemma3:4b` and
+  `qwen2.5-coder:7b`
+- The `claude` CLI for Bass. Logged in with a subscription, it uses subscription limits;
+  with `ANTHROPIC_API_KEY` set, it bills the API.
+- For Rush only: `.env` from `.env.example` (Agent Net edge, Keychain service, watched
+  tasks), the Agent Net token in macOS Keychain, network access to the edge
 
 ## Use
+
+Rush:
 
 ```bash
 uv run lab roster
 uv run lab rush tick              # one heartbeat (first run marks the backlog seen)
-uv run lab rush tick --backfill   # first run only: draft for the existing backlog too
 uv run lab rush queue
 uv run lab rush show <id>         # edit var/rush/queue/pending/<id>.json to revise a draft
 uv run lab rush approve <id>      # post it
@@ -69,55 +95,48 @@ uv run lab rush reject <id>
 uv run lab rush escalate <id>     # hand to Auto (`claude -p`); result stays local
 ```
 
-Eval results:
+Copy `light_labs/agents/rush/memory.example.md` to `memory.md` (git-ignored) and keep it
+current; the 8B model invents past work without it. `ops/com.pjkelly.light-labs.rush.plist`
+runs a tick when loaded and hourly after that, while the Mac is awake.
+
+Boss fights and results:
 
 ```bash
-just eval reply-draft mega-man 3   # fight; results land in var/evals, then var/lab.duckdb
-just analytics                    # re-ingest var/evals and dbt build the marts
-just runs                         # recent runs from marts.fct_eval_runs
+just eval reply-draft mega-man,bass 3          # fight; results to var/evals, then var/lab.duckdb
+just eval dbt-model mega-man,proto-coder 3
+just analytics                                 # re-ingest var/evals and dbt build the marts
+just runs                                      # recent runs from marts.fct_eval_runs
 ```
 
-`marts.mart_weapon_status` says whether Mega Man has earned each stage's weapon: his
-latest full run against Bass's, thresholds in `analytics/dbt_project.yml`.
-
-Rush posts nothing without `approve`. Copy `light_labs/agents/rush/memory.example.md` to
-`memory.md` (git-ignored) and keep it current; the 8B model invents past work without it.
-
-## Requirements
-
-- `.env` from `.env.example`: Agent Net edge URL, Keychain service, watched tasks
-- Ollama with `llama3.1:8b` (or set `RUSH_MODEL`)
-- Agent Net token in macOS Keychain under that service name
-- Network access to the Agent Net edge (here, over Tailscale)
-
-## Schedule
-
-`ops/com.pjkelly.light-labs.rush.plist` runs `lab rush tick` hourly via launchd while the Mac
-is awake. Not installed by default.
+Real models run locally only, one fight at a time; a full local fight is 20-25 minutes of
+sustained GPU on an M1. Don't run checks or builds alongside one. Marts: `fct_eval_runs`,
+`fct_eval_category_results`, `fct_eval_check_failures`, `mart_weapon_status`. Harness
+details: [evals/README.md](evals/README.md).
 
 ## Skills
 
 `.claude/skills/<name>/SKILL.md`, in Claude Code's format, serves both Auto and the robots.
-Frontmatter adds `audience` (`auto`, `robots`, or both) and, for robots, `load` (`always`,
-or `on-match` with `triggers`). A robot gets the full text of its `always` skills and of any
-`on-match` skill the message triggers; the rest appear as one-line index entries, which keeps
-a small model's context small. `uv run lab skills` lists them.
+Frontmatter adds `audience` and, for robots, `load` (`always`, or `on-match` with
+`triggers`). A robot gets the full text of its `always` skills and any `on-match` skill the
+message triggers; the rest are one-line index entries, which keeps a small model's context
+small. `uv run lab skills` lists them.
 
 | Skill | Audience | Purpose |
 |---|---|---|
 | agent-net-etiquette | robots, auto | How to write for the shared board |
 | escalate-to-auto | robots | When and how to hand work to Auto |
+| dbt-model-sql | robots | Writing one dbt model on DuckDB (from the data-engineering toolkit's dbt-model skill) |
 | lab-workflow | auto | Branch, check, push, PR, merge |
 | add-robot | auto | Commission a new robot |
 | update-robot-memory | auto | Keep a robot's local memory accurate |
-| boss-fight | auto | Design an eval stage |
+| boss-fight | auto | Design a stage, set its bar, record a weapon |
 
 ## Checks
 
 ```bash
-just check          # pre-commit hooks, unit tests and eval-harness checks, same as CI
-just eval           # boss fight with real local models (see evals/README.md)
+just check          # hooks, unit tests, Go harness tests, dbt-model oracle, dbt build; same as CI
 just install-hooks  # run the hooks on every local commit
 ```
 
 CI, repository settings and what is deliberately left out: [docs/ci-cd.md](docs/ci-cd.md).
+Conventions for Auto (naming, what never gets committed): [CLAUDE.md](CLAUDE.md).
