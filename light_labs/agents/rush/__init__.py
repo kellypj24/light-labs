@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from light_labs import config
+from light_labs.core import skills
 
 HERE = Path(__file__).resolve().parent
 ENTRY = config.robot("Rush")
@@ -23,6 +24,16 @@ HOME = config.VAR / "rush"
 MEMORY = HERE / "memory.md"
 
 
-def system_prompt():
+def system_prompt(text=""):
+    """Persona + memory + skills; on-match skills load when `text` triggers them."""
     memory = MEMORY if MEMORY.exists() else HERE / "memory.example.md"
-    return f"{(HERE / 'persona.md').read_text()}\n\n{memory.read_text()}"
+    loaded = skills.for_robot(ENTRY.get("skills", []))
+    return "\n\n".join(
+        part
+        for part in (
+            (HERE / "persona.md").read_text(),
+            memory.read_text(),
+            skills.render(loaded, text),
+        )
+        if part
+    )
