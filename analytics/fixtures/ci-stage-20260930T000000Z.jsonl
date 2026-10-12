@@ -1,0 +1,1 @@
+{"contestant": "proto", "role": "proto", "brain": "ollama:gemma3:4b", "stage": "ci-stage", "fixture": "chat_a", "category": "chat", "sample": 1, "passed": false, "checks": [{"name": "ran", "passed": true}, {"name": "must_not_match", "passed": false, "detail": "Here's the draft"}], "draft": "ok", "latency_s": 1.5, "cost_usd": 0, "at": "2026-09-30T00:00:00Z"}

@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: fct_eval_runs
+    description: One row per contestant per eval run.
+    columns:
+      - name: run_contestant_key
+        description: run_id | contestant
+        tests:
+          - unique
+          - not_null
+      - name: run_id
+        tests:
+          - not_null
+      - name: role
+        description: megaman, proto, bass or mock
+      - name: git_commit
+        description: Commit the run was made from; NULL for runs before it was recorded
+      - name: is_dirty
+        description: Uncommitted changes were present, so git_commit alone does not reproduce it
+      - name: is_full_run
+        description: No -filter; every fixture in the stage was fought
+      - name: samples_per_fixture
+        description: The runner's -samples
+      - name: sample_pass_rate
+        description: Passed samples / samples
+        tests:
+          - not_null
+      - name: fixture_pass_rate
+        description: Fixtures whose every sample passed / fixtures
+        tests:
+          - not_null
+      - name: harness_error_count
+        description: Samples that failed before scoring; a run with any is suspect
+      - name: total_cost_usd
+        description: API-equivalent cost; not a charge when the cloud CLI runs on a subscription
+      - name: is_isolated
+        description: False when the cloud CLI loaded the user's own CLAUDE.md
+
+unit_tests:
+  - name: sample_and_fixture_rates
+    description: >
+      Three of four samples pass, but only one of two fixtures passes on every sample,
+      so the sample rate is 0.75 and the fixture rate 0.5.
+    model: fct_eval_runs
+    given:
+      - input: ref('stg_eval_samples')
+        rows:
+          - {run_id: r1, contestant: megaman, fixture: a, sample_number: 1, is_passed: true, is_harness_error: false, is_escalated: false}
+          - {run_id: r1, contestant: megaman, fixture: a, sample_number: 2, is_passed: true, is_harness_error: false, is_escalated: false}
+          - {run_id: r1, contestant: megaman, fixture: b, sample_number: 1, is_passed: true, is_harness_error: false, is_escalated: true}
+          - {run_id: r1, contestant: megaman, fixture: b, sample_number: 2, is_passed: false, is_harness_error: true, is_escalated: false}
+      - input: ref('int_eval_fixtures_scored')
+        rows:
+          - {run_id: r1, contestant: megaman, fixture: a, is_all_passed: true}
+          - {run_id: r1, contestant: megaman, fixture: b, is_all_passed: false}
+    expect:
+      rows:
+        - {run_contestant_key: r1|megaman, is_full_run: true, sample_count: 4, sample_pass_rate: 0.75, fixture_pass_rate: 0.5, harness_error_count: 1, escalated_sample_count: 1, samples_per_fixture: 2}

@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: mart_weapon_status
+    description: >
+      One row per stage: whether Mega Man (the local generalist) has earned the stage's
+      weapon, judged on his latest full run against Bass's latest full run. Thresholds
+      are the weapon_* vars in dbt_project.yml.
+    columns:
+      - name: stage
+        tests:
+          - unique
+          - not_null
+      - name: local_fixture_pass_rate
+        description: Mega Man's fixture pass rate on his latest full run
+      - name: cloud_fixture_pass_rate
+        description: Bass's fixture pass rate on his latest full run; NULL if none
+      - name: fixture_rate_gap
+        description: Bass minus Mega Man; NULL without a Bass run
+      - name: is_weapon_earned
+        description: Mega Man clears the threshold and trails Bass by no more than the gap
+        tests:
+          - not_null
+
+unit_tests:
+  - name: weapon_rules
+    description: Threshold, gap, missing baseline, and filtered runs not counting.
+    model: mart_weapon_status
+    given:
+      - input: ref('fct_eval_runs')
+        rows:
+          # earned: 0.92 local, 0.95 cloud
+          - {stage: s1, role: megaman, run_id: s1-a, is_full_run: true, fixture_pass_rate: 0.92, started_at: "2026-10-01 00:00:00"}
+          - {stage: s1, role: bass, run_id: s1-b, is_full_run: true, fixture_pass_rate: 0.95, started_at: "2026-10-01 00:00:00"}
+          # below threshold: latest full run 0.80; a later filtered 1.0 must not count
+          - {stage: s2, role: megaman, run_id: s2-a, is_full_run: true, fixture_pass_rate: 0.80, started_at: "2026-10-01 00:00:00"}
+          - {stage: s2, role: megaman, run_id: s2-f, is_full_run: false, fixture_pass_rate: 1.0, started_at: "2026-10-02 00:00:00"}
+          - {stage: s2, role: bass, run_id: s2-b, is_full_run: true, fixture_pass_rate: 0.85, started_at: "2026-10-01 00:00:00"}
+          # gap too wide: 0.91 local vs 1.0 cloud
+          - {stage: s3, role: megaman, run_id: s3-a, is_full_run: true, fixture_pass_rate: 0.91, started_at: "2026-10-01 00:00:00"}
+          - {stage: s3, role: bass, run_id: s3-b, is_full_run: true, fixture_pass_rate: 1.0, started_at: "2026-10-01 00:00:00"}
+          # no baseline
+          - {stage: s4, role: megaman, run_id: s4-a, is_full_run: true, fixture_pass_rate: 0.99, started_at: "2026-10-01 00:00:00"}
+    expect:
+      rows:
+        - {stage: s1, local_run_id: s1-a, is_weapon_earned: true}
+        - {stage: s2, local_run_id: s2-a, is_weapon_earned: false}
+        - {stage: s3, local_run_id: s3-a, is_weapon_earned: false}
+        - {stage: s4, local_run_id: s4-a, is_weapon_earned: false}

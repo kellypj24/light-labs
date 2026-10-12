@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Landed by `lab evals ingest` from the eval runner's JSONL files.
+    schema: raw
+    tables:
+      - name: eval_samples
+        description: >
+          One row per scored sample: one contestant's attempt at one fixture. Columns
+          the runner added later (run_id, commit, dirty, filter) are NULL on older runs.
+        columns:
+          - name: run_id
+            tests:
+              - not_null
+          - name: contestant
+            tests:
+              - not_null
+          - name: fixture
+            tests:
+              - not_null

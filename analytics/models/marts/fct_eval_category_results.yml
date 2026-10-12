@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: fct_eval_category_results
+    description: One row per fixture category per contestant per run.
+    columns:
+      - name: run_category_key
+        description: run_id | contestant | category
+        tests:
+          - unique
+          - not_null
+      - name: sample_pass_rate
+        description: Passed samples / samples in the category
+      - name: fixture_pass_rate
+        description: Fixtures in the category whose every sample passed / fixtures

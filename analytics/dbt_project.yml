@@ -1,0 +1,36 @@
+# Eval analytics: raw eval samples (`lab evals ingest`) → staging → intermediate → marts.
+# Layout and conventions follow ~/data-engineering/transformation/dbt.
+name: light_labs
+version: "1.0.0"
+
+require-dbt-version: ">=1.10.0"
+
+profile: light_labs
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  # A stage's weapon is earned when the local generalist (role megaman) clears this
+  # fixture pass rate (every sample of a fixture must pass) on its latest run...
+  weapon_min_fixture_rate: 0.9
+  # ...and trails the cloud baseline (role bass) by no more than this.
+  weapon_max_gap: 0.05
+
+models:
+  light_labs:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts

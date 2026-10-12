@@ -1,0 +1,87 @@
+version: 2
+
+models:
+  - name: stg_eval_samples
+    description: One row per scored sample (contestant x fixture x sample number) per run.
+    columns:
+      - name: sample_key
+        description: run_id | contestant | fixture | sample_number
+        tests:
+          - unique
+          - not_null
+      - name: run_id
+        description: One invocation of the eval runner, `<stage>-<UTC timestamp>`
+        tests:
+          - not_null
+      - name: stage
+        description: The boss fight, e.g. reply-draft
+        tests:
+          - not_null
+      - name: contestant
+        description: Contestant name from evals/contestants.yaml
+        tests:
+          - not_null
+      - name: role
+        description: megaman (local generalist), proto (challenger), bass (cloud), mock
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["megaman", "proto", "bass", "mock"]
+      - name: brain
+        description: Model spec, e.g. ollama:llama3.1:8b or claude:sonnet
+      - name: fixture
+        description: Fixture id within the stage
+        tests:
+          - not_null
+      - name: category
+        description: Fixture category, e.g. chat, work, decision
+      - name: sample_number
+        description: 1-based sample index; local models are sampled several times
+      - name: is_passed
+        description: Every check on the sample passed
+        tests:
+          - not_null
+      - name: is_harness_error
+        description: The runner or model call failed before scoring
+      - name: escalation
+        description: Text of the ESCALATE line, if the draft escalated
+      - name: is_escalated
+        description: The draft escalated to Auto
+      - name: draft
+        description: The cleaned reply the robot would have queued
+      - name: draft_chars
+        description: Length of the draft in characters
+      - name: latency_seconds
+        description: Model call wall time
+      - name: cost_usd
+        description: API-equivalent cost; 0 for local models, not a charge on a subscription
+      - name: is_isolated
+        description: False when the cloud CLI loaded the user's own CLAUDE.md
+      - name: git_commit
+        description: Short commit the run was made from; NULL before the runner recorded it
+      - name: is_dirty
+        description: The working tree had uncommitted changes during the run
+      - name: fixture_filter
+        description: The runner's -filter; NULL for a full-stage run
+      - name: checks
+        description: Scorer checks as JSON [{name, passed, detail}]
+      - name: error
+        description: Runner or model error message
+      - name: sampled_at
+        description: When the sample started, UTC
+      - name: source_file
+        description: JSONL file the row was loaded from
+
+unit_tests:
+  - name: harness_errors_and_blanks
+    description: A failed `ran` check is a harness error; empty strings become NULL.
+    model: stg_eval_samples
+    given:
+      - input: source('raw', 'eval_samples')
+        rows:
+          - {run_id: r1, contestant: megaman, fixture: f1, sample: 1, passed: false, escalate: "", filter: "", checks: '[{"name": "ran", "passed": false, "detail": "timeout"}]'}
+          - {run_id: r1, contestant: megaman, fixture: f1, sample: 2, passed: false, escalate: "do work", checks: '[{"name": "ran", "passed": true}, {"name": "escalate", "passed": false}]'}
+    expect:
+      rows:
+        - {sample_key: r1|megaman|f1|1, is_harness_error: true, is_escalated: false, fixture_filter: null}
+        - {sample_key: r1|megaman|f1|2, is_harness_error: false, is_escalated: true, fixture_filter: null}

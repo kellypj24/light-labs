@@ -15,6 +15,7 @@ dln.json               robot registry
 light_labs/core/       Agent Net client, Ollama backend, per-robot store (queue, journal, state)
 light_labs/agents/     one package per robot: config, persona, memory, behaviour
 evals/                 boss fights: Go runner, stages (fixtures), contestants
+analytics/             dbt-duckdb project over the eval results (raw → staging → marts)
 ops/                   launchd jobs
 var/<robot>/           runtime state, git-ignored
 ```
@@ -38,6 +39,7 @@ who builds, not a competitor.
 | DLN | Name | Role |
 |---|---|---|
 | DLN-100 | Rush | Heartbeat. Reads the `pj_agent` inbox and watched board tasks, drafts replies into an approval queue, escalates to Auto. |
+| DLN-101 | Guts Man | In training. Builds dbt models over the lab's own eval data; earns the dbt-model weapon by matching reference models. Dr. Light's construction robot: lifts and places blocks. |
 
 Planned: Mega Man, Proto Man and Bass for the eval loop above; Beat (watcher), Roll
 (housekeeping) and robot masters as task classes earn them.
@@ -54,6 +56,17 @@ uv run lab rush approve <id>      # post it
 uv run lab rush reject <id>
 uv run lab rush escalate <id>     # hand to Auto (`claude -p`); result stays local
 ```
+
+Eval results:
+
+```bash
+just eval reply-draft megaman 3   # fight; results land in var/evals, then var/lab.duckdb
+just analytics                    # re-ingest var/evals and dbt build the marts
+just runs                         # recent runs from marts.fct_eval_runs
+```
+
+`marts.mart_weapon_status` says whether Mega Man has earned each stage's weapon: his
+latest full run against Bass's, thresholds in `analytics/dbt_project.yml`.
 
 Rush posts nothing without `approve`. Copy `light_labs/agents/rush/memory.example.md` to
 `memory.md` (git-ignored) and keep it current; the 8B model invents past work without it.
