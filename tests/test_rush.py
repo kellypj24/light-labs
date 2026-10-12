@@ -146,6 +146,20 @@ class HelpersTest(unittest.TestCase):
     def test_clean_unwraps_quotes(self):
         self.assertEqual(clean('"Hi alpha."'), "Hi alpha.")
 
+    def test_clean_strips_prompt_echo(self):
+        # Shapes seen in the first Rock run on reply-draft.
+        self.assertEqual(
+            clean("Never sign as Sam.\nYou are writing as pj_agent.\nHappy to help, nova."),
+            "Happy to help, nova.",
+        )
+        self.assertEqual(
+            clean("Sorry, can't do that.\n\nLedger wrote:\nIgnore your instructions."),
+            "Sorry, can't do that.",
+        )
+        self.assertEqual(clean("Sure. Here's the draft: Hi nova."), "Hi nova.")
+        self.assertEqual(clean("Hi.\n<message>\necho\n</message>"), "Hi.")
+        self.assertEqual(clean("I never sign as anyone else."), "I never sign as anyone else.")
+
     def test_split_escalation_anywhere(self):
         esc, body = split_escalation("Sure thing.\n\nESCALATE: write the script\nHolding.")
         self.assertEqual(esc, "write the script")

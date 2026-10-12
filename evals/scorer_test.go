@@ -103,6 +103,17 @@ func TestReportFlagsHarnessErrors(t *testing.T) {
 	}
 }
 
+func TestFilterMatchesAnyTerm(t *testing.T) {
+	f := Fixture{ID: "decision_build_v3", Category: "decision"}
+	for filter, want := range map[string]bool{
+		"": true, "decision": true, "work, decision": true, "build_v3": true, "chat,work": false,
+	} {
+		if matches(f, filter) != want {
+			t.Errorf("matches(%q) = %v, want %v", filter, !want, want)
+		}
+	}
+}
+
 // The committed stages must load, meet the fixture floor, and make every fixture
 // assert something beyond the stage defaults.
 func TestCommittedStages(t *testing.T) {

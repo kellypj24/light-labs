@@ -8,6 +8,19 @@ THREAD_CHARS = 1200
 
 _HEADER = re.compile(r"^\s*(\**draft\**:?|subject:.*)\s*$", re.IGNORECASE)
 _CLOSING = re.compile(r"^\s*(best|cheers|thanks|regards|warmly)[,!]?\s*$", re.IGNORECASE)
+# "Here's the draft:" preambles; whatever follows on the line is the reply.
+_PREAMBLE = re.compile(
+    r"^.*?\bhere'?s (the|my|a) (draft|reply|response)\b[^:\n]*:\s*", re.IGNORECASE
+)
+# A quoted copy of the incoming message; everything from here on is echo.
+_QUOTE = re.compile(r"^\s*(\S+ wrote:|<(message|comment|earlier)\b)", re.IGNORECASE)
+# Restated instructions from the system prompt or skills.
+_INSTRUCTION = re.compile(
+    r"^\s*(never|always|do not|don't) (sign|post|promise|refuse|escalate|mention)\b"
+    r"|^\s*you are (writing|posting|replying) as\b"
+    r"|^\s*draft \S+'s reply\b",
+    re.IGNORECASE,
+)
 
 
 _ESCALATE = re.compile(r"^\s*\**ESCALATE\**:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -22,12 +35,24 @@ def split_escalation(text):
     return match.group(1), body
 
 
+def strip_echo(text):
+    """Drop prompt echo: draft preambles, quoted messages, restated instructions."""
+    text = _PREAMBLE.sub("", text, count=1)
+    kept = []
+    for line in text.splitlines():
+        if _QUOTE.match(line):
+            break
+        if not _INSTRUCTION.match(line):
+            kept.append(line)
+    return "\n".join(kept)
+
+
 def clean(text, name="Rush"):
-    """Strip the header and sign-off lines small models add despite instructions."""
+    """Strip the header, sign-off and prompt echo small models add despite instructions."""
     signoff = re.compile(
         rf"^\s*(best|cheers|thanks|regards|warmly)?[,!]?\s*(—\s*)?{name}\.?\s*$", re.IGNORECASE
     )
-    lines = text.strip().splitlines()
+    lines = strip_echo(text.strip()).strip().splitlines()
     while lines and (not lines[0].strip() or _HEADER.match(lines[0])):
         lines.pop(0)
     while lines and (

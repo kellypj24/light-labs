@@ -39,7 +39,7 @@ func main() {
 	stageName := flag.String("stage", "reply-draft", "stage to fight (evals/stages/<stage>.yaml)")
 	names := flag.String("contestants", "rock", "comma-separated contestant names from contestants.yaml")
 	samples := flag.Int("samples", 3, "samples per fixture (local models are nondeterministic)")
-	filter := flag.String("filter", "", "only fixtures whose id or category contains this")
+	filter := flag.String("filter", "", "only fixtures whose id or category contains one of these comma-separated terms")
 	concurrency := flag.Int("concurrency", 1, "parallel samples; keep 1 for local models on a laptop")
 	minPass := flag.Float64("min-pass", 0, "exit 1 if any contestant's sample pass rate is below this (0-1)")
 	outDir := flag.String("out", "", "write samples as JSONL here (default <repo>/var/evals)")
@@ -64,7 +64,7 @@ func main() {
 	}
 	var fixtures []Fixture
 	for _, f := range st.Fixtures {
-		if *filter == "" || strings.Contains(f.ID, *filter) || strings.Contains(f.Category, *filter) {
+		if matches(f, *filter) {
 			fixtures = append(fixtures, f)
 		}
 	}
@@ -157,4 +157,18 @@ func exitOn(err error) {
 		fmt.Fprintln(os.Stderr, "evals:", err)
 		os.Exit(2)
 	}
+}
+
+// matches reports whether a fixture's id or category contains any comma-separated term.
+func matches(f Fixture, filter string) bool {
+	if filter == "" {
+		return true
+	}
+	for _, term := range strings.Split(filter, ",") {
+		if term = strings.TrimSpace(term); term != "" &&
+			(strings.Contains(f.ID, term) || strings.Contains(f.Category, term)) {
+			return true
+		}
+	}
+	return false
 }
