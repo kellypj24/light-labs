@@ -9,6 +9,14 @@ stage: reply-draft
 robot: Rush
 memory_file: reply-draft.memory.md
 
+# Fixed before the first run; recorded on every sample. Procedure: the boss-fight skill.
+bar:
+  min_fixture_rate: 0.90
+  max_gap: 0.05
+  reason: >
+    Drafts wait for PJ's approval, but a wrong escalation call costs his review time
+    on every message; held at the lab default until approval-queue data says otherwise.
+
 # Applied to every fixture; a fixture's own lists add to these.
 defaults:
   max_chars: 900

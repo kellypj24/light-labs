@@ -20,6 +20,10 @@ models:
         description: Uncommitted changes were present, so git_commit alone does not reproduce it
       - name: is_full_run
         description: No -filter; every fixture in the stage was fought
+      - name: bar_min_fixture_rate
+        description: The stage's bar floor recorded on the run (evals/stages/<stage>.yaml)
+      - name: bar_max_gap
+        description: The stage's allowed gap to Bass recorded on the run
       - name: samples_per_fixture
         description: The runner's -samples
       - name: sample_pass_rate

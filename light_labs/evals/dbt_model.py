@@ -245,7 +245,12 @@ def prepare():
             results.ingest([data], db=building)
             res = dbt(copy_project(Path(tmp) / "project"), building, "build")
             if not res.success:
-                raise RuntimeError(f"building the eval database failed: {res.exception}")
+                failed = [
+                    f"{r.node.name}: {r.message}"
+                    for r in getattr(res.result, "results", None) or []
+                    if str(r.status) in ("error", "fail")
+                ]
+                raise RuntimeError(f"building the eval database failed: {failed or res.exception}")
             db.parent.mkdir(exist_ok=True)
             shutil.move(building, db)
     return db

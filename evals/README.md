@@ -31,6 +31,9 @@ the files into `raw.eval_samples` in `var/lab.duckdb` and builds the dbt marts i
 | `reply-draft` | Rush | 41 | the draft escalates when it should, answers from memory, and trips no style or identity check |
 | `dbt-model` | Guts Man | 33 | dbt builds the model and its rows equal the fixture's reference model |
 
+Each stage carries its `bar:` (floor, gap to Bass, reason); the report prints it and every
+sample records it. `marts.mart_weapon_status` applies it.
+
 `dbt-model` runs on a seeded synthetic dataset built through the real `analytics/` project
 (cached under `var/evals/cache/`, keyed by the project's contents). Each sample builds the
 candidate and its reference in a throwaway copy of the project and database, with DuckDB's

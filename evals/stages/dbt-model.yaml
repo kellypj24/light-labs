@@ -11,6 +11,14 @@ stage: dbt-model
 robot: Guts Man
 uv_groups: [analytics]
 
+# Fixed before the first run; recorded on every sample. Procedure: the boss-fight skill.
+bar:
+  min_fixture_rate: 0.90
+  max_gap: 0.05
+  reason: >
+    Models are reviewed in a PR before merge, but a model that builds with wrong rows
+    misleads the analytics silently; held at the lab default.
+
 defaults:
   max_chars: 4000
   require: [sql, builds, columns, rows]

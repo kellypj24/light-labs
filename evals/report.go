@@ -57,6 +57,10 @@ func report(w io.Writer, st *Stage, contestants []Contestant, samples []Sample, 
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "\nSTAGE %s (robot %s)\n", st.Stage, st.Robot)
+	if b := st.Bar; b != nil {
+		fmt.Fprintf(tw, "bar: Mega Man fixture pass rate >= %.2f and within %.2f of Bass\n",
+			b.MinFixtureRate, b.MaxGap)
+	}
 	fmt.Fprintln(tw, "contestant\trole\tbrain\tsamples\tfixtures (all samples)\tmean latency\tcost")
 	for _, c := range contestants {
 		var all tally

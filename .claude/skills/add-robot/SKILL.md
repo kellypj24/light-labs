@@ -11,8 +11,9 @@ A robot has one job. Check that no existing robot already does it before adding 
    robots (Rush, Beat, Roll, Auto, Eddie) for infrastructure, robot masters for task
    specialists. Mega Man, Proto Man and Bass are reserved for the eval loop (see README).
 2. **Register it** in `dln.json`: `dln`, `name`, `role`, `job`, `model` (`ollama:<tag>`),
-   `actor` if it posts anywhere, `status: "active"`, `commissioned` date, `skills: []`,
-   `weapons: []`.
+   `actor` if it posts anywhere, `status` (`training` until its stage is earned, then
+   `active`; support robots start `active`), `commissioned` date, `skills: []`,
+   `weapons: []` (filled by the boss-fight skill's weapon get).
 3. **Package** `light_labs/agents/<name>/`:
    - `__init__.py`: settings from the registry entry with env overrides (copy Rush's),
      `HOME = config.VAR / "<name>"`, `system_prompt(text)` built from persona + memory +
