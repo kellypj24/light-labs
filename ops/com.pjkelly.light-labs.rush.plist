@@ -16,6 +16,9 @@
     <string>tick</string>
   </array>
   <key>StartInterval</key><integer>3600</integer>
+  <!-- Tick on load too: without it, every bootstrap (e.g. after pausing Rush for an
+       eval) restarts the hour before the first tick. -->
+  <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/rush/launchd.log</string>
   <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/rush/launchd.log</string>
 </dict>
