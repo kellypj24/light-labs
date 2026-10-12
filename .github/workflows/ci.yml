@@ -64,6 +64,39 @@ jobs:
       - name: Unit tests
         run: uv run python -m unittest discover -s tests -t . -v
 
+  # Eval harness wiring: Go vet/test/format, then a full smoke run against the mock
+  # contestant. Real models never run in CI (see docs/ci-cd.md); the smoke run fails
+  # only if a sample could not run, never on the mock's scores.
+  evals:
+    name: Eval harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: evals/go.mod
+          cache: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Smoke run (mock contestant)
+        run: go run . -contestants mock -samples 1 -out "$RUNNER_TEMP/evals"
+
   # The single required status check. Jobs that legitimately skip are fine;
   # any failure or cancellation fails this. Add every new job to `needs`.
   ci-success:
@@ -72,7 +105,7 @@ jobs:
     if: always()
     timeout-minutes: 5
     permissions: {}
-    needs: [hooks, test]
+    needs: [hooks, test, evals]
     steps:
       - name: Fail if any required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

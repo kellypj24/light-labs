@@ -1,0 +1,67 @@
+"""Run one eval sample through a robot's real pipeline. Subprocess target of the Go runner.
+
+    python -m light_labs.evals.run_one --input-json '{"stage": ..., "brain": ..., ...}'
+
+Input:  {"stage": "reply-draft", "brain": "ollama:llama3.1:8b", "memory": "<text>",
+         "input": {...stage-specific...}}
+Output: one JSON object on stdout, always, even on failure:
+        {"ok": bool, "result": {...}, "stats": {...}, "error": str}
+The Go side scores `result`; this side never judges.
+"""
+
+import argparse
+import json
+import sys
+import traceback
+
+from light_labs.core.brain import brain_for
+
+
+def reply_draft(brain, memory, inp):
+    """Rush drafting a reply or task comment: the exact prompts the heartbeat uses."""
+    from light_labs.agents import rush
+    from light_labs.agents.rush.heartbeat import (
+        clean,
+        comment_prompt,
+        reply_prompt,
+        split_escalation,
+    )
+
+    content = inp["content"]
+    if inp.get("kind", "reply") == "comment":
+        earlier = [(e["author"], e["text"]) for e in inp.get("earlier", [])]
+        user = comment_prompt(rush.NAME, inp.get("title", ""), earlier, inp["sender"], content)
+    else:
+        user = reply_prompt(rush.NAME, inp["sender"], inp.get("summary"), content)
+    raw = brain.think(rush.system_prompt(user, memory_text=memory), user)
+    escalate, body = split_escalation(clean(raw, rush.NAME))
+    return {"raw": raw, "draft": body, "escalate": escalate}
+
+
+STAGES = {"reply-draft": reply_draft}
+
+
+def run(payload):
+    stage = STAGES.get(payload.get("stage"))
+    if stage is None:
+        raise ValueError(f"unknown stage {payload.get('stage')!r}; known: {', '.join(STAGES)}")
+    brain = brain_for(payload["brain"])
+    result = stage(brain, payload.get("memory"), payload["input"])
+    return result, brain.last
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="run_one")
+    parser.add_argument("--input-json", required=True)
+    args = parser.parse_args(argv)
+    try:
+        result, stats = run(json.loads(args.input_json))
+        out = {"ok": True, "result": result, "stats": stats, "error": ""}
+    except Exception as exc:  # noqa: BLE001 - the envelope must report every failure
+        out = {"ok": False, "result": None, "stats": {}, "error": f"{exc}"}
+        traceback.print_exc(file=sys.stderr)
+    print(json.dumps(out))
+
+
+if __name__ == "__main__":
+    main()

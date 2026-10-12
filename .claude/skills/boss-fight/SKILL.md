@@ -5,12 +5,19 @@ audience: [auto]
 ---
 
 A stage answers one question: is a local model good enough at this task class to stop
-paying a cloud model for it? See `evals/README.md` for the stage list.
+paying a cloud model for it? `evals/README.md` has the harness layout and commands.
+
+Mechanics: a stage is `evals/stages/<stage>.yaml` (+ `<stage>.memory.md` if the robot
+needs memory) and a function in `light_labs/evals/run_one.py` `STAGES` that runs one
+input through the robot's real pipeline. Reuse the robot's own prompt builders; never
+copy them, or the eval measures something the robot doesn't run. Smoke-test with
+`go -C evals run . -stage <stage> -contestants mock -samples 1`.
 
 1. **Pick one task class** a robot actually does (for example `reply-draft`). One stage
    per class.
-2. **Fixtures**: real inputs, at least 30 before reading anything into the numbers. Take
-   them from real traffic, and record what PJ approved or rejected as ground truth.
+2. **Fixtures**: at least 30 before reading anything into the numbers. Model them on real
+   traffic, including what PJ approved or rejected, but the repo is public: rewrite them
+   with synthetic names and content.
 3. **Checks, deterministic first**: format, length, required escalation, no invented past
    work, no promises of undecided work. Code checks anything code can check.
 4. **Judge second**, only for what code can't check, with a pinned rubric and model.

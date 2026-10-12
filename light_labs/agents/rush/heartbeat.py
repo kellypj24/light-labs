@@ -40,6 +40,28 @@ def clean(text, name="Rush"):
     return text
 
 
+def reply_prompt(name, sender, summary, content):
+    """User prompt for a direct message. Shared by the heartbeat and the evals."""
+    return (
+        f"A direct message arrived from {sender} "
+        f"(subject: {summary or 'none'}).\n"
+        f"<message>\n{content}\n</message>\n\nDraft {name}'s reply."
+    )
+
+
+def comment_prompt(name, title, earlier, author, text):
+    """User prompt for a new task comment. `earlier` is a list of (author, text)."""
+    thread = "\n".join(
+        f'<earlier author="{a}">\n{t[:THREAD_CHARS]}\n</earlier>' for a, t in earlier
+    )
+    return (
+        f'Board task "{title}".\nEarlier in the thread:\n'
+        f"{thread or '(none)'}\n\nNew comment from {author}:\n"
+        f"<comment>\n{text}\n</comment>\n\n"
+        f"Draft {name}'s reply comment for the task thread."
+    )
+
+
 def short_id(url):
     return url.rstrip("/").rsplit("/", 1)[-1]
 
@@ -72,11 +94,7 @@ class Heartbeat:
                 continue
             msg = self.client.message(mid)
             content = (msg.get("content") or "")[:MAX_CONTEXT_CHARS]
-            prompt = (
-                f"A direct message arrived from {sender} "
-                f"(subject: {msg.get('summary') or 'none'}).\n"
-                f"<message>\n{content}\n</message>\n\nDraft {self.name}'s reply."
-            )
+            prompt = reply_prompt(self.name, sender, msg.get("summary"), content)
             drafted.append(
                 self._draft(
                     "reply",
@@ -101,16 +119,12 @@ class Heartbeat:
                 if c.get("author") == self.actor:
                     continue
                 text = (c.get("text") or "")[:MAX_CONTEXT_CHARS]
-                earlier = "\n".join(
-                    f'<earlier author="{p.get("author")}">\n'
-                    f"{(p.get('text') or '')[:THREAD_CHARS]}\n</earlier>"
+                earlier = [
+                    (p.get("author"), p.get("text") or "")
                     for p in comments[max(0, idx - THREAD_COMMENTS) : idx]
-                )
-                prompt = (
-                    f'Board task "{task.get("title")}".\nEarlier in the thread:\n'
-                    f"{earlier or '(none)'}\n\nNew comment from {c.get('author')}:\n"
-                    f"<comment>\n{text}\n</comment>\n\n"
-                    f"Draft {self.name}'s reply comment for the task thread."
+                ]
+                prompt = comment_prompt(
+                    self.name, task.get("title"), earlier, c.get("author"), text
                 )
                 drafted.append(
                     self._draft(
