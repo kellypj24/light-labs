@@ -30,6 +30,21 @@ OLLAMA = os.environ.get("LAB_OLLAMA", "http://localhost:11434")
 VAR = Path(os.environ.get("LAB_VAR", REPO / "var"))
 
 
+def git_state():
+    """(short commit, dirty) of the lab's checkout, or (None, None) outside git."""
+    import subprocess
+
+    def git(*args):
+        return subprocess.run(
+            ["git", "-C", str(REPO), *args], capture_output=True, text=True, check=False
+        )
+
+    head = git("rev-parse", "--short", "HEAD")
+    if head.returncode:
+        return None, None
+    return head.stdout.strip(), bool(git("status", "--porcelain").stdout.strip())
+
+
 def robot(name):
     """Registry entry for a robot, by name (case-insensitive)."""
     for r in json.loads(DLN.read_text())["robots"]:

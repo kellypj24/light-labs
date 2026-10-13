@@ -1,0 +1,17 @@
+{
+  "id": "s2",
+  "context": "synthetic",
+  "result_id": null,
+  "kind": "comment",
+  "draft": "Edited by PJ.",
+  "drafted": "Rush wrote this.",
+  "escalate": "review v2",
+  "created": "2026-10-01T11:00:00+00:00",
+  "resolved": "2026-10-01T12:00:00+00:00",
+  "brain": "ollama:llama3.1:8b",
+  "commit": "abc1234",
+  "dirty": false,
+  "target": {
+    "task_id": "task_x"
+  }
+}

@@ -228,6 +228,7 @@ def _invoke(runner, project, args):
 
 def prepare():
     """Path to the cached database: synthetic raw data plus the built project."""
+    from light_labs.core import queue_results
     from light_labs.evals import results
 
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -243,6 +244,8 @@ def prepare():
             data.write_text("".join(json.dumps(r) + "\n" for r in synthetic_samples()))
             building = Path(tmp) / "lab.duckdb"
             results.ingest([data], db=building)
+            # The project also models approval queues; the eval database has none.
+            queue_results.ingest(Path(tmp) / "no-queues", db=building)
             res = dbt(copy_project(Path(tmp) / "project"), building, "build")
             if not res.success:
                 failed = [

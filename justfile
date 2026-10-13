@@ -43,9 +43,14 @@ eval stage="reply-draft" contestants="mega-man" samples="3" *args="":
 runs *args="":
     uv run --locked lab evals runs {{args}}
 
-# Load var/evals into var/lab.duckdb, then build the dbt project over it
+# Approval queues: can a robot's draft kind skip approval yet?
+queue *args="":
+    uv run --locked lab queue status {{args}}
+
+# Load var/evals and the robots' queues into var/lab.duckdb, then build the dbt project
 analytics:
     uv run --locked lab evals ingest
+    uv run --locked lab queue ingest
     cd analytics && uv run --locked --group analytics dbt build
 
 # dbt lint and build on the synthetic fixtures in a throwaway database (same as CI)
@@ -54,6 +59,7 @@ analytics-check:
     set -euo pipefail
     tmp="$(mktemp -d)"
     LAB_VAR="$tmp" uv run --locked lab evals ingest analytics/fixtures/*.jsonl
+    LAB_VAR="$tmp" uv run --locked lab queue ingest --root analytics/fixtures/queue
     cd analytics
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet

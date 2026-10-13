@@ -1,0 +1,15 @@
+{
+  "id": "s3",
+  "context": "synthetic",
+  "result_id": null,
+  "kind": "reply",
+  "draft": "Older item.",
+  "escalate": null,
+  "created": "2026-09-30T10:00:00+00:00",
+  "resolved": "2026-09-30T10:05:00+00:00",
+  "target": {
+    "to": [
+      "quill"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: mart_queue_daily
+    description: One row per robot, draft kind and day queued.
+    columns:
+      - name: queue_day_key
+        description: robot | kind | queued_date
+        tests:
+          - unique
+          - not_null
+      - name: approval_rate
+        description: Sent / decided (sent + rejected); NULL with no decisions yet
+      - name: unedited_sent_count
+        description: Sent exactly as the robot drafted them
+      - name: edited_sent_count
+        description: Sent after edits; items with unknown edits count in neither
+      - name: median_minutes_to_decision
+        description: Median minutes from queued to sent or rejected

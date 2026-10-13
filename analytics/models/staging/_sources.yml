@@ -19,3 +19,18 @@ sources:
           - name: fixture
             tests:
               - not_null
+      - name: queue_items
+        description: >
+          Robots' approval queues, one row per queued draft, reloaded in full by
+          `lab queue ingest` from var/<robot>/queue/{pending,sent,rejected}/. `drafted`
+          (the robot's original text) and brain/commit are NULL on items queued before
+          they were recorded.
+        columns:
+          - name: item_id
+            tests:
+              - not_null
+          - name: status
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ["pending", "sent", "rejected"]
