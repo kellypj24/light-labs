@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: mart_run_health
+    description: >
+      One row per eval run (from 2026-10-13): outcome (completed, cancelled, abandoned
+      or still running), stop reason, and how hot and loaded the machine ran.
+    columns:
+      - name: run_id
+        tests:
+          - unique
+          - not_null
+      - name: outcome
+        description: status, except a "running" run silent for run_stale_minutes is abandoned
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["running", "completed", "cancelled", "abandoned"]
+      - name: peak_battery_temp_c
+        description: Hottest battery reading during the run
+      - name: was_throttled
+        description: macOS limited the CPU at least once during the run
+      - name: on_battery_share
+        description: Share of readings taken on battery power
+      - name: completion_share
+        description: done_samples / total_samples
+
+unit_tests:
+  - name: outcomes_and_heat
+    description: Completed, cancelled with a reason, killed (abandoned), and a throttled run.
+    model: mart_run_health
+    overrides:
+      vars:
+        health_as_of: "2026-10-13 12:00:00+00"
+        run_stale_minutes: 10
+    given:
+      - input: ref('stg_eval_run_log')
+        rows:
+          - {run_id: done, status: completed, stop_reason: null, started_at: "2026-10-13 10:00:00+00", total_samples: 4, done_samples: 4}
+          - {run_id: hot, status: cancelled, stop_reason: machine hot, started_at: "2026-10-13 10:00:00+00", total_samples: 4, done_samples: 2}
+          - {run_id: killed, status: running, stop_reason: null, started_at: "2026-10-13 10:00:00+00", total_samples: 4, done_samples: 1}
+          - {run_id: live, status: running, stop_reason: null, started_at: "2026-10-13 11:55:00+00", total_samples: 4, done_samples: 1}
+      - input: ref('stg_eval_telemetry')
+        rows:
+          - {run_id: done, read_at: "2026-10-13 10:00:00+00", battery_temp_c: 31.0, is_throttled: false, is_on_ac: true, cpu_speed_limit: 100}
+          - {run_id: hot, read_at: "2026-10-13 10:00:00+00", battery_temp_c: 38.0, is_throttled: false, is_on_ac: false, cpu_speed_limit: 100}
+          - {run_id: hot, read_at: "2026-10-13 10:00:30+00", battery_temp_c: 42.5, is_throttled: true, is_on_ac: false, cpu_speed_limit: 80}
+          - {run_id: killed, read_at: "2026-10-13 10:05:00+00", battery_temp_c: 35.0, is_throttled: false, is_on_ac: true, cpu_speed_limit: 100}
+    expect:
+      rows:
+        - {run_id: done, outcome: completed, was_throttled: false, peak_battery_temp_c: 31.0, completion_share: 1.0}
+        - {run_id: hot, outcome: cancelled, was_throttled: true, peak_battery_temp_c: 42.5, completion_share: 0.5}
+        - {run_id: killed, outcome: abandoned, was_throttled: false, peak_battery_temp_c: 35.0, completion_share: 0.25}
+        - {run_id: live, outcome: running, was_throttled: false, peak_battery_temp_c: null, completion_share: 0.25}

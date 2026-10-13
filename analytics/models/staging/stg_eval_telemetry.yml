@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_eval_telemetry
+    description: One row per heat and load reading during an eval run.
+    columns:
+      - name: reading_key
+        description: run_id | read_at
+        tests:
+          - unique
+          - not_null
+      - name: battery_temp_c
+        description: Battery temperature, °C; the chassis-heat proxy readable without sudo
+      - name: cpu_speed_limit
+        description: macOS CPU speed limit, percent; below 100 means throttled
+      - name: is_throttled
+        description: The CPU was throttled at this reading
+      - name: is_on_ac
+        description: On AC power (false = on battery)
+      - name: ollama_cpu
+        description: Ollama's CPU use, percent of one core summed over its processes

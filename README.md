@@ -137,7 +137,22 @@ over its last 30 decisions, at least 95% went out exactly as drafted (`autonomy_
 `analytics/dbt_project.yml`). `marts.mart_queue_daily` has the daily counts.
 
 Real models run locally only, one fight at a time; a full local fight is 20-25 minutes of
-sustained GPU on an M1. Don't run checks or builds alongside one. Eval marts: `fct_eval_runs`,
+sustained GPU on an M1. Don't run checks or builds alongside one.
+
+During a fight the runner prints one line per sample (progress, pass/fail, each
+contestant's running score, time left, battery temperature) and saves every sample as it
+finishes, so stopping loses nothing. It also writes `var/evals/<run_id>.run.json` (status,
+reason, progress) and heat readings every 30 seconds.
+
+```bash
+just watch                                      # live view from a second terminal
+just eval dbt-model mega-man 3 -cool-above 40   # pause while the battery is over 40°C
+                                                # or macOS throttles the CPU
+uv run lab evals cancel <run_id> --reason "machine hot"   # after Ctrl-C: say why
+```
+
+`marts.mart_run_health` has one row per run: completed, cancelled (with the reason) or
+abandoned (killed without a word), peak temperature, throttling, time on battery. Eval marts: `fct_eval_runs`,
 `fct_eval_category_results`, `fct_eval_check_failures`, `mart_weapon_status`. Harness
 details: [evals/README.md](evals/README.md).
 

@@ -246,6 +246,7 @@ def prepare():
             results.ingest([data], db=building)
             # The project also models approval queues; the eval database has none.
             queue_results.ingest(Path(tmp) / "no-queues", db=building)
+            results.ingest_health(Path(tmp) / "no-runs", db=building)
             res = dbt(copy_project(Path(tmp) / "project"), building, "build")
             if not res.success:
                 failed = [

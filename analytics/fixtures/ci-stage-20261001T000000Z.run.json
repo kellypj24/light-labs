@@ -1,0 +1,22 @@
+{
+  "run_id": "ci-stage-20261001T000000Z",
+  "stage": "ci-stage",
+  "contestants": [
+    "mega-man",
+    "bass"
+  ],
+  "samples": 2,
+  "commit": "abc1234",
+  "dirty": false,
+  "total": 6,
+  "done": 6,
+  "passed": 5,
+  "harness_errors": 0,
+  "cool_pauses": 0,
+  "cool_seconds": 0,
+  "status": "completed",
+  "started_at": "2026-10-01T00:00:00Z",
+  "ended_at": "2026-10-01T00:02:00Z",
+  "samples_file": "ci-stage-20261001T000000Z.jsonl",
+  "telemetry_file": "ci-stage-20261001T000000Z.telemetry.jsonl"
+}

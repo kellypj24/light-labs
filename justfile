@@ -39,6 +39,10 @@ evals-check:
 eval stage="reply-draft" contestants="mega-man" samples="3" *args="":
     status=0; go -C evals run . -stage {{stage}} -contestants {{contestants}} -samples {{samples}} {{args}} || status=$?; just analytics > /dev/null; exit $status
 
+# Follow a fight live from a second terminal (default: the latest run)
+watch run_id="":
+    uv run --locked lab evals watch {{run_id}}
+
 # Recent eval runs from marts.fct_eval_runs
 runs *args="":
     uv run --locked lab evals runs {{args}}

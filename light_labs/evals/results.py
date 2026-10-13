@@ -77,6 +77,7 @@ def ingest(paths=None, db=None):
     Returns {run_id: rows}.
     """
     paths = sorted(Path(p) for p in paths) if paths else sorted(RESULTS.glob("*.jsonl"))
+    paths = [p for p in paths if not p.name.endswith(".telemetry.jsonl")]
     loaded = {}
     with connect(db) as con:
         for path in paths:
@@ -100,6 +101,90 @@ def ingest(paths=None, db=None):
                 loaded[run_id] = n
             con.execute("COMMIT")
     return loaded
+
+
+HEALTH_SCHEMA = """
+CREATE SCHEMA IF NOT EXISTS raw;
+CREATE TABLE IF NOT EXISTS raw.eval_run_log (
+    run_id VARCHAR, stage VARCHAR, contestants JSON, samples INTEGER, "filter" VARCHAR,
+    "commit" VARCHAR, dirty BOOLEAN, total INTEGER, done INTEGER, passed INTEGER,
+    harness_errors INTEGER, cool_pauses INTEGER, cool_seconds DOUBLE, cool_above_c DOUBLE,
+    status VARCHAR, reason VARCHAR, started_at TIMESTAMPTZ, ended_at TIMESTAMPTZ,
+    source VARCHAR
+);
+CREATE TABLE IF NOT EXISTS raw.eval_telemetry (
+    run_id VARCHAR, "at" TIMESTAMPTZ, battery_temp_c DOUBLE, battery_pct INTEGER,
+    on_ac BOOLEAN, cpu_speed_limit INTEGER, thermal_warning VARCHAR, load_1 DOUBLE,
+    ollama_cpu DOUBLE, source VARCHAR
+);
+"""
+RUN_COLUMNS = {
+    "run_id": "VARCHAR",
+    "stage": "VARCHAR",
+    "contestants": "JSON",
+    "samples": "INTEGER",
+    "filter": "VARCHAR",
+    "commit": "VARCHAR",
+    "dirty": "BOOLEAN",
+    "total": "INTEGER",
+    "done": "INTEGER",
+    "passed": "INTEGER",
+    "harness_errors": "INTEGER",
+    "cool_pauses": "INTEGER",
+    "cool_seconds": "DOUBLE",
+    "cool_above_c": "DOUBLE",
+    "status": "VARCHAR",
+    "reason": "VARCHAR",
+    "started_at": "TIMESTAMPTZ",
+    "ended_at": "TIMESTAMPTZ",
+}
+TELEMETRY_COLUMNS = {
+    "at": "TIMESTAMPTZ",
+    "battery_temp_c": "DOUBLE",
+    "battery_pct": "INTEGER",
+    "on_ac": "BOOLEAN",
+    "cpu_speed_limit": "INTEGER",
+    "thermal_warning": "VARCHAR",
+    "load_1": "DOUBLE",
+    "ollama_cpu": "DOUBLE",
+}
+
+
+def _typed(columns):
+    return "{" + ", ".join(f"'{n}': '{t}'" for n, t in columns.items()) + "}"
+
+
+def ingest_health(directory=None, db=None):
+    """Reload run records (*.run.json) and telemetry (*.telemetry.jsonl) in full.
+    Returns (runs, telemetry rows)."""
+    directory = Path(directory or RESULTS)
+    records = sorted(str(p) for p in directory.glob("*.run.json"))
+    telemetry = sorted(str(p) for p in directory.glob("*.telemetry.jsonl") if p.stat().st_size)
+    with connect(db) as con:
+        con.execute(HEALTH_SCHEMA)
+        con.execute("BEGIN")
+        con.execute("DELETE FROM raw.eval_run_log")
+        con.execute("DELETE FROM raw.eval_telemetry")
+        if records:
+            con.execute(
+                "INSERT INTO raw.eval_run_log BY NAME SELECT * EXCLUDE (filename), "
+                "filename AS source FROM read_json(?, format = 'auto', filename = true, "
+                f"columns = {_typed(RUN_COLUMNS)})",
+                [records],
+            )
+        if telemetry:
+            con.execute(
+                "INSERT INTO raw.eval_telemetry BY NAME SELECT * EXCLUDE (filename), "
+                "regexp_extract(filename, '([^/]+)\\.telemetry\\.jsonl$', 1) AS run_id, "
+                "filename AS source FROM read_json(?, format = 'newline_delimited', "
+                f"filename = true, columns = {_typed(TELEMETRY_COLUMNS)})",
+                [telemetry],
+            )
+        con.execute("COMMIT")
+        return (
+            con.execute("SELECT count(*) FROM raw.eval_run_log").fetchone()[0],
+            con.execute("SELECT count(*) FROM raw.eval_telemetry").fetchone()[0],
+        )
 
 
 def runs(stage=None, contestant=None, limit=20, db=None):

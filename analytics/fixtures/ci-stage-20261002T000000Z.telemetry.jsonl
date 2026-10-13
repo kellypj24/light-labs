@@ -1,0 +1,2 @@
+{"at": "2026-10-02T00:00:00Z", "battery_temp_c": 39.5, "battery_pct": 40, "on_ac": false, "cpu_speed_limit": 100, "load_1": 4.0, "ollama_cpu": 250.0}
+{"at": "2026-10-02T00:00:30Z", "battery_temp_c": 41.8, "battery_pct": 39, "on_ac": false, "cpu_speed_limit": 85, "thermal_warning": "1", "load_1": 5.2, "ollama_cpu": 270.0}
