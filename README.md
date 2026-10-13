@@ -53,7 +53,9 @@ whatever a robot escalates. It never competes.
 | DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies, escalates work to Auto. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
 | DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
 
-Planned: robot masters as new task classes get stages.
+Planned: Roll, the housekeeper: drafts commit messages and PR bodies and triages stale
+branches, once a `commit-message` stage scores her. `lab git` is her toolset. Robot
+masters as new task classes get stages.
 
 ## Layout
 
@@ -173,6 +175,23 @@ small. `uv run lab skills` lists them.
 | add-robot | auto | Commission a new robot |
 | update-robot-memory | auto | Keep a robot's local memory accurate |
 | boss-fight | auto | Design a stage, set its bar, record a weapon |
+
+## Git chores
+
+`lab git` runs the multi-step git and GitHub chores as one command each, in any repo with
+a GitHub `origin` (`-C <repo>`):
+
+```bash
+lab git status                      # branch, changes, open PRs with CI state, Dependabot alerts
+lab git ship -F msg.txt             # just check, then commit, push, open or find the PR
+lab git land 21                     # wait for CI; merge on green, else print the failing log tail
+lab git tidy                        # merged/abandoned branches and worktrees; --apply deletes
+```
+
+`tidy` deletes only work that is safe to lose: branches whose PR merged (unless they moved
+after the merge), branches already contained in `main`, and branches of PRs closed
+unmerged more than 30 days ago (GitHub keeps their commits under `refs/pull/<n>/head`).
+Anything else, including uncommitted worktrees, is listed for review and never deleted.
 
 ## Orchestration
 
