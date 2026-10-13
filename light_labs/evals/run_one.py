@@ -31,7 +31,7 @@ def reply_draft(brain, memory, inp):
     else:
         user = reply_prompt(rush.NAME, inp["sender"], inp.get("summary"), content)
     system = rush.system_prompt(user, memory_text=memory)
-    raw, escalate, body = draft(brain, system, user, rush.NAME, rush.TEMPERATURE)
+    raw, escalate, body = draft(brain, system, user, content, rush.NAME, rush.TEMPERATURE)
     return {"raw": raw, "draft": body, "escalate": escalate}
 
 

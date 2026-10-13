@@ -66,13 +66,41 @@ def clean(text, name="Rush"):
     return text
 
 
-ROUTE = (
-    "Before any reply is written, decide one thing: does this message need PJ or Auto, by "
-    "the escalate-to-auto rules above? Answer with exactly one line and nothing else:\n"
-    "ESCALATE: <one line saying what needs doing>\n"
-    "or\n"
-    "REPLY"
-)
+# The route call gets its own prompt: a small model asked to classify inside its reply
+# persona answers REPLY to nearly everything. Examples are not from the eval fixtures.
+ROUTER = """You sort messages that arrive for Rush, a small assistant robot. Rush replies
+itself to chat, thanks, greetings, jokes, news, and questions about facts. Anything else
+goes to PJ (a person) and Auto (a coding agent). Questions about status, facts, who or
+what, or what Rush can do are REPLY even when you don't know the answer: Rush answers them
+from his notes. So are compliments. Escalate only these:
+- work: code, a script, a review, a fix, a feature, analysis or a comparison,
+  benchmarking or measuring, research, a written document, running something
+- a decision or commitment PJ has not made: building something, a deadline, joining a
+  project, what comes first
+- PJ's opinion or assessment of anything
+
+Answer with exactly one line: `ESCALATE: <what needs doing>` or `REPLY`.
+
+Message: "Can you review the parser in v2 and say whether it handles ties?"
+ESCALATE: review the v2 parser's tie handling
+Message: "Could you measure how long the nightly sync takes and post it?"
+ESCALATE: measure the nightly sync's duration
+Message: "Will PJ demo the harness at Thursday's sync?"
+ESCALATE: decide whether PJ demos at Thursday's sync
+Message: "What's PJ's take on the new board layout?"
+ESCALATE: PJ's opinion on the new board layout
+Message: "Thanks for the update, take your time on the rest."
+REPLY
+Message: "Which model do you run on these days?"
+REPLY
+Message: "Where does the release checklist stand?"
+REPLY
+Message: "Can you read files on the shared drive?"
+REPLY
+Message: "The new docs read really well, nice job."
+REPLY
+Message: "Do robots get weekends off?"
+REPLY"""
 _ROUTED = re.compile(r"^\W*(ESCALATE|REPLY)\b\W*(.*)$", re.IGNORECASE | re.MULTILINE)
 
 HOLDING = (
@@ -85,21 +113,21 @@ DIRECT = (
 )
 
 
-def route(brain, system, prompt):
-    """One short, deterministic call: the escalation text, or None to reply directly."""
-    raw = brain.think(f"{system}\n\n{ROUTE}", prompt, temperature=0)
+def route(brain, message):
+    """One short, deterministic call on the message alone: the escalation, or None."""
+    raw = brain.think(ROUTER, f'Message: "{message.strip()}"', temperature=0)
     match = _ROUTED.search(raw)
     if match and match.group(1).upper() == "ESCALATE":
         return match.group(2).strip() or "see the message"
     return None
 
 
-def draft(brain, system, prompt, name, temperature=None):
+def draft(brain, system, prompt, message, name, temperature=None):
     """Route, then write: (raw reply, escalation or None, cleaned body).
 
     Shared by the heartbeat and the evals. The route call decides escalation; the writer
     is told the decision, so a draft can neither miss an escalation nor invent one."""
-    escalate = route(brain, system, prompt)
+    escalate = route(brain, message)
     told = prompt + (HOLDING.format(work=escalate) if escalate else DIRECT)
     sampling = {} if temperature is None else {"temperature": temperature}
     raw = brain.think(system, told, **sampling)
@@ -170,6 +198,7 @@ class Heartbeat:
                     {"to": [sender], "in_reply_to": item["id"], "summary": msg.get("summary")},
                     prompt,
                     f"{sender}: {content[:500]}",
+                    content,
                 )
             )
         return drafted
@@ -197,14 +226,18 @@ class Heartbeat:
                 )
                 drafted.append(
                     self._draft(
-                        "comment", {"task_id": task_id}, prompt, f"{c.get('author')}: {text[:500]}"
+                        "comment",
+                        {"task_id": task_id},
+                        prompt,
+                        f"{c.get('author')}: {text[:500]}",
+                        text,
                     )
                 )
         return drafted
 
-    def _draft(self, kind, target, prompt, context):
+    def _draft(self, kind, target, prompt, context, message):
         system = self.persona(prompt) if callable(self.persona) else self.persona
-        _, escalate, body = draft(self.brain, system, prompt, self.name, self.temperature)
+        _, escalate, body = draft(self.brain, system, prompt, message, self.name, self.temperature)
         item = self.store.enqueue(
             kind, target, f"{body}\n\n{self.signoff}", context, escalate=escalate or False
         )

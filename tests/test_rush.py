@@ -58,18 +58,19 @@ class RouteThenWriteTest(unittest.TestCase):
             "ESCALATE: compare two models on board replies",
             "I don't have that data.\nESCALATE: something else",
         )
-        _, escalate, body = draft(brain, "SYSTEM", "MESSAGE", "Rush", temperature=0.3)
+        _, escalate, body = draft(brain, "SYSTEM", "PROMPT", "MESSAGE", "Rush", temperature=0.3)
         self.assertEqual(escalate, "compare two models on board replies")
         self.assertEqual(body, "I don't have that data.")  # writer's own ESCALATE dropped
         route_call, write_call = brain.calls
         self.assertEqual(route_call["temperature"], 0)
-        self.assertIn("ESCALATE: <one line", route_call["system"])
+        self.assertIn("ESCALATE: <what needs doing>", route_call["system"])
+        self.assertEqual(route_call["user"], 'Message: "MESSAGE"')
         self.assertIn("holding reply", write_call["user"])
         self.assertEqual(write_call["temperature"], 0.3)
 
     def test_reply_route_never_escalates(self):
         brain = ScriptedBrain("REPLY", "Thanks! I've passed the next steps to PJ.")
-        _, escalate, _ = draft(brain, "SYSTEM", "Thanks, nice work.", "Rush")
+        _, escalate, _ = draft(brain, "SYSTEM", "PROMPT", "Thanks, nice work.", "Rush")
         self.assertIsNone(escalate)
         self.assertIn("Don't say you passed", brain.calls[1]["user"])
 
@@ -79,7 +80,7 @@ class RouteThenWriteTest(unittest.TestCase):
             ("Reply.", None),
             ("hm", None),
         ):
-            self.assertEqual(route(ScriptedBrain(answer), "S", "M"), want, answer)
+            self.assertEqual(route(ScriptedBrain(answer), "M"), want, answer)
 
 
 class TemperatureTest(unittest.TestCase):
