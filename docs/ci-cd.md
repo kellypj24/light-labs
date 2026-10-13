@@ -24,7 +24,7 @@ instead of fixing, so CI can't pass on an auto-fix.
 | Tests | unit tests on Python 3.12 and 3.13, `uv sync` with `UV_LOCKED=1` so a stale `uv.lock` fails |
 | Eval harness | `gofmt`, `go vet`, `go test`, and a smoke run of the `reply-draft` stage against the `mock` contestant (fails only if a sample could not run) |
 | Analytics (dbt) | sqlfluff, then ingest the synthetic fixtures and `dbt build` every model, data test and unit test |
-| Beat (Dagster) | `dbt parse`, `dagster definitions validate`, `tests/test_beat.py` (invariants, sensor logic, the analytics job over the fixtures) |
+| Orchestration (Dagster) | `dbt parse`, `dagster definitions validate`, `tests/test_orchestration.py` (invariants, sensor logic, the analytics job over the fixtures) |
 | CI Success | fan-in: the single required check; fails if any job failed or was cancelled |
 
 Triggers: PRs into `main`, every push to `main` (a post-merge backstop), manual dispatch.
@@ -35,7 +35,7 @@ Hardening applied to every workflow:
 - `permissions: {}` at the top; jobs request only `contents: read`.
 - `persist-credentials: false` on checkout, so the token isn't left in `.git/config`.
 - Untrusted values reach `run:` through `env:`, never inline `${{ }}`.
-- uv caching off: a cache is one more thing to poison. Beat's Dagster group is the largest
+- uv caching off: a cache is one more thing to poison. The orchestration (Dagster) group is the largest
   sync, at well under a minute.
 - `timeout-minutes` on every job; superseded PR runs are cancelled.
 

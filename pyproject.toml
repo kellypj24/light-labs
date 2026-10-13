@@ -26,8 +26,8 @@ analytics = [
     "dbt-duckdb>=1.9,<2.0",
     "sqlfluff>=3.4,<4.0",
 ]
-# Beat: Dagster over the analytics project (light_labs/beat). Carries dbt through analytics.
-beat = [
+# Dagster over the analytics project (light_labs/orchestration). Carries dbt through analytics.
+orchestration = [
     {include-group = "analytics"},
     "dagster>=1.13,<2.0",
     "dagster-dbt>=0.29,<1.0",

@@ -139,10 +139,10 @@ jobs:
       - name: Tests that need the analytics group
         run: uv run python -m unittest tests.test_dbt_model tests.test_autosend -v
 
-  # Beat (Dagster): definitions load, invariants hold, and the analytics job builds over
-  # the synthetic fixtures. Same steps as `just beat-check`.
-  beat:
-    name: Beat (Dagster)
+  # Orchestration (Dagster): definitions load, invariants hold, and the analytics job
+  # builds over the synthetic fixtures. Same steps as `just dagster-check`.
+  orchestration:
+    name: Orchestration (Dagster)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -158,14 +158,14 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: false
       - name: Sync
-        run: uv sync --group beat
+        run: uv sync --group orchestration
       - name: dbt parse
         working-directory: analytics
         run: uv run dbt parse --quiet
       - name: Validate definitions
-        run: uv run dagster definitions validate -m light_labs.beat
+        run: uv run dagster definitions validate -m light_labs.orchestration
       - name: Tests
-        run: uv run python -m unittest tests.test_beat -v
+        run: uv run python -m unittest tests.test_orchestration -v
 
   # The single required status check. Jobs that legitimately skip are fine;
   # any failure or cancellation fails this. Add every new job to `needs`.
@@ -175,7 +175,7 @@ jobs:
     if: always()
     timeout-minutes: 5
     permissions: {}
-    needs: [hooks, test, evals, analytics, beat]
+    needs: [hooks, test, evals, analytics, orchestration]
     steps:
       - name: Fail if any required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

@@ -1017,7 +1017,7 @@ analytics = [
     { name = "dbt-duckdb" },
     { name = "sqlfluff" },
 ]
-beat = [
+orchestration = [
     { name = "dagster" },
     { name = "dagster-dbt" },
     { name = "dagster-webserver" },
@@ -1035,7 +1035,7 @@ analytics = [
     { name = "dbt-duckdb", specifier = ">=1.9,<2.0" },
     { name = "sqlfluff", specifier = ">=3.4,<4.0" },
 ]
-beat = [
+orchestration = [
     { name = "dagster", specifier = ">=1.13,<2.0" },
     { name = "dagster-dbt", specifier = ">=0.29,<1.0" },
     { name = "dagster-webserver", specifier = ">=1.13,<2.0" },

@@ -1,7 +1,7 @@
 """Sensors: rebuild the analytics when a fight ends or a queue changes.
 
 Both skip while a fight is on (one heavy job at a time on the laptop) and default to
-STOPPED: turn them on in the UI once; the state persists in var/beat.
+STOPPED: turn them on in the UI once; the state persists in var/dagster.
 """
 
 import hashlib
@@ -12,7 +12,7 @@ from pathlib import Path
 from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 from light_labs import config
-from light_labs.beat.jobs import evals_job, queue_job
+from light_labs.orchestration.jobs import evals_job, queue_job
 
 # A fight is live while its record says running and it wrote telemetry this recently
 # (the runner reads every 30s; a killed runner leaves a stale "running" record).

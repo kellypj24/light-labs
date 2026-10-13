@@ -1,5 +1,5 @@
-"""Beat (light_labs/beat): definition invariants, sensor logic, and one full run over the
-CI fixtures. Needs the beat dependency group; `just beat-check` runs it."""
+"""Orchestration (light_labs/orchestration): definition invariants, sensor logic, and one full
+run over the CI fixtures. Needs the orchestration dependency group; `just dagster-check` runs it."""
 
 import importlib.util
 import json
@@ -42,11 +42,11 @@ def record(evals, run_id, status, ended=None):
     (evals / f"{run_id}.run.json").write_text(json.dumps(body))
 
 
-@unittest.skipUnless(HAS_DAGSTER, "needs the beat dependency group")
+@unittest.skipUnless(HAS_DAGSTER, "needs the orchestration dependency group")
 class DefinitionsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from light_labs.beat import defs
+        from light_labs.orchestration import defs
 
         cls.defs = defs
         cls.graph = defs.resolve_asset_graph()
@@ -77,6 +77,11 @@ class DefinitionsTest(unittest.TestCase):
         keys = {k.to_user_string() for k in self.graph.get_all_asset_keys()}
         self.assertEqual(models - keys, set())
 
+    def test_steps_run_in_one_process(self):
+        # DuckDB allows one writer; parallel step processes lock each other out.
+        for job in self.defs.resolve_all_job_defs():
+            self.assertEqual(job.executor_def.name, "in_process", job.name)
+
     def test_staging_reads_the_landed_source(self):
         from dagster import AssetKey
 
@@ -84,7 +89,7 @@ class DefinitionsTest(unittest.TestCase):
         self.assertEqual(parents, {AssetKey(["raw", "queue_items"])})
 
 
-@unittest.skipUnless(HAS_DAGSTER, "needs the beat dependency group")
+@unittest.skipUnless(HAS_DAGSTER, "needs the orchestration dependency group")
 class SensorLogicTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -95,7 +100,7 @@ class SensorLogicTest(unittest.TestCase):
         self.now = datetime.now(UTC)
 
     def test_live_fight_needs_a_fresh_running_record(self):
-        from light_labs.beat.sensors import live_fight
+        from light_labs.orchestration.sensors import live_fight
 
         record(self.evals, "r1", "completed", self.now)
         self.assertIsNone(live_fight(self.evals))
@@ -105,7 +110,7 @@ class SensorLogicTest(unittest.TestCase):
         self.assertIsNone(live_fight(self.evals, now=self.now + timedelta(minutes=10)))
 
     def test_finished_since_waits_to_settle_and_advances_the_cursor(self):
-        from light_labs.beat.sensors import finished_since
+        from light_labs.orchestration.sensors import finished_since
 
         start = (self.now - timedelta(hours=1)).isoformat()
         record(self.evals, "old", "completed", self.now - timedelta(hours=2))
@@ -119,7 +124,7 @@ class SensorLogicTest(unittest.TestCase):
         self.assertEqual(finished_since(self.evals, cursor, now=later), ([], cursor))
 
     def test_queue_fingerprint_moves_with_the_queue(self):
-        from light_labs.beat.sensors import queue_fingerprint
+        from light_labs.orchestration.sensors import queue_fingerprint
 
         empty = queue_fingerprint(self.var)
         pending = self.var / "rush/queue/pending"
@@ -135,7 +140,7 @@ class SensorLogicTest(unittest.TestCase):
     def test_sensors_hold_off_during_a_fight(self):
         from dagster import SkipReason, build_sensor_context
 
-        from light_labs.beat import sensors
+        from light_labs.orchestration import sensors
 
         record(self.evals, "live", "running")
         with mock.patch.object(sensors.config, "VAR", self.var):
@@ -147,7 +152,7 @@ class SensorLogicTest(unittest.TestCase):
     def test_fight_finished_starts_from_now_then_requests_one_run(self):
         from dagster import RunRequest, SkipReason, build_sensor_context
 
-        from light_labs.beat import sensors
+        from light_labs.orchestration import sensors
 
         record(self.evals, "old", "completed", self.now - timedelta(days=1))
         with mock.patch.object(sensors.config, "VAR", self.var):
@@ -160,14 +165,14 @@ class SensorLogicTest(unittest.TestCase):
         self.assertEqual(request.tags["lab/runs"], "new")
 
 
-@unittest.skipUnless(HAS_DAGSTER, "needs the beat dependency group")
+@unittest.skipUnless(HAS_DAGSTER, "needs the orchestration dependency group")
 class FullRunTest(unittest.TestCase):
     def test_analytics_job_over_the_ci_fixtures(self):
         with tempfile.TemporaryDirectory() as tmp:
             var = fixture_var(tmp)
             env = {**os.environ, "LAB_VAR": str(var), "DUCKDB_PATH": str(var / "lab.duckdb")}
             script = (
-                "from light_labs.beat import defs\n"
+                "from light_labs.orchestration import defs\n"
                 "r = defs.resolve_job_def('analytics_job').execute_in_process()\n"
                 "raise SystemExit(0 if r.success else 1)\n"
             )

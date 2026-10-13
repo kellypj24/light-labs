@@ -1,4 +1,5 @@
-# Beat's Dagster instance. `just beat` copies this into DAGSTER_HOME (var/beat), where
+# The lab's Dagster instance. `just dagster` and `just analytics` copy this into
+# DAGSTER_HOME (var/dagster), where
 # runs, event logs and sensor cursors live in SQLite.
 
 # DuckDB allows one writer: one run at a time.

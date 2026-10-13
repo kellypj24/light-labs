@@ -2,7 +2,7 @@
 
 from dagster import AssetSelection, define_asset_job
 
-from light_labs.beat.assets import eval_run_health, eval_samples, queue_items
+from light_labs.orchestration.assets import eval_run_health, eval_samples, queue_items
 
 evals_job = define_asset_job(
     "evals_job",
@@ -17,7 +17,7 @@ queue_job = define_asset_job(
 analytics_job = define_asset_job(
     "analytics_job",
     selection=AssetSelection.all(),
-    description="Everything: `just analytics` as a Dagster run.",
+    description="Everything; what `just analytics` runs.",
 )
 
 ALL_JOBS = [evals_job, queue_job, analytics_job]
