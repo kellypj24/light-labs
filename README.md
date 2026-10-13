@@ -53,8 +53,7 @@ whatever a robot escalates. It never competes.
 | DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies, escalates work to Auto. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
 | DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
 
-Planned: Beat (watcher, likely the orchestrator), Roll (housekeeping), and robot masters as
-new task classes get stages.
+Planned: robot masters as new task classes get stages.
 
 ## Layout
 
@@ -66,8 +65,9 @@ light_labs/agents/     one package per robot: persona, prompt builders, behaviou
 light_labs/evals/      run_one (one sample through a robot's pipeline), results ingest, stages
 evals/                 Go runner, stages (fixtures + bar), contestants
 analytics/             dbt-duckdb project: raw eval samples → staging → marts
+light_labs/orchestration/  Dagster: landing assets + the dbt project, jobs, sensors
 tests/                 unit tests (no network, no models)
-ops/                   launchd job for Rush, GitHub settings
+ops/                   launchd job for Rush, Dagster instance config, GitHub settings
 var/                   runtime state, results and the lab database; git-ignored
 ```
 
@@ -174,10 +174,31 @@ small. `uv run lab skills` lists them.
 | update-robot-memory | auto | Keep a robot's local memory accurate |
 | boss-fight | auto | Design a stage, set its bar, record a weapon |
 
+## Orchestration
+
+Data reaches `var/lab.duckdb` one way: Dagster (`light_labs/orchestration`). Landing assets
+(`raw/*`, loaded by the same functions as `lab evals ingest` and `lab queue ingest`) feed
+every dbt node as an asset, built with `dbt build`. `just analytics` executes
+`analytics_job`; the sensors run narrower jobs on their own.
+
+```bash
+just dagster-install   # once: the daemon under launchd, so the sensors tick
+just dagster           # UI at http://127.0.0.1:3000; state in var/dagster
+just dagster-restart   # after merging orchestration changes
+```
+
+| Sensor | Runs | When |
+|---|---|---|
+| `fight_finished` | `evals_job` | a fight's run record ends (completed or cancelled), 2 min after |
+| `queue_changed` | `queue_job` | a draft is queued, sent, rejected or edited (checked every 5 min) |
+
+Both are on by default and skip while a fight is running. One job runs at a time (DuckDB has one writer), and fights are never started from Dagster.
+Changing it: the `dagster-orchestration` skill.
+
 ## Checks
 
 ```bash
-just check          # hooks, unit tests, Go harness tests, dbt-model oracle, dbt build; same as CI
+just check          # hooks, unit tests, Go harness tests, dbt-model oracle, dbt build, Dagster; same as CI
 just install-hooks  # run the hooks on every local commit
 ```
 

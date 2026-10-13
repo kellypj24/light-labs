@@ -139,6 +139,34 @@ jobs:
       - name: Tests that need the analytics group
         run: uv run python -m unittest tests.test_dbt_model tests.test_autosend -v
 
+  # Orchestration (Dagster): definitions load, invariants hold, and the analytics job
+  # builds over the synthetic fixtures. Same steps as `just dagster-check`.
+  orchestration:
+    name: Orchestration (Dagster)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      DBT_PROFILES_DIR: ${{ github.workspace }}/analytics
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: Sync
+        run: uv sync --group orchestration
+      - name: dbt parse
+        working-directory: analytics
+        run: uv run dbt parse --quiet
+      - name: Validate definitions
+        run: uv run dagster definitions validate -m light_labs.orchestration
+      - name: Tests
+        run: uv run python -m unittest tests.test_orchestration -v
+
   # The single required status check. Jobs that legitimately skip are fine;
   # any failure or cancellation fails this. Add every new job to `needs`.
   ci-success:
@@ -147,7 +175,7 @@ jobs:
     if: always()
     timeout-minutes: 5
     permissions: {}
-    needs: [hooks, test, evals, analytics]
+    needs: [hooks, test, evals, analytics, orchestration]
     steps:
       - name: Fail if any required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

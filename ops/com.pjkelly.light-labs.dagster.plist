@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Dagster daemon: ticks the sensors in light_labs/orchestration. Install with
+     `just dagster-install`; after a merge that changes orchestration code,
+     `just dagster-restart` so the daemon loads it. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.dagster</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/just</string>
+    <string>--justfile</string>
+    <string>/Users/pjkelly/light-labs/justfile</string>
+    <string>dagster-daemon</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <!-- Don't spin if it crashes on start (e.g. a broken manifest): wait a minute. -->
+  <key>ThrottleInterval</key><integer>60</integer>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/dagster/daemon.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/dagster/daemon.log</string>
+</dict>
+</plist>

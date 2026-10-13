@@ -33,4 +33,7 @@ Start with `lab-workflow` before any commit, push or PR.
   while a local-model fight runs. Ask before starting a fight; say how long it takes. Run
   long local fights with `-cool-above 40`, and when one has to be stopped, record why
   (`lab evals cancel <run_id> --reason`).
+- Data reaches var/lab.duckdb only through Dagster (`light_labs/orchestration`; `just
+  analytics` runs its job). It never starts fights, and its sensors skip while one runs.
+  Follow `dagster-orchestration` before changing it.
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.

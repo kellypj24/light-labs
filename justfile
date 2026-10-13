@@ -6,7 +6,7 @@ export DBT_PROFILES_DIR := justfile_directory() / "analytics"
 default: check
 
 # Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests
-check: hooks test evals-check analytics-check
+check: hooks test evals-check analytics-check dagster-check
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
@@ -51,11 +51,11 @@ runs *args="":
 queue *args="":
     uv run --locked lab queue status {{args}}
 
-# Load var/evals and the robots' queues into var/lab.duckdb, then build the dbt project
-analytics:
-    uv run --locked lab evals ingest
-    uv run --locked lab queue ingest
-    cd analytics && uv run --locked --group analytics dbt build
+# Load var/evals and the robots' queues into var/lab.duckdb, then build the dbt project:
+# Dagster's analytics_job, recorded in var/dagster beside the sensors' runs
+analytics: _dagster-home
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster job execute -m light_labs.orchestration -j analytics_job
 
 # dbt lint and build on the synthetic fixtures in a throwaway database (same as CI)
 analytics-check:
@@ -70,3 +70,31 @@ analytics-check:
     cd ..
     uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend
     LAB_VAR="$tmp" uv run --locked lab evals runs
+
+# Dagster UI (http://127.0.0.1:3000). The sensors run in the daemon, not here.
+dagster: _dagster-home
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster-webserver -m light_labs.orchestration -p 3000
+
+# The daemon that ticks the sensors; launchd runs this (ops/com.pjkelly.light-labs.dagster.plist)
+dagster-daemon: _dagster-home
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    DAGSTER_HOME="$PWD/var/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
+
+# Install and start the daemon's launchd job
+dagster-install: _dagster-home
+    cp ops/com.pjkelly.light-labs.dagster.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.dagster.plist
+
+# Restart the daemon so it loads changed orchestration code
+dagster-restart:
+    launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.dagster
+
+_dagster-home:
+    mkdir -p var/dagster && cp ops/orchestration/dagster.yaml var/dagster/
+
+# Definitions load, invariants hold, and a full run over the fixtures builds
+dagster-check:
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    uv run --locked --group orchestration dagster definitions validate -m light_labs.orchestration 2>&1 | grep -q "Validation successful"
+    uv run --locked --group orchestration python -m unittest tests.test_orchestration
