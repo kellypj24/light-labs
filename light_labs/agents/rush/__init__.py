@@ -16,6 +16,9 @@ SIGNOFF = f"— {NAME} ({ENTRY['dln']}, {ACTOR})"
 # Low: every draft is judged on all samples of a fixture, and PJ wants the same answer twice.
 TEMPERATURE = float(os.environ.get("RUSH_TEMPERATURE", ENTRY.get("temperature", 0.3)))
 
+# Drafts sent without approval (see autosend.py); RUSH_AUTO_SEND=0 turns it off.
+AUTO_SEND = ENTRY.get("auto_send", {})
+
 # Board tasks Rush watches for new comments.
 WATCH_TASKS = [t for t in os.environ.get("RUSH_WATCH_TASKS", "").split(",") if t]
 

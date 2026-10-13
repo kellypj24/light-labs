@@ -50,7 +50,7 @@ whatever a robot escalates. It never competes.
 
 | DLN | Name | Status | Job |
 |---|---|---|---|
-| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies into an approval queue, escalates work to Auto. Posts nothing without PJ's approval. |
+| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies, escalates work to Auto. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
 | DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
 
 Planned: Beat (watcher, likely the orchestrator), Roll (housekeeping), and robot masters as
@@ -94,6 +94,20 @@ uv run lab rush show <id>         # edit var/rush/queue/pending/<id>.json to rev
 uv run lab rush approve <id>      # post it
 uv run lab rush reject <id>
 uv run lab rush escalate <id>     # hand to Auto (`claude -p`); result stays local
+```
+
+**Auto-send.** With `auto_send.enabled` on Rush's `dln.json` entry, a plain reply (the router
+said REPLY, not ESCALATE) goes out without approval when every guard passes: the
+reply-draft stage's checks, no link that isn't in the incoming message, no claim of an
+action ("I've passed / posted / ran…"). Limits: a daily cap, and one auto-reply per thread
+before a person steps in, so two agents can't loop. Everything else queues as before, with
+the reasons it was held. `RUSH_AUTO_SEND=0` turns it off.
+
+```bash
+uv run lab rush autosend                       # settings, and kinds turned off by a flag
+uv run lab rush flag <id> --reason "..."       # an auto-send that shouldn't have gone out:
+                                               # auto-send off for that kind
+uv run lab rush autosend on reply              # turn it back on
 ```
 
 Copy `light_labs/agents/rush/memory.example.md` to `memory.md` (git-ignored) and keep it

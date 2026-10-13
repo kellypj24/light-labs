@@ -52,8 +52,12 @@ unit_tests:
           - {robot: beat, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 13:00:00+00"}
           # pending items are not decisions
           - {robot: beat, kind: reply, is_decided: false, is_sent: false, is_edited: null, is_escalated: false, resolved_at: null}
+          # auto-sends are not PJ's decisions; a flagged one counts as a correction
+          - {robot: roll, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, is_auto: true, is_flagged: false, resolved_at: "2026-10-12 10:00:00+00"}
+          - {robot: roll, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, is_auto: true, is_flagged: true, resolved_at: "2026-10-12 11:00:00+00"}
     expect:
       rows:
         - {robot_kind_key: rush|reply, decision_count: 4, unedited_sent_count: 3, unknown_edit_count: 0, is_ready_to_skip_approval: true}
         - {robot_kind_key: rush|comment, decision_count: 3, unedited_sent_count: 3, unknown_edit_count: 0, is_ready_to_skip_approval: false}
         - {robot_kind_key: beat|reply, decision_count: 4, unedited_sent_count: 2, unknown_edit_count: 2, is_ready_to_skip_approval: false}
+        - {robot_kind_key: roll|reply, decision_count: 1, unedited_sent_count: 0, unknown_edit_count: 0, is_ready_to_skip_approval: false}

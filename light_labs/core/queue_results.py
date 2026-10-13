@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS raw.queue_items (
     dirty BOOLEAN,
     source VARCHAR NOT NULL
 );
+-- Added after the table was first created.
+ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS auto BOOLEAN;
+ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS flagged BOOLEAN;
+ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS flag_reason VARCHAR;
+ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS held JSON;
 """
 
 COLUMNS = [
@@ -54,6 +59,10 @@ COLUMNS = [
     "commit",
     "dirty",
     "source",
+    "auto",
+    "flagged",
+    "flag_reason",
+    "held",
 ]
 
 
@@ -78,6 +87,10 @@ def _row(robot, status, path):
         item.get("commit"),
         item.get("dirty"),
         str(path),
+        bool(item.get("auto")),
+        bool(item.get("flagged")),
+        item.get("flag_reason"),
+        json.dumps(item["held"]) if item.get("held") else None,
     )
 
 

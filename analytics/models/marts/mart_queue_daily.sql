@@ -16,6 +16,8 @@ SELECT
     COUNT(*) FILTER (WHERE is_sent AND NOT is_edited) AS unedited_sent_count,
     COUNT(*) FILTER (WHERE is_sent AND is_edited) AS edited_sent_count,
     COUNT(*) FILTER (WHERE is_escalated) AS escalated_count,
+    COUNT(*) FILTER (WHERE is_auto) AS auto_sent_count,
+    COUNT(*) FILTER (WHERE is_flagged) AS flagged_count,
     {{ safe_divide('COUNT(*) FILTER (WHERE is_sent)', 'COUNT(*) FILTER (WHERE is_decided)') }}
         AS approval_rate,
     MEDIAN(minutes_to_decision) AS median_minutes_to_decision

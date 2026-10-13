@@ -25,7 +25,16 @@
           "earned": "2026-10-12"
         }
       ],
-      "temperature": 0.3
+      "temperature": 0.3,
+      "auto_send": {
+        "enabled": true,
+        "kinds": [
+          "reply",
+          "comment"
+        ],
+        "daily_cap": 10,
+        "per_thread": 1
+      }
     },
     {
       "dln": "DLN-101",

@@ -2,7 +2,8 @@
     One row per robot and draft kind: could this kind skip approval? Judged on the
     last `autonomy_window` decisions (sent or rejected), all of which must exist: ready
     when at least `autonomy_min_unedited_rate` of them were sent exactly as drafted.
-    Rejections, edits, and edits unknown all count against it.
+    Rejections, edits, and edits unknown all count against it. Auto-sent drafts are not
+    PJ's decisions and are left out, except flagged ones, which count as corrections.
 #}
 
 WITH ranked AS (
@@ -10,15 +11,15 @@ WITH ranked AS (
     SELECT
         robot,
         kind,
-        is_sent,
         is_edited,
         is_escalated,
         resolved_at,
+        is_sent AND NOT COALESCE(is_flagged, FALSE) AS is_sent,
         ROW_NUMBER() OVER (
             PARTITION BY robot, kind ORDER BY resolved_at DESC
         ) AS recency
     FROM {{ ref('stg_queue_items') }}
-    WHERE is_decided
+    WHERE is_decided AND (NOT COALESCE(is_auto, FALSE) OR COALESCE(is_flagged, FALSE))
 
 ),
 

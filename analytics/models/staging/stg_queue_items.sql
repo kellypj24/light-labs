@@ -30,6 +30,10 @@ renamed AS (
         "commit" AS git_commit,  -- noqa: RF06
         dirty AS is_dirty,
         source AS source_file,
+        flag_reason,
+        held AS held_reasons,
+        COALESCE(auto, FALSE) AS is_auto,
+        COALESCE(flagged, FALSE) AS is_flagged,
         robot || '|' || item_id AS queue_item_key,
         target ->> '$.task_id' AS task_id,
         escalation IS NOT NULL AS is_escalated,

@@ -64,5 +64,5 @@ analytics-check:
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet
     cd ..
-    uv run --locked --group analytics python -m unittest tests.test_dbt_model
+    uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend
     LAB_VAR="$tmp" uv run --locked lab evals runs

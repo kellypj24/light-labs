@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 
@@ -86,6 +87,7 @@ def queue_status(args):
 
 
 def rush_tick(args, store, rush):
+    from light_labs.agents.rush.autosend import Policy
     from light_labs.agents.rush.heartbeat import Heartbeat
 
     hb = Heartbeat(
@@ -99,6 +101,7 @@ def rush_tick(args, store, rush):
         signoff=rush.SIGNOFF,
         temperature=rush.TEMPERATURE,
         meta=_draft_meta(f"ollama:{rush.MODEL}"),
+        autosend=Policy(rush.AUTO_SEND, store),
     )
     for item in hb.tick(backfill=args.backfill):
         print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))
@@ -115,18 +118,10 @@ def rush_show(args, store, rush):
 
 
 def rush_approve(args, store, rush):
+    from light_labs.agents.rush.heartbeat import post
+
     item = store.get(args.id)
-    client, t = Client(), item["target"]
-    if item["kind"] == "reply":
-        result = client.send(
-            rush.ACTOR,
-            t["to"],
-            item["draft"],
-            summary=t.get("summary") and f"re: {t['summary']}",
-            in_reply_to=t.get("in_reply_to"),
-        )
-    else:
-        result = client.comment(rush.ACTOR, t["task_id"], item["draft"])
+    result = post(Client(), rush.ACTOR, item)
     store.resolve(args.id, "sent", result_id=result.get("id"))
     store.journal(f"sent {args.id} ({item['kind']})")
     print(f"sent {args.id}")
@@ -136,6 +131,44 @@ def rush_reject(args, store, rush):
     store.resolve(args.id, "rejected", reason=args.reason)
     store.journal(f"rejected {args.id}" + (f": {args.reason}" if args.reason else ""))
     print(f"rejected {args.id}")
+
+
+def rush_flag(args, store, rush):
+    """An auto-sent draft that should not have gone out: auto-send off for its kind."""
+    path = store.root / "queue" / "sent" / f"{args.id}.json"
+    if not path.exists():
+        sys.exit(f"no sent item {args.id}")
+    item = json.loads(path.read_text())
+    item.update(flagged=True, flag_reason=args.reason)
+    path.write_text(json.dumps(item, indent=2) + "\n")
+    state = store.load()
+    state["auto_send_off"] = sorted(set(state.get("auto_send_off", [])) | {item["kind"]})
+    store.save(state)
+    store.journal(f"flagged {args.id}; auto-send off for {item['kind']}: {args.reason or ''}")
+    print(
+        f"flagged {args.id}; auto-send off for {item['kind']} (lab rush autosend on {item['kind']})"
+    )
+
+
+def rush_autosend(args, store, rush):
+    """Show auto-send, or turn a kind back on after a flag (on) / off by hand (off)."""
+    state = store.load()
+    off = set(state.get("auto_send_off", []))
+    if args.action == "on":
+        off.discard(args.kind)
+    elif args.action == "off":
+        off.add(args.kind)
+    if args.action in ("on", "off"):
+        state["auto_send_off"] = sorted(off)
+        store.save(state)
+        store.journal(f"auto-send {args.action} for {args.kind} by hand")
+    s = rush.AUTO_SEND
+    env_off = os.environ.get("RUSH_AUTO_SEND") == "0"
+    print(
+        f"enabled: {s.get('enabled', False) and not env_off}  kinds: {s.get('kinds', [])}  "
+        f"daily cap: {s.get('daily_cap')}  per thread: {s.get('per_thread')}  "
+        f"off after a flag: {sorted(off) or 'none'}"
+    )
 
 
 def rush_escalate(args, store, rush):
@@ -180,6 +213,12 @@ def main(argv=None):
     rcmd.add_parser("queue")
     for name in ("show", "approve", "escalate"):
         rcmd.add_parser(name).add_argument("id")
+    flag_p = rcmd.add_parser("flag", help="an auto-sent draft that should not have gone out")
+    flag_p.add_argument("id")
+    flag_p.add_argument("--reason")
+    auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
+    auto_p.add_argument("action", nargs="?", choices=["on", "off"])
+    auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
     reject_p = rcmd.add_parser("reject")
     reject_p.add_argument("id")
     reject_p.add_argument("--reason", help="why, for the queue analytics")

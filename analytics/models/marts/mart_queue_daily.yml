@@ -15,5 +15,9 @@ models:
         description: Sent exactly as the robot drafted them
       - name: edited_sent_count
         description: Sent after edits; items with unknown edits count in neither
+      - name: auto_sent_count
+        description: Sent by the auto-send tier without approval
+      - name: flagged_count
+        description: Auto-sent drafts PJ flagged as should-not-have-gone-out
       - name: median_minutes_to_decision
         description: Median minutes from queued to sent or rejected
