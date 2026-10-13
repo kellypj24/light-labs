@@ -17,7 +17,14 @@
         "agent-net-etiquette",
         "escalate-to-auto"
       ],
-      "weapons": [],
+      "weapons": [
+        {
+          "stage": "reply-draft",
+          "brain": "ollama:llama3.1:8b",
+          "run_id": "reply-draft-20261013T001913Z",
+          "earned": "2026-10-12"
+        }
+      ],
       "temperature": 0.3
     },
     {
