@@ -34,3 +34,17 @@ sources:
               - accepted_values:
                   arguments:
                     values: ["pending", "sent", "rejected"]
+      - name: eval_run_log
+        description: >
+          One row per eval run from the runner's <run_id>.run.json: lifecycle (running,
+          completed, cancelled), reason, progress, cooling pauses. Reloaded in full by
+          `lab evals ingest`. Runs before 2026-10-13 have no record.
+        columns:
+          - name: run_id
+            tests:
+              - not_null
+      - name: eval_telemetry
+        description: >
+          Heat and load readings the runner takes every 30 seconds during a run
+          (<run_id>.telemetry.jsonl): battery temperature and charge, AC power, CPU speed
+          limit, load, Ollama's CPU. NULL where the platform has no reading.

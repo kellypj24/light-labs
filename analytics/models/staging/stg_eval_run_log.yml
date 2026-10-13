@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: stg_eval_run_log
+    description: One row per eval run's lifecycle record (runs from 2026-10-13 on).
+    columns:
+      - name: run_id
+        tests:
+          - unique
+          - not_null
+      - name: status
+        description: running, completed or cancelled, as the runner last wrote it
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["running", "completed", "cancelled"]
+      - name: stop_reason
+        description: Why it was cancelled ("interrupted", or what `lab evals cancel --reason` said)
+      - name: done_samples
+        description: Samples finished and saved
+      - name: cool_pause_count
+        description: Times the runner waited for the machine to cool (-cool-above)
+      - name: duration_minutes
+        description: Started to ended; NULL while running or if killed

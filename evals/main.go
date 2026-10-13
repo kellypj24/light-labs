@@ -7,13 +7,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -53,6 +56,9 @@ func main() {
 	minPass := flag.Float64("min-pass", 0, "exit 1 if any contestant's sample pass rate is below this (0-1)")
 	outDir := flag.String("out", "", "write samples as JSONL here (default <repo>/var/evals)")
 	timeout := flag.Duration("timeout", 5*time.Minute, "per-sample timeout")
+	coolAbove := flag.Float64("cool-above", 0, "pause before a sample while the battery is above this many °C or the CPU is throttled (0: off)")
+	coolMaxWait := flag.Duration("cool-max-wait", 10*time.Minute, "longest single cooling pause")
+	telemetryEvery := flag.Duration("telemetry-every", 30*time.Second, "how often to read heat and load")
 	flag.Parse()
 
 	evalsDir, _ := os.Getwd()
@@ -87,34 +93,83 @@ func main() {
 		n int
 	}
 	var jobs []job
+	var contestantNames []string
 	for _, c := range contestants {
+		contestantNames = append(contestantNames, c.Name)
 		for _, f := range fixtures {
 			for n := 1; n <= *samples; n++ {
 				jobs = append(jobs, job{c, f, n})
 			}
 		}
 	}
-	fmt.Fprintf(os.Stderr, "stage %s: %d fixtures x %d samples x %d contestants = %d runs\n",
-		st.Stage, len(fixtures), *samples, len(contestants), len(jobs))
 
 	runID := fmt.Sprintf("%s-%s", st.Stage, time.Now().UTC().Format("20060102T150405Z"))
 	commit, dirty := gitState(root)
+	dir := *outDir
+	if dir == "" {
+		dir = filepath.Join(root, "var", "evals")
+	}
+	exitOn(os.MkdirAll(dir, 0o755))
+
+	// Ctrl-C or SIGTERM stops new samples, cancels the running ones, and still writes
+	// the record and the partial report.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	samplesPath := filepath.Join(dir, runID+".jsonl")
+	samplesFile, err := os.Create(samplesPath)
+	exitOn(err)
+	defer samplesFile.Close()
+	telemetryPath := filepath.Join(dir, runID+".telemetry.jsonl")
+	telemetryFile, err := os.Create(telemetryPath)
+	exitOn(err)
+	defer telemetryFile.Close()
+
+	rec := &RunRecord{RunID: runID, Stage: st.Stage, Contestants: contestantNames, Samples: *samples,
+		Filter: *filter, Commit: commit, Dirty: dirty, Total: len(jobs), Status: "running",
+		StartedAt: time.Now().UTC(), SamplesFile: samplesPath, TelemetryFile: telemetryPath,
+		CoolAboveC: *coolAbove, path: filepath.Join(dir, runID+".run.json")}
+	exitOn(rec.save())
+
+	monitor := &Monitor{read: readTelemetry}
+	monCtx, stopMonitor := context.WithCancel(context.Background())
+	go monitor.Run(monCtx, telemetryFile, *telemetryEvery)
+	defer stopMonitor()
+
+	fmt.Fprintf(os.Stderr, "stage %s: %d fixtures x %d samples x %d contestants = %d runs\n",
+		st.Stage, len(fixtures), *samples, len(contestants), len(jobs))
+	fmt.Fprintf(os.Stderr, "run %s (watch: uv run lab evals watch)\n", runID)
 
 	results := make([]Sample, len(jobs))
 	sem := make(chan struct{}, max(1, *concurrency))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+	enc := json.NewEncoder(samplesFile)
+	scores := newScoreboard(contestantNames)
+	started := time.Now()
 	done := 0
 	for i, j := range jobs {
+		if ctx.Err() != nil {
+			break
+		}
+		if waited := coolDown(ctx, monitor, *coolAbove, 30*time.Second, *coolMaxWait); waited >= 1 {
+			rec.update(func(r *RunRecord) { r.CoolPauses++; r.CoolSeconds += waited })
+		}
+		if ctx.Err() != nil {
+			break
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(i int, j job) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+			sampleCtx, cancel := context.WithTimeout(ctx, *timeout)
 			defer cancel()
 			start := time.Now()
-			run, runErr := runSample(ctx, root, st, j.c, j.f)
+			run, runErr := runSample(sampleCtx, root, st, j.c, j.f)
+			if ctx.Err() != nil {
+				return // interrupted mid-sample: not a result
+			}
 			s := Sample{RunID: runID, Commit: commit, Dirty: dirty, Filter: *filter, Contestant: j.c.Name, Role: j.c.Role, Brain: j.c.Brain, Stage: st.Stage,
 				Fixture: j.f.ID, Category: j.f.Category, N: j.n, At: start.UTC()}
 			if runErr != nil {
@@ -137,31 +192,59 @@ func main() {
 				s.BarMinFixtureRate, s.BarMaxGap = &st.Bar.MinFixtureRate, &st.Bar.MaxGap
 			}
 			s.Passed = passed(s.Checks)
-			results[i] = s
+
 			mu.Lock()
+			defer mu.Unlock()
+			results[i] = s
+			if err := enc.Encode(s); err != nil { // saved as it finishes
+				fmt.Fprintln(os.Stderr, "evals: write sample:", err)
+			}
 			done++
-			mark := "."
-			if !s.Passed {
-				mark = "x"
-			}
-			fmt.Fprint(os.Stderr, mark)
-			if done%50 == 0 || done == len(jobs) {
-				fmt.Fprintf(os.Stderr, " %d/%d\n", done, len(jobs))
-			}
-			mu.Unlock()
+			scores.add(s.Contestant, s.Passed)
+			harness := !s.Passed && len(s.Checks) > 0 && s.Checks[0].Name == "ran" && !s.Checks[0].Passed
+			rec.update(func(r *RunRecord) {
+				r.Done = done
+				if s.Passed {
+					r.Passed++
+				}
+				if harness {
+					r.HarnessErrors++
+				}
+			})
+			fmt.Fprintln(os.Stderr, progressLine(done, len(jobs), s, scores, time.Since(started), monitor.Latest()))
 		}(i, j)
 	}
 	wg.Wait()
+	stopMonitor()
 
-	dir := *outDir
-	if dir == "" {
-		dir = filepath.Join(root, "var", "evals")
+	var finished []Sample
+	for _, s := range results {
+		if s.RunID != "" {
+			finished = append(finished, s)
+		}
 	}
-	path, err := writeResults(dir, runID, results)
-	exitOn(err)
+	ended := time.Now().UTC()
+	cancelled := ctx.Err() != nil
+	rec.update(func(r *RunRecord) {
+		r.EndedAt = &ended
+		r.Status = "completed"
+		if cancelled {
+			r.Status, r.Reason = "cancelled", "interrupted"
+		}
+	})
+	if cancelled {
+		fmt.Fprintf(os.Stderr, "\ncancelled after %d/%d samples; add a reason: uv run lab evals cancel %s --reason \"...\"\n",
+			len(finished), len(jobs), runID)
+	}
+	if len(finished) == 0 {
+		os.Exit(130)
+	}
 
-	ok := report(os.Stdout, st, contestants, results, *minPass)
-	fmt.Printf("\nsamples: %s\n", path)
+	ok := report(os.Stdout, st, contestants, finished, *minPass)
+	fmt.Printf("\nsamples: %s\n", samplesPath)
+	if cancelled {
+		os.Exit(130)
+	}
 	if !ok {
 		os.Exit(1)
 	}

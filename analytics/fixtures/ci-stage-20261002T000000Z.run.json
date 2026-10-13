@@ -1,0 +1,24 @@
+{
+  "run_id": "ci-stage-20261002T000000Z",
+  "stage": "ci-stage",
+  "contestants": [
+    "mega-man"
+  ],
+  "samples": 2,
+  "filter": "work",
+  "commit": "abc1234",
+  "dirty": false,
+  "total": 4,
+  "done": 2,
+  "passed": 1,
+  "harness_errors": 1,
+  "cool_pauses": 1,
+  "cool_seconds": 30,
+  "cool_above_c": 40,
+  "status": "cancelled",
+  "reason": "machine hot",
+  "started_at": "2026-10-02T00:00:00Z",
+  "ended_at": "2026-10-02T00:03:00Z",
+  "samples_file": "ci-stage-20261002T000000Z.jsonl",
+  "telemetry_file": "ci-stage-20261002T000000Z.telemetry.jsonl"
+}

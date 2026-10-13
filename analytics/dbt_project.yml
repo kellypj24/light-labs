@@ -31,6 +31,9 @@ vars:
   autonomy_window: 30
   autonomy_min_unedited_rate: 0.95
 
+  # mart_run_health: a run still "running" with no reading for this long was killed.
+  run_stale_minutes: 10
+
 models:
   light_labs:
     staging:

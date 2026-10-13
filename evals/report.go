@@ -1,34 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"text/tabwriter"
 )
-
-// writeResults appends nothing: one JSONL file per run, named by run id.
-func writeResults(dir, runID string, samples []Sample) (string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, runID+".jsonl")
-	f, err := os.Create(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	enc := json.NewEncoder(f)
-	for _, s := range samples {
-		if err := enc.Encode(s); err != nil {
-			return "", err
-		}
-	}
-	return path, nil
-}
 
 type tally struct{ pass, total int }
 

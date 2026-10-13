@@ -30,5 +30,7 @@ Start with `lab-workflow` before any commit, push or PR.
 - Rush's auto-send posts to other people's board as pj_agent. Loosen its guards, caps or
   kinds only when PJ asks, and say what changes.
 - One heavy job at a time on PJ's laptop: never run `just check`, builds or a second fight
-  while a local-model fight runs. Ask before starting a fight; say how long it takes.
+  while a local-model fight runs. Ask before starting a fight; say how long it takes. Run
+  long local fights with `-cool-above 40`, and when one has to be stopped, record why
+  (`lab evals cancel <run_id> --reason`).
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.

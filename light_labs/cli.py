@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from light_labs import config
 from light_labs.core.agentnet import Client
@@ -35,7 +36,34 @@ def evals_ingest(args):
 
     for run_id, n in results.ingest(args.paths).items():
         print(f"loaded {run_id} ({n} samples)")
+    health_dir = Path(args.paths[0]).parent if args.paths else None
+    runs, readings = results.ingest_health(health_dir)
+    print(f"loaded {runs} run records, {readings} telemetry readings")
     print(f"db: {results.DB}")
+
+
+def evals_watch(args):
+    from light_labs.evals import watch
+
+    watch.watch(args.run_id)
+
+
+def evals_cancel(args):
+    """Give a stopped (or killed) fight its reason. A record still marked running is
+    closed as cancelled now."""
+    from light_labs.evals import results
+
+    path = results.RESULTS / f"{args.run_id}.run.json"
+    if not path.exists():
+        sys.exit(f"no run record {path}")
+    record = json.loads(path.read_text())
+    if record["status"] == "running":
+        from datetime import UTC, datetime
+
+        record.update(status="cancelled", ended_at=datetime.now(UTC).isoformat())
+    record["reason"] = args.reason
+    path.write_text(json.dumps(record, indent=2) + "\n")
+    print(f"{args.run_id}: {record['status']} ({args.reason})")
 
 
 def evals_runs(args):
@@ -195,6 +223,12 @@ def main(argv=None):
     ecmd.add_parser("ingest", help="load var/evals/*.jsonl (idempotent)").add_argument(
         "paths", nargs="*", help="specific JSONL files (default: all)"
     )
+    ecmd.add_parser("watch", help="follow a fight live (default: the latest)").add_argument(
+        "run_id", nargs="?"
+    )
+    cancel_p = ecmd.add_parser("cancel", help="record why a fight was stopped")
+    cancel_p.add_argument("run_id")
+    cancel_p.add_argument("--reason", required=True)
     runs_p = ecmd.add_parser("runs", help="recent runs from marts.fct_eval_runs, newest first")
     runs_p.add_argument("--stage")
     runs_p.add_argument("--contestant")
