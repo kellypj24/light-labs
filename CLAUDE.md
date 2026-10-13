@@ -33,4 +33,6 @@ Start with `lab-workflow` before any commit, push or PR.
   while a local-model fight runs. Ask before starting a fight; say how long it takes. Run
   long local fights with `-cool-above 40`, and when one has to be stopped, record why
   (`lab evals cancel <run_id> --reason`).
+- Beat (`light_labs/beat`, Dagster) never starts fights, and its sensors skip while one
+  runs. Follow `beat-orchestration` before changing it.
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.

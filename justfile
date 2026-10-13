@@ -6,7 +6,7 @@ export DBT_PROFILES_DIR := justfile_directory() / "analytics"
 default: check
 
 # Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests
-check: hooks test evals-check analytics-check
+check: hooks test evals-check analytics-check beat-check
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
@@ -70,3 +70,14 @@ analytics-check:
     cd ..
     uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend
     LAB_VAR="$tmp" uv run --locked lab evals runs
+
+# Beat: Dagster UI and sensors over the analytics (http://127.0.0.1:3000). State in var/beat.
+beat:
+    mkdir -p var/beat && cp ops/beat/dagster.yaml var/beat/
+    DAGSTER_HOME="$PWD/var/beat" uv run --locked --group beat dagster dev -m light_labs.beat
+
+# Beat's definitions load, its invariants hold, and a full run over the fixtures builds
+beat-check:
+    cd analytics && uv run --locked --group beat dbt parse --quiet
+    uv run --locked --group beat dagster definitions validate -m light_labs.beat 2>&1 | grep -q "Validation successful"
+    uv run --locked --group beat python -m unittest tests.test_beat

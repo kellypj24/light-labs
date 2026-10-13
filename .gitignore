@@ -7,3 +7,6 @@ light_labs/agents/*/memory.md
 # dbt build output (also in analytics/.gitignore; here so no branch can commit it)
 analytics/target/
 analytics/logs/
+
+# Dagster's throwaway instance dirs (`dagster definitions validate`, `dagster dev` without DAGSTER_HOME)
+.tmp_dagster_home_*/

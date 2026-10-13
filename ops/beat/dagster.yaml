@@ -1,0 +1,10 @@
+# Beat's Dagster instance. `just beat` copies this into DAGSTER_HOME (var/beat), where
+# runs, event logs and sensor cursors live in SQLite.
+
+# DuckDB allows one writer: one run at a time.
+concurrency:
+  runs:
+    max_concurrent_runs: 1
+
+telemetry:
+  enabled: false
