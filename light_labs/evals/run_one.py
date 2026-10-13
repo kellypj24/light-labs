@@ -22,12 +22,7 @@ from light_labs.core.brain import brain_for
 def reply_draft(brain, memory, inp):
     """Rush drafting a reply or task comment: the exact prompts the heartbeat uses."""
     from light_labs.agents import rush
-    from light_labs.agents.rush.heartbeat import (
-        clean,
-        comment_prompt,
-        reply_prompt,
-        split_escalation,
-    )
+    from light_labs.agents.rush.heartbeat import comment_prompt, draft, reply_prompt
 
     content = inp["content"]
     if inp.get("kind", "reply") == "comment":
@@ -35,10 +30,8 @@ def reply_draft(brain, memory, inp):
         user = comment_prompt(rush.NAME, inp.get("title", ""), earlier, inp["sender"], content)
     else:
         user = reply_prompt(rush.NAME, inp["sender"], inp.get("summary"), content)
-    raw = brain.think(
-        rush.system_prompt(user, memory_text=memory), user, temperature=rush.TEMPERATURE
-    )
-    escalate, body = split_escalation(clean(raw, rush.NAME))
+    system = rush.system_prompt(user, memory_text=memory)
+    raw, escalate, body = draft(brain, system, user, rush.NAME, rush.TEMPERATURE)
     return {"raw": raw, "draft": body, "escalate": escalate}
 
 

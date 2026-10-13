@@ -25,24 +25,12 @@ _INSTRUCTION = re.compile(
 
 # At a line start in any case, or mid-line in capitals ("...per second. ESCALATE: x").
 _ESCALATE = re.compile(r"(?:^\s*\**(?i:escalate)|\s?\**ESCALATE)\**:\s*(.+?)\s*$", re.MULTILINE)
-# A draft that tells the sender it was handed on must create the handoff.
-_HANDOFF = re.compile(
-    r"\b(passed|handed|flagged|forwarded|sent)\b[^.\n]{0,40}?\b(to|for)\s+(PJ|Auto)\b",
-    re.IGNORECASE,
-)
 
 
 def split_escalation(text):
-    """Pull out an `ESCALATE: <work>` line, wherever the model put it. A draft that says
-    it passed something to PJ or Auto without one is escalated with that sentence."""
+    """Pull out an `ESCALATE: <work>` line, wherever the model put it."""
     match = _ESCALATE.search(text)
     if not match:
-        handoff = _HANDOFF.search(text)
-        if handoff:
-            start = max(text.rfind(".", 0, handoff.start()), text.rfind("\n", 0, handoff.start()))
-            end = text.find(".", handoff.end())
-            sentence = text[start + 1 : end if end != -1 else None].strip()
-            return f"draft says it was handed on: {sentence}", text
         return None, text
     body = re.sub(r"\n{3,}", "\n\n", text[: match.start()] + text[match.end() :]).strip()
     return match.group(1), body
@@ -78,6 +66,47 @@ def clean(text, name="Rush"):
     return text
 
 
+ROUTE = (
+    "Before any reply is written, decide one thing: does this message need PJ or Auto, by "
+    "the escalate-to-auto rules above? Answer with exactly one line and nothing else:\n"
+    "ESCALATE: <one line saying what needs doing>\n"
+    "or\n"
+    "REPLY"
+)
+_ROUTED = re.compile(r"^\W*(ESCALATE|REPLY)\b\W*(.*)$", re.IGNORECASE | re.MULTILINE)
+
+HOLDING = (
+    "\n\nDecision: this goes to PJ and Auto ({work}). Write only a short holding reply: "
+    "say it's with PJ and Auto, and promise no result or date. No ESCALATE line."
+)
+DIRECT = (
+    "\n\nDecision: no escalation. Reply directly from what you know. Don't say you passed "
+    "anything to PJ or Auto, and no ESCALATE line."
+)
+
+
+def route(brain, system, prompt):
+    """One short, deterministic call: the escalation text, or None to reply directly."""
+    raw = brain.think(f"{system}\n\n{ROUTE}", prompt, temperature=0)
+    match = _ROUTED.search(raw)
+    if match and match.group(1).upper() == "ESCALATE":
+        return match.group(2).strip() or "see the message"
+    return None
+
+
+def draft(brain, system, prompt, name, temperature=None):
+    """Route, then write: (raw reply, escalation or None, cleaned body).
+
+    Shared by the heartbeat and the evals. The route call decides escalation; the writer
+    is told the decision, so a draft can neither miss an escalation nor invent one."""
+    escalate = route(brain, system, prompt)
+    told = prompt + (HOLDING.format(work=escalate) if escalate else DIRECT)
+    sampling = {} if temperature is None else {"temperature": temperature}
+    raw = brain.think(system, told, **sampling)
+    _, body = split_escalation(clean(raw, name))  # drop any ESCALATE line the writer added
+    return raw, escalate, body
+
+
 def reply_prompt(name, sender, summary, content):
     """User prompt for a direct message. Shared by the heartbeat and the evals."""
     return (
@@ -111,9 +140,6 @@ class Heartbeat:
         self.client, self.brain, self.store = client, brain, store
         self.persona, self.actor, self.watch_tasks = persona, actor, watch_tasks
         self.name, self.signoff, self.temperature = name, signoff, temperature
-
-    def _sampling(self):
-        return {} if self.temperature is None else {"temperature": self.temperature}
 
     def tick(self, backfill=False):
         state = self.store.load()
@@ -178,8 +204,7 @@ class Heartbeat:
 
     def _draft(self, kind, target, prompt, context):
         system = self.persona(prompt) if callable(self.persona) else self.persona
-        raw = self.brain.think(system, prompt, **self._sampling())
-        escalate, body = split_escalation(clean(raw, self.name))
+        _, escalate, body = draft(self.brain, system, prompt, self.name, self.temperature)
         item = self.store.enqueue(
             kind, target, f"{body}\n\n{self.signoff}", context, escalate=escalate or False
         )
