@@ -161,6 +161,20 @@ def short_id(url):
     return url.rstrip("/").rsplit("/", 1)[-1]
 
 
+def post(client, actor, item):
+    """Send a queued item: a direct reply or a task comment. Returns the edge's response."""
+    t = item["target"]
+    if item["kind"] == "reply":
+        return client.send(
+            actor,
+            t["to"],
+            item["draft"],
+            summary=t.get("summary") and f"re: {t['summary']}",
+            in_reply_to=t.get("in_reply_to"),
+        )
+    return client.comment(actor, t["task_id"], item["draft"])
+
+
 class Heartbeat:
     def __init__(
         self,
@@ -174,11 +188,13 @@ class Heartbeat:
         signoff,
         temperature=None,
         meta=None,
+        autosend=None,
     ):
         self.client, self.brain, self.store = client, brain, store
         self.persona, self.actor, self.watch_tasks = persona, actor, watch_tasks
         self.name, self.signoff, self.temperature = name, signoff, temperature
         self.meta = meta or {}  # recorded on every queued draft (brain, commit)
+        self.autosend = autosend  # autosend.Policy, or None to queue everything
 
     def tick(self, backfill=False):
         state = self.store.load()
@@ -249,6 +265,9 @@ class Heartbeat:
     def _draft(self, kind, target, prompt, context, message):
         system = self.persona(prompt) if callable(self.persona) else self.persona
         _, escalate, body = draft(self.brain, system, prompt, message, self.name, self.temperature)
+        send, held = (False, [])
+        if self.autosend is not None:
+            send, held = self.autosend.decide(kind, target, body, message, escalate)
         item = self.store.enqueue(
             kind,
             target,
@@ -256,7 +275,13 @@ class Heartbeat:
             context,
             escalate=escalate or False,
             **self.meta,
+            **({"held": held} if self.autosend is not None and not send else {}),
         )
+        if send:
+            result = post(self.client, self.actor, item)
+            item = self.store.resolve(item["id"], "sent", result_id=result.get("id"), auto=True)
+            self.store.journal(f"auto-sent {item['id']} ({kind})")
+            return item
         if escalate:
             (self.store.root / "escalations" / f"{item['id']}.md").write_text(
                 f"# Escalation {item['id']}\n\n{escalate}\n\n## Context\n\n{context}\n"

@@ -136,8 +136,8 @@ jobs:
         run: uv run dbt build
       - name: Runs mart
         run: uv run lab evals runs
-      - name: dbt-model stage tests
-        run: uv run python -m unittest tests.test_dbt_model -v
+      - name: Tests that need the analytics group
+        run: uv run python -m unittest tests.test_dbt_model tests.test_autosend -v
 
   # The single required status check. Jobs that legitimately skip are fine;
   # any failure or cancellation fails this. Add every new job to `needs`.

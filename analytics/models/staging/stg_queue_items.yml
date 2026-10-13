@@ -33,6 +33,14 @@ models:
         description: Model spec that drafted it, e.g. ollama:llama3.1:8b
       - name: git_commit
         description: Lab commit that drafted it
+      - name: is_auto
+        description: Sent without PJ's approval by the auto-send tier
+      - name: is_flagged
+        description: An auto-sent draft PJ marked as one that should not have gone out
+      - name: flag_reason
+        description: Reason given to `lab rush flag --reason`
+      - name: held_reasons
+        description: JSON list of why auto-send held this draft for approval
 
 unit_tests:
   - name: edits_and_decisions

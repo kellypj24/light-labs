@@ -27,6 +27,8 @@ Start with `lab-workflow` before any commit, push or PR.
   kebab-case (stages, skills, contestants, roles, commands, branches: `mega-man`,
   `dbt-model`); code and keys inside things are snake_case (Python, SQL, fixture ids, data
   fields: `guts_man`, `select_harness_errors`, `run_id`).
+- Rush's auto-send posts to other people's board as pj_agent. Loosen its guards, caps or
+  kinds only when PJ asks, and say what changes.
 - One heavy job at a time on PJ's laptop: never run `just check`, builds or a second fight
   while a local-model fight runs. Ask before starting a fight; say how long it takes.
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.
