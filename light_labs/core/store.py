@@ -28,15 +28,19 @@ class Store:
         self.state_path.write_text(json.dumps(state, indent=2) + "\n")
 
     # --- approval queue
-    def enqueue(self, kind, target, draft, context, escalate=False):
+    def enqueue(self, kind, target, draft, context, escalate=False, **meta):
+        """`draft` may be edited before sending; `drafted` keeps what the robot wrote.
+        `meta` records what produced it (brain, commit, dirty) for the queue analytics."""
         item = {
             "id": uuid.uuid4().hex[:8],
             "kind": kind,
             "target": target,
             "draft": draft,
+            "drafted": draft,
             "context": context,
             "escalate": escalate,
             "created": now(),
+            **meta,
         }
         self._path("pending", item["id"]).write_text(json.dumps(item, indent=2) + "\n")
         return item

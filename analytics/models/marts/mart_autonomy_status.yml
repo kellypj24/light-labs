@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: mart_autonomy_status
+    description: >
+      One row per robot and draft kind: whether its drafts could skip PJ's approval,
+      judged on the last autonomy_window decisions (unedited sends at or above
+      autonomy_min_unedited_rate). The approval-queue half of loop promotion: an eval
+      weapon says the local model can do the task; this says PJ stopped changing it.
+    columns:
+      - name: robot_kind_key
+        description: robot | kind
+        tests:
+          - unique
+          - not_null
+      - name: decision_count
+        description: Decisions in the window (at most window_size)
+      - name: unedited_rate
+        description: Unedited sends / decisions in the window
+      - name: unknown_edit_count
+        description: Sends with no record of the original draft; they count against readiness
+      - name: is_ready_to_skip_approval
+        description: A full window and unedited_rate at or above the threshold
+        tests:
+          - not_null
+
+unit_tests:
+  - name: autonomy_rules
+    description: Full window and rate pass; short window, an edit, a rejection or unknown edits fail.
+    model: mart_autonomy_status
+    overrides:
+      vars:
+        autonomy_window: 4
+        autonomy_min_unedited_rate: 0.75
+    given:
+      - input: ref('stg_queue_items')
+        rows:
+          # ready: 4 decisions, 3 unedited (0.75); an older edit falls outside the window
+          - {robot: rush, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 10:00:00+00"}
+          - {robot: rush, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 11:00:00+00"}
+          - {robot: rush, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: true, resolved_at: "2026-10-12 12:00:00+00"}
+          - {robot: rush, kind: reply, is_decided: true, is_sent: false, is_edited: null, is_escalated: false, resolved_at: "2026-10-12 13:00:00+00"}
+          - {robot: rush, kind: reply, is_decided: true, is_sent: true, is_edited: true, is_escalated: false, resolved_at: "2026-10-11 09:00:00+00"}
+          # short window: 3 decisions, all unedited
+          - {robot: rush, kind: comment, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 10:00:00+00"}
+          - {robot: rush, kind: comment, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 11:00:00+00"}
+          - {robot: rush, kind: comment, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 12:00:00+00"}
+          # unknown edits count against: 4 decisions, 2 unedited
+          - {robot: beat, kind: reply, is_decided: true, is_sent: true, is_edited: null, is_escalated: false, resolved_at: "2026-10-12 10:00:00+00"}
+          - {robot: beat, kind: reply, is_decided: true, is_sent: true, is_edited: null, is_escalated: false, resolved_at: "2026-10-12 11:00:00+00"}
+          - {robot: beat, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 12:00:00+00"}
+          - {robot: beat, kind: reply, is_decided: true, is_sent: true, is_edited: false, is_escalated: false, resolved_at: "2026-10-12 13:00:00+00"}
+          # pending items are not decisions
+          - {robot: beat, kind: reply, is_decided: false, is_sent: false, is_edited: null, is_escalated: false, resolved_at: null}
+    expect:
+      rows:
+        - {robot_kind_key: rush|reply, decision_count: 4, unedited_sent_count: 3, unknown_edit_count: 0, is_ready_to_skip_approval: true}
+        - {robot_kind_key: rush|comment, decision_count: 3, unedited_sent_count: 3, unknown_edit_count: 0, is_ready_to_skip_approval: false}
+        - {robot_kind_key: beat|reply, decision_count: 4, unedited_sent_count: 2, unknown_edit_count: 2, is_ready_to_skip_approval: false}

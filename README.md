@@ -109,8 +109,21 @@ just analytics                                 # re-ingest var/evals and dbt bui
 just runs                                      # recent runs from marts.fct_eval_runs
 ```
 
+Approval queues:
+
+```bash
+just analytics                                 # also reloads every robot's queue
+just queue                                     # per robot and draft kind: ready to skip approval?
+uv run lab rush reject <id> --reason "..."     # reasons land in the analytics
+```
+
+An eval weapon says the local model can do a task; the queue says whether PJ still changes
+its output. `marts.mart_autonomy_status` marks a draft kind ready to skip approval when,
+over its last 30 decisions, at least 95% went out exactly as drafted (`autonomy_*` vars in
+`analytics/dbt_project.yml`). `marts.mart_queue_daily` has the daily counts.
+
 Real models run locally only, one fight at a time; a full local fight is 20-25 minutes of
-sustained GPU on an M1. Don't run checks or builds alongside one. Marts: `fct_eval_runs`,
+sustained GPU on an M1. Don't run checks or builds alongside one. Eval marts: `fct_eval_runs`,
 `fct_eval_category_results`, `fct_eval_check_failures`, `mart_weapon_status`. Harness
 details: [evals/README.md](evals/README.md).
 

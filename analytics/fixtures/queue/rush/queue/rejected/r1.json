@@ -1,0 +1,18 @@
+{
+  "id": "r1",
+  "context": "synthetic",
+  "result_id": null,
+  "kind": "comment",
+  "draft": "Invented a link.",
+  "drafted": "Invented a link.",
+  "escalate": false,
+  "created": "2026-10-01T13:00:00+00:00",
+  "resolved": "2026-10-01T13:10:00+00:00",
+  "reason": "made up a URL",
+  "brain": "ollama:llama3.1:8b",
+  "commit": "abc1234",
+  "dirty": false,
+  "target": {
+    "task_id": "task_x"
+  }
+}

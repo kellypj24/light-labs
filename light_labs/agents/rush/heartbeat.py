@@ -163,11 +163,22 @@ def short_id(url):
 
 class Heartbeat:
     def __init__(
-        self, client, brain, store, persona, actor, watch_tasks, name, signoff, temperature=None
+        self,
+        client,
+        brain,
+        store,
+        persona,
+        actor,
+        watch_tasks,
+        name,
+        signoff,
+        temperature=None,
+        meta=None,
     ):
         self.client, self.brain, self.store = client, brain, store
         self.persona, self.actor, self.watch_tasks = persona, actor, watch_tasks
         self.name, self.signoff, self.temperature = name, signoff, temperature
+        self.meta = meta or {}  # recorded on every queued draft (brain, commit)
 
     def tick(self, backfill=False):
         state = self.store.load()
@@ -239,7 +250,12 @@ class Heartbeat:
         system = self.persona(prompt) if callable(self.persona) else self.persona
         _, escalate, body = draft(self.brain, system, prompt, message, self.name, self.temperature)
         item = self.store.enqueue(
-            kind, target, f"{body}\n\n{self.signoff}", context, escalate=escalate or False
+            kind,
+            target,
+            f"{body}\n\n{self.signoff}",
+            context,
+            escalate=escalate or False,
+            **self.meta,
         )
         if escalate:
             (self.store.root / "escalations" / f"{item['id']}.md").write_text(

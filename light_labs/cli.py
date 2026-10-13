@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab evals {ingest,runs} | lab rush {tick,queue,...}"""
+"""lab roster | lab skills | lab evals {ingest,runs} | lab queue ingest | lab rush {...}"""
 
 import argparse
 import json
@@ -44,9 +44,45 @@ def evals_runs(args):
         cols, rows = results.runs(args.stage, args.contestant, args.limit)
     except LookupError as e:
         sys.exit(str(e))
+    _table(cols, rows)
+
+
+def _table(cols, rows):
     widths = [max(len(str(v)) for v in [c, *(r[i] for r in rows)]) for i, c in enumerate(cols)]
     for row in [cols, *rows]:
         print("  ".join(str(v).ljust(w) for v, w in zip(row, widths, strict=True)).rstrip())
+
+
+def _draft_meta(brain):
+    commit, dirty = config.git_state()
+    return {"brain": brain, "commit": commit, "dirty": dirty}
+
+
+def queue_ingest(args):
+    from light_labs.core import queue_results
+    from light_labs.evals import results
+
+    for robot, n in queue_results.ingest(args.root).items():
+        print(f"loaded {robot} ({n} queue items)")
+    print(f"db: {results.DB}")
+
+
+def queue_status(args):
+    from light_labs.evals import results
+
+    sql = (
+        "SELECT robot_kind_key, decision_count, window_size, unedited_sent_count, "
+        "edited_sent_count, unknown_edit_count, rejected_count, "
+        "round(unedited_rate, 2) AS unedited_rate, is_ready_to_skip_approval "
+        "FROM marts.mart_autonomy_status ORDER BY robot_kind_key"
+    )
+    try:
+        with results.connect() as con:
+            cur = con.execute(sql)
+            cols, rows = [d[0] for d in cur.description], cur.fetchall()
+    except Exception:  # noqa: BLE001 - any failure here means the marts are not built
+        sys.exit("marts.mart_autonomy_status is missing; run `just analytics`")
+    _table(cols, rows)
 
 
 def rush_tick(args, store, rush):
@@ -62,6 +98,7 @@ def rush_tick(args, store, rush):
         name=rush.NAME,
         signoff=rush.SIGNOFF,
         temperature=rush.TEMPERATURE,
+        meta=_draft_meta(f"ollama:{rush.MODEL}"),
     )
     for item in hb.tick(backfill=args.backfill):
         print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))
@@ -96,8 +133,8 @@ def rush_approve(args, store, rush):
 
 
 def rush_reject(args, store, rush):
-    store.resolve(args.id, "rejected")
-    store.journal(f"rejected {args.id}")
+    store.resolve(args.id, "rejected", reason=args.reason)
+    store.journal(f"rejected {args.id}" + (f": {args.reason}" if args.reason else ""))
     print(f"rejected {args.id}")
 
 
@@ -129,21 +166,30 @@ def main(argv=None):
     runs_p.add_argument("--stage")
     runs_p.add_argument("--contestant")
     runs_p.add_argument("--limit", type=int, default=20)
+    queue_p = sub.add_parser("queue", help="robots' approval queues in DuckDB")
+    qcmd = queue_p.add_subparsers(dest="cmd", required=True)
+    qcmd.add_parser("ingest", help="reload var/<robot>/queue into raw.queue_items").add_argument(
+        "--root", help="directory holding <robot>/queue (default: var/)"
+    )
+    qcmd.add_parser("status", help="per robot and draft kind: ready to skip approval?")
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
         "--backfill", action="store_true", help="on first run, draft for the backlog"
     )
     rcmd.add_parser("queue")
-    for name in ("show", "approve", "reject", "escalate"):
+    for name in ("show", "approve", "escalate"):
         rcmd.add_parser(name).add_argument("id")
+    reject_p = rcmd.add_parser("reject")
+    reject_p.add_argument("id")
+    reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
     if args.robot in ("roster", "skills"):
         globals()[f"cmd_{args.robot}"](args)
         return
-    if args.robot == "evals":
-        globals()[f"evals_{args.cmd}"](args)
+    if args.robot in ("evals", "queue"):
+        globals()[f"{args.robot}_{args.cmd}"](args)
         return
     from light_labs.agents import rush
 

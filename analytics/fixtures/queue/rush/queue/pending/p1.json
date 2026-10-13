@@ -1,0 +1,18 @@
+{
+  "id": "p1",
+  "context": "synthetic",
+  "result_id": null,
+  "kind": "reply",
+  "draft": "Waiting.",
+  "drafted": "Waiting.",
+  "escalate": false,
+  "created": "2026-10-02T09:00:00+00:00",
+  "brain": "ollama:llama3.1:8b",
+  "commit": "abc1234",
+  "dirty": false,
+  "target": {
+    "to": [
+      "ledger"
+    ]
+  }
+}

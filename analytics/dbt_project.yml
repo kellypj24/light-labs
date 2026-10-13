@@ -24,6 +24,13 @@ vars:
   # ...and trails the cloud baseline (role bass) by no more than this.
   weapon_max_gap: 0.05
 
+  # A robot's draft kind is ready to skip approval when, over its last
+  # `autonomy_window` decisions (all of them required), at least
+  # `autonomy_min_unedited_rate` were sent exactly as drafted. Edits unknown (items
+  # queued before `drafted` was recorded) count as not unedited.
+  autonomy_window: 30
+  autonomy_min_unedited_rate: 0.95
+
 models:
   light_labs:
     staging:

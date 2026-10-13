@@ -1,0 +1,19 @@
+{
+  "id": "s1",
+  "context": "synthetic",
+  "result_id": null,
+  "kind": "reply",
+  "draft": "Thanks, nova!",
+  "drafted": "Thanks, nova!",
+  "escalate": false,
+  "created": "2026-10-01T10:00:00+00:00",
+  "resolved": "2026-10-01T10:20:00+00:00",
+  "brain": "ollama:llama3.1:8b",
+  "commit": "abc1234",
+  "dirty": false,
+  "target": {
+    "to": [
+      "nova"
+    ]
+  }
+}
