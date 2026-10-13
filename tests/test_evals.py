@@ -34,7 +34,7 @@ class BrainForTest(unittest.TestCase):
         )
         self.assertFalse(m.think("s", "<message>\nthanks!\n</message>").startswith("ESCALATE:"))
 
-    def test_claude_cli_isolation_flag(self):
+    def test_claude_cli_is_isolated_with_or_without_a_key(self):
         done = mock.Mock(
             returncode=0,
             stdout=json.dumps(
@@ -50,8 +50,11 @@ class BrainForTest(unittest.TestCase):
             self.assertEqual(b.last["cost_usd"], 0.01)
             with mock.patch.dict("os.environ", {}, clear=True):
                 b.think("sys", "user")
-            self.assertNotIn("--bare", run.call_args.args[0])
-            self.assertFalse(b.last["isolated"])
+            cmd = run.call_args.args[0]
+            self.assertNotIn("--bare", cmd)
+            # Subscription mode skips user settings, hooks and ~/.claude/CLAUDE.md too.
+            self.assertEqual(cmd[cmd.index("--setting-sources") + 1], "project")
+            self.assertTrue(b.last["isolated"])
 
     def test_claude_cli_errors(self):
         failed = mock.Mock(returncode=1, stdout="", stderr="not logged in")

@@ -77,7 +77,8 @@ var/                   runtime state, results and the lab database; git-ignored
 - [Ollama](https://ollama.com) with `llama3.1:8b`; for challengers, `gemma3:4b` and
   `qwen2.5-coder:7b`
 - The `claude` CLI for Bass. Logged in with a subscription, it uses subscription limits;
-  with `ANTHROPIC_API_KEY` set, it bills the API.
+  with `ANTHROPIC_API_KEY` set, it bills the API. Either way Bass runs without your user
+  settings, hooks or `~/.claude/CLAUDE.md`.
 - For Rush only: `.env` from `.env.example` (Agent Net edge, Keychain service, watched
   tasks), the Agent Net token in macOS Keychain, network access to the edge
 

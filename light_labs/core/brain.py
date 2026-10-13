@@ -53,9 +53,10 @@ class Brain:
 class ClaudeCLI:
     """Cloud model through `claude -p`: one turn, no tools, run from an empty directory.
 
-    With ANTHROPIC_API_KEY set it runs `--bare`, which also skips CLAUDE.md files and
-    hooks. Without a key it uses the logged-in subscription, and the user's global
-    ~/.claude/CLAUDE.md still loads; `last["isolated"]` records which.
+    Isolated either way, so the baseline is the model, not the user's setup: with
+    ANTHROPIC_API_KEY set it runs `--bare` (billed to the key); without one it uses the
+    logged-in subscription with `--setting-sources project` from an empty directory, which
+    skips the user's settings, hooks (no Stop chime per call) and ~/.claude/CLAUDE.md.
     """
 
     def __init__(self, model, timeout=300):
@@ -64,7 +65,7 @@ class ClaudeCLI:
         self.last = {}
 
     def think(self, system, user, temperature=None):
-        isolated = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        isolated = bool(os.environ.get("ANTHROPIC_API_KEY"))  # else: subscription
         cmd = [
             "claude",
             "-p",
@@ -79,8 +80,7 @@ class ClaudeCLI:
             "--no-session-persistence",
             "--strict-mcp-config",
         ]
-        if isolated:
-            cmd.append("--bare")
+        cmd += ["--bare"] if isolated else ["--setting-sources", "project"]
         start = time.monotonic()
         with tempfile.TemporaryDirectory() as empty:
             proc = subprocess.run(
@@ -100,7 +100,7 @@ class ClaudeCLI:
             "input_tokens": usage.get("input_tokens"),
             "output_tokens": usage.get("output_tokens"),
             "cost_usd": data.get("total_cost_usd"),
-            "isolated": isolated,
+            "isolated": True,
         }
         if data.get("is_error"):
             raise RuntimeError(f"claude -p error: {data.get('result')}")
