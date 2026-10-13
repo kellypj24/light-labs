@@ -27,7 +27,7 @@
       ],
       "temperature": 0.3,
       "auto_send": {
-        "enabled": false,
+        "enabled": true,
         "kinds": [
           "reply",
           "comment"
