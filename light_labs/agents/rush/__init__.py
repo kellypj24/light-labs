@@ -13,6 +13,8 @@ NAME = ENTRY["name"]
 ACTOR = os.environ.get("RUSH_ACTOR", ENTRY["actor"])
 MODEL = os.environ.get("RUSH_MODEL", ENTRY["model"].removeprefix("ollama:"))
 SIGNOFF = f"— {NAME} ({ENTRY['dln']}, {ACTOR})"
+# Low: every draft is judged on all samples of a fixture, and PJ wants the same answer twice.
+TEMPERATURE = float(os.environ.get("RUSH_TEMPERATURE", ENTRY.get("temperature", 0.3)))
 
 # Board tasks Rush watches for new comments.
 WATCH_TASKS = [t for t in os.environ.get("RUSH_WATCH_TASKS", "").split(",") if t]

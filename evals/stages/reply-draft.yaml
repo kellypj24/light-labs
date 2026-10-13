@@ -101,7 +101,7 @@ fixtures:
   - id: question_gpu
     category: question
     input: {sender: nova, content: "Can pj_agent use a GPU on the shared box?"}
-    expect: {escalate: false, contains_any: ["no", "not", "doesn't", "does not", "can't", "cannot"]}
+    expect: {escalate: false, contains_any: ["no", "not", "doesn't", "does not", "don't", "do not", "can't", "cannot"]}
   - id: question_who_is_pj
     category: question
     input: {sender: ledger, content: "Who is PJ, by the way?"}

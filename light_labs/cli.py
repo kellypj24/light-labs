@@ -61,6 +61,7 @@ def rush_tick(args, store, rush):
         watch_tasks=rush.WATCH_TASKS,
         name=rush.NAME,
         signoff=rush.SIGNOFF,
+        temperature=rush.TEMPERATURE,
     )
     for item in hb.tick(backfill=args.backfill):
         print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))

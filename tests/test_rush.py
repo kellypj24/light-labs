@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from light_labs.agents.rush.heartbeat import Heartbeat, clean, split_escalation
+from light_labs.agents.rush.heartbeat import Heartbeat, clean, draft, route, split_escalation
 from light_labs.core.store import Store
 
 HUB = "http://127.0.0.1:8710"
@@ -35,9 +35,76 @@ class FakeBrain:
     def __init__(self, reply="hello there"):
         self.reply, self.prompts = reply, []
 
-    def think(self, system, user):
+    def think(self, system, user, **sampling):
         self.prompts.append(user)
+        self.sampling = sampling
         return self.reply
+
+
+class ScriptedBrain:
+    """Answers each think() call with the next scripted reply; records every call."""
+
+    def __init__(self, *replies):
+        self.replies, self.calls = list(replies), []
+
+    def think(self, system, user, **sampling):
+        self.calls.append({"system": system, "user": user, **sampling})
+        return self.replies.pop(0)
+
+
+class RouteThenWriteTest(unittest.TestCase):
+    def test_route_decides_escalation_and_writer_is_told(self):
+        brain = ScriptedBrain(
+            "ESCALATE: compare two models on board replies",
+            "I don't have that data.\nESCALATE: something else",
+        )
+        _, escalate, body = draft(brain, "SYSTEM", "PROMPT", "MESSAGE", "Rush", temperature=0.3)
+        self.assertEqual(escalate, "compare two models on board replies")
+        self.assertEqual(body, "I don't have that data.")  # writer's own ESCALATE dropped
+        route_call, write_call = brain.calls
+        self.assertEqual(route_call["temperature"], 0)
+        self.assertIn("ESCALATE: <what needs doing>", route_call["system"])
+        self.assertEqual(route_call["user"], 'Message: "MESSAGE"')
+        self.assertIn("holding reply", write_call["user"])
+        self.assertEqual(write_call["temperature"], 0.3)
+
+    def test_reply_route_never_escalates(self):
+        brain = ScriptedBrain("REPLY", "Thanks! I've passed the next steps to PJ.")
+        _, escalate, _ = draft(brain, "SYSTEM", "PROMPT", "Thanks, nice work.", "Rush")
+        self.assertIsNone(escalate)
+        self.assertIn("Don't say you passed", brain.calls[1]["user"])
+
+    def test_route_tolerates_decoration(self):
+        for answer, want in (
+            ("**ESCALATE:** review v2", "review v2"),
+            ("Reply.", None),
+            ("hm", None),
+        ):
+            self.assertEqual(route(ScriptedBrain(answer), "M"), want, answer)
+
+
+class TemperatureTest(unittest.TestCase):
+    def test_rush_samples_at_its_registry_temperature(self):
+        from light_labs.agents import rush
+
+        self.assertLessEqual(rush.TEMPERATURE, 0.5)
+        with tempfile.TemporaryDirectory() as tmp:
+            client, brain = FakeClient(), FakeBrain()
+            client.items = [item("a1", "alpha")]
+            client.messages["a1"] = {"content": "hi rush", "summary": "hello"}
+            hb = Heartbeat(
+                client,
+                brain,
+                Store(Path(tmp)),
+                "persona",
+                actor="pj_agent",
+                watch_tasks=[],
+                name="Rush",
+                signoff="— Rush",
+                temperature=rush.TEMPERATURE,
+            )
+            hb.tick(backfill=True)
+        self.assertEqual(brain.sampling, {"temperature": rush.TEMPERATURE})  # the writer call
 
 
 class HeartbeatTest(unittest.TestCase):
@@ -164,6 +231,20 @@ class HelpersTest(unittest.TestCase):
         esc, body = split_escalation("Sure thing.\n\nESCALATE: write the script\nHolding.")
         self.assertEqual(esc, "write the script")
         self.assertEqual(body, "Sure thing.\n\nHolding.")
+
+    def test_split_escalation_mid_line(self):
+        # Shapes from the reply-draft fights: the model escalated, then kept talking.
+        esc, body = split_escalation(
+            "I don't have numbers. ESCALATE: benchmark tokens per second\nNone recorded."
+        )
+        self.assertEqual(esc, "benchmark tokens per second")
+        self.assertEqual(body, "I don't have numbers.\nNone recorded.")
+        self.assertEqual(split_escalation("We should escalate: maybe later")[0], None)
+
+    def test_clean_strips_here_is_preamble(self):
+        self.assertEqual(
+            clean("Here is the draft reply comment:\n\nThanks, muse."), "Thanks, muse."
+        )
 
     def test_split_escalation(self):
         self.assertEqual(split_escalation("hi"), (None, "hi"))
