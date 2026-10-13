@@ -182,7 +182,9 @@ every dbt node as an asset, built with `dbt build`. `just analytics` executes
 `analytics_job`; the sensors run narrower jobs on their own.
 
 ```bash
-just dagster        # UI at http://127.0.0.1:3000; state in var/dagster
+just dagster-install   # once: the daemon under launchd, so the sensors tick
+just dagster           # UI at http://127.0.0.1:3000; state in var/dagster
+just dagster-restart   # after merging orchestration changes
 ```
 
 | Sensor | Runs | When |
@@ -190,8 +192,7 @@ just dagster        # UI at http://127.0.0.1:3000; state in var/dagster
 | `fight_finished` | `evals_job` | a fight's run record ends (completed or cancelled), 2 min after |
 | `queue_changed` | `queue_job` | a draft is queued, sent, rejected or edited (checked every 5 min) |
 
-Both start STOPPED; turn them on in the UI once. Both skip while a fight is running. One
-job runs at a time (DuckDB has one writer), and fights are never started from Dagster.
+Both are on by default and skip while a fight is running. One job runs at a time (DuckDB has one writer), and fights are never started from Dagster.
 Changing it: the `dagster-orchestration` skill.
 
 ## Checks

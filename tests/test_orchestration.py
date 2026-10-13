@@ -51,11 +51,15 @@ class DefinitionsTest(unittest.TestCase):
         cls.defs = defs
         cls.graph = defs.resolve_asset_graph()
 
-    def test_sensors_that_launch_runs_start_stopped(self):
+    def test_sensors_are_on_and_only_launch_landing_and_dbt(self):
         from dagster import DefaultSensorStatus
 
         for s in self.defs.sensors:
-            self.assertEqual(s.default_status, DefaultSensorStatus.STOPPED, s.name)
+            self.assertEqual(s.default_status, DefaultSensorStatus.RUNNING, s.name)
+            for target in s.targets:
+                job = self.defs.resolve_job_def(target.job_name)
+                groups = {self.graph.get(k).group_name for k in job.asset_layer.selected_asset_keys}
+                self.assertLessEqual(groups, {"landing", "staging", "intermediate", "marts"})
 
     def test_every_dbt_source_is_landed_by_an_asset(self):
         manifest = json.loads((ANALYTICS / "target/manifest.json").read_text())

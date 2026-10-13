@@ -71,9 +71,24 @@ analytics-check:
     uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend
     LAB_VAR="$tmp" uv run --locked lab evals runs
 
-# Dagster UI and sensors over the analytics (http://127.0.0.1:3000). State in var/dagster.
+# Dagster UI (http://127.0.0.1:3000). The sensors run in the daemon, not here.
 dagster: _dagster-home
-    DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster dev -m light_labs.orchestration
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster-webserver -m light_labs.orchestration -p 3000
+
+# The daemon that ticks the sensors; launchd runs this (ops/com.pjkelly.light-labs.dagster.plist)
+dagster-daemon: _dagster-home
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    DAGSTER_HOME="$PWD/var/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
+
+# Install and start the daemon's launchd job
+dagster-install: _dagster-home
+    cp ops/com.pjkelly.light-labs.dagster.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.dagster.plist
+
+# Restart the daemon so it loads changed orchestration code
+dagster-restart:
+    launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.dagster
 
 _dagster-home:
     mkdir -p var/dagster && cp ops/orchestration/dagster.yaml var/dagster/

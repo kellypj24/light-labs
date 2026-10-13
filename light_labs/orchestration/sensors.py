@@ -1,7 +1,8 @@
 """Sensors: rebuild the analytics when a fight ends or a queue changes.
 
-Both skip while a fight is on (one heavy job at a time on the laptop) and default to
-STOPPED: turn them on in the UI once; the state persists in var/dagster.
+Both are on by default and tick in the Dagster daemon (`just dagster-install`). They only
+launch the landing + dbt jobs, never a fight, and skip while a fight is on (one heavy job
+at a time on the laptop). Turning one off in the UI persists in var/dagster.
 """
 
 import hashlib
@@ -72,7 +73,7 @@ def queue_fingerprint(var_dir):
 @sensor(
     job=evals_job,
     minimum_interval_seconds=60,
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
     description="Rebuilds the eval marts after a fight ends (completed or cancelled).",
 )
 def fight_finished(context: SensorEvaluationContext):
@@ -93,7 +94,7 @@ def fight_finished(context: SensorEvaluationContext):
 @sensor(
     job=queue_job,
     minimum_interval_seconds=300,
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
     description="Rebuilds the queue marts when a robot's approval queue changes.",
 )
 def queue_changed(context: SensorEvaluationContext):

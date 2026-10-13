@@ -39,8 +39,12 @@ A new dbt model needs no orchestration change: `dbt parse` puts it in the manife
 ## Jobs and sensors
 
 - A job selects landing assets plus `.downstream()`, so it rebuilds only what reads them.
-- Every sensor or schedule that launches runs defaults to `STOPPED`; PJ turns it on in
-  the UI. Schedules set `execution_timezone="UTC"`.
+- Sensors default to `RUNNING` and tick in the daemon (launchd, `just dagster-install`).
+  That's safe only because they launch landing + dbt jobs, never a fight; a sensor that
+  launches anything heavier starts `STOPPED` and PJ turns it on. Schedules set
+  `execution_timezone="UTC"`.
+- After merging orchestration changes, `just dagster-restart`: the daemon keeps the code
+  it started with.
 - Every sensor returns `SkipReason` while `live_fight()` finds a fight: one heavy job at
   a time on the laptop.
 - Make requests idempotent: a cursor for "what I've already handled", and a `run_key`
@@ -61,9 +65,10 @@ raise `max_concurrent_runs`.
 ```bash
 just dagster-check  # dbt parse, definitions validate, tests/test_orchestration.py (incl. a full run over the fixtures)
 just dagster        # UI on :3000; state in var/dagster
+just dagster-install  # daemon under launchd; log in var/dagster/daemon.log
 ```
 
-`tests/test_orchestration.py` pins: launching sensors start STOPPED, every dbt source has a
+`tests/test_orchestration.py` pins: sensors are on and launch only landing + dbt, every dbt source has a
 landing asset, every model is an asset, and sensors hold off during a fight. Add a case
 there for any new sensor rule. Test sensor logic as plain functions over a temp `var/`
 (see `finished_since`, `queue_fingerprint`); use `build_sensor_context` for the sensor
