@@ -48,6 +48,19 @@
         "dbt-model-sql"
       ],
       "weapons": []
+    },
+    {
+      "dln": "DLN-102",
+      "name": "Roll",
+      "role": "support",
+      "job": "Housekeeper. Drafts commit messages (later PR bodies) from a diff for Auto or PJ to approve, and triages stale branches `lab git tidy` leaves for review. In training: earns the commit-message weapon on the commit-message stage.",
+      "model": "tbd: commit-message fight",
+      "status": "training",
+      "commissioned": "2026-10-13",
+      "skills": [
+        "commit-message-style"
+      ],
+      "weapons": []
     }
   ]
 }

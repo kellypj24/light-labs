@@ -100,6 +100,10 @@ jobs:
       # must build and score 100%.
       - name: Oracle run (dbt-model)
         run: go run . -stage dbt-model -contestants mock -samples 1 -min-pass 1 -out "$RUNNER_TEMP/evals"
+      # The mock answers each commit-message fixture with its reference: every reference
+      # must pass every check.
+      - name: Oracle run (commit-message)
+        run: go run . -stage commit-message -contestants mock -samples 1 -min-pass 1 -out "$RUNNER_TEMP/evals"
 
   # dbt project: lint, then ingest the synthetic fixtures into a throwaway DuckDB
   # file and build every model, data test and unit test over them. Same steps as
@@ -137,7 +141,7 @@ jobs:
       - name: Runs mart
         run: uv run lab evals runs
       - name: Tests that need the analytics group
-        run: uv run python -m unittest tests.test_dbt_model tests.test_autosend -v
+        run: uv run python -m unittest tests.test_dbt_model tests.test_autosend tests.test_commit_message -v
 
   # Orchestration (Dagster): definitions load, invariants hold, and the analytics job
   # builds over the synthetic fixtures. Same steps as `just dagster-check`.

@@ -17,9 +17,10 @@ live numbers.
 |---|---|---|---|---|---|---|
 | `reply-draft` | Rush | 41 | 0.951 | 0.512 (gemma3:4b) | 0.976 | **earned** 2026-10-12: Rush runs locally |
 | `dbt-model` | Guts Man | 33 | 0.182 | 0.485 (qwen2.5-coder:7b) | 0.970 | not earned |
+| `commit-message` | Roll | 44 | not fought | not fought | not fought | not earned |
 
 Rates are fixture pass rates: a fixture counts only when every sample passed (3 samples for
-local models, 1 for Bass). The bar for both stages is 0.90 and within 0.05 of Bass.
+local models, 1 for Bass). The bar for every stage is 0.90 and within 0.05 of Bass.
 
 ## How it works
 
@@ -52,10 +53,9 @@ whatever a robot escalates. It never competes.
 |---|---|---|---|
 | DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies, escalates work to Auto. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
 | DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
+| DLN-102 | Roll | training | Housekeeper. Drafts commit messages from a diff for review; later PR bodies and triage of the branches `lab git tidy` leaves for review. Scored on 44 of PJ's merged PRs: conventional subject, a body, the right type, nothing named that the diff doesn't show. |
 
-Planned: Roll, the housekeeper: drafts commit messages and PR bodies and triages stale
-branches, once a `commit-message` stage scores her. `lab git` is her toolset. Robot
-masters as new task classes get stages.
+Planned: robot masters as new task classes get stages.
 
 ## Layout
 
