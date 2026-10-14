@@ -4,6 +4,8 @@
     ship    run the repo's check, commit, push, open (or find) the PR
     land    wait for CI, squash-merge, update main, delete the branch
     tidy    branches and worktrees whose work is merged or abandoned; --apply deletes
+    labels  sync the repo's label set from .github/labels.toml; --apply writes
+    label   label a PR (or every open one): type from its title, areas from its paths
 
 Works in any repo with an `origin` on GitHub and `gh` logged in. No model involved: these
 replace multi-step tool sequences. Drafting messages is a separate (robot) job.
@@ -180,6 +182,7 @@ def ship(repo, message=None, title=None, body=None, check=None, out=sys.stdout):
         body = f"## Summary\n{commit_body}\n\n## Test plan\n- `{' '.join(check)}`\n"
     url = repo.gh("pr", "create", "--title", title or subject, "--body", body).splitlines()[-1]
     out.write(f"pr: {url}\n")
+    label_prs(repo, [url.rsplit("/", 1)[-1]], out=out)
     return url
 
 
@@ -231,6 +234,7 @@ def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
     if repo.branch() == main:
         repo.git("pull", "-q", "--ff-only")
     repo.git("branch", "-D", head, check=False)
+    repo.git("fetch", "-q", "origin", main)  # not on main: origin/main is otherwise stale
     out.write(f"merged #{pr}: {repo.git('log', '-1', '--format=%h %s', f'origin/{main}')}\n")
     out.write(f"on {repo.branch()}; deleted {head}\n")
     return [f["path"] for f in info.get("files", [])]
@@ -390,3 +394,101 @@ def tidy(repo, apply=False, stale_days=30, out=sys.stdout):
     elif any(a.delete for a in actions):
         out.write("\nlab git tidy --apply deletes the first kind; `review` rows are yours.\n")
     return actions
+
+
+# --- labels -----------------------------------------------------------------------------
+
+LABELS_FILE = ".github/labels.toml"
+
+
+def load_labels(repo):
+    """{name: {color, description, paths?}} from .github/labels.toml, or None without one.
+
+    [types.<type>] become `type: <type>`; [areas.<area>] (with `paths` prefixes) become
+    `area: <area>`; [keep].labels are labels other tools set (Dependabot), left alone."""
+    import tomllib
+
+    path = repo.path / LABELS_FILE
+    if not path.exists():
+        return None
+    data = tomllib.loads(path.read_text())
+    labels = {}
+    for kind in ("types", "areas"):
+        for key, spec in data.get(kind, {}).items():
+            labels[f"{kind[:-1]}: {key}"] = spec
+    return labels, set(data.get("keep", {}).get("labels", []))
+
+
+def sync_labels(repo, apply=False, prune=False, out=sys.stdout):
+    """Create or update the file's labels; with prune, delete labels the file doesn't name
+    (GitHub's unused defaults). Returns the planned changes."""
+    loaded = load_labels(repo)
+    if loaded is None:
+        raise GitError(f"no {LABELS_FILE} in {repo.path}")
+    wanted, keep = loaded
+    have = {
+        label["name"]: label
+        for label in repo.gh_json(
+            "label", "list", "--limit", "200", "--json", "name,color,description"
+        )
+    }
+    changes = []
+    for name, spec in wanted.items():
+        color, desc = spec["color"].lower(), spec.get("description", "")
+        if name not in have:
+            changes.append(("create", name, ["label", "create", name, "-c", color, "-d", desc]))
+        elif (have[name]["color"].lower(), have[name]["description"]) != (color, desc):
+            changes.append(("update", name, ["label", "edit", name, "-c", color, "-d", desc]))
+    if prune:
+        for name in sorted(set(have) - set(wanted) - keep):
+            changes.append(("delete", name, ["label", "delete", name, "--yes"]))
+    if not changes:
+        out.write("labels in sync\n")
+    for verb, name, args in changes:
+        out.write(f"{verb if apply else 'would ' + verb:14} {name}\n")
+        if apply:
+            repo.gh(*args)
+    return changes
+
+
+def labels_for(title, paths, labels):
+    """Labels a PR should carry: its conventional type, and every area a path falls in."""
+    out = []
+    m = re.match(r"^(\w+)(\([^)]*\))?!?:", title)
+    if m and f"type: {m.group(1)}" in labels:
+        out.append(f"type: {m.group(1)}")
+    for name, spec in labels.items():
+        if name.startswith("area: ") and any(
+            p.startswith(prefix) for p in paths for prefix in spec.get("paths", [])
+        ):
+            out.append(name)
+    return out
+
+
+def label_prs(repo, prs=None, out=sys.stdout):
+    """Add the missing type/area labels to the given PRs, or to every open PR. Never
+    removes a label someone set."""
+    loaded = load_labels(repo)
+    if loaded is None:
+        return {}
+    labels, _ = loaded
+    if prs is None:
+        prs = [p["number"] for p in repo.gh_json("pr", "list", "--json", "number")]
+    on_github = {
+        x["name"] for x in repo.gh_json("label", "list", "--limit", "200", "--json", "name")
+    }
+    added = {}
+    for pr in prs:
+        info = repo.gh_json("pr", "view", str(pr), "--json", "title,files,labels")
+        have = {label["name"] for label in info["labels"]}
+        paths = [f["path"] for f in info["files"]]
+        wanted = [x for x in labels_for(info["title"], paths, labels) if x not in have]
+        unsynced = [x for x in wanted if x not in on_github]
+        if unsynced:
+            out.write(f"#{pr}: not on GitHub yet ({', '.join(unsynced)}): lab git labels --apply\n")
+        missing = [x for x in wanted if x in on_github]
+        if missing:
+            repo.gh("pr", "edit", str(pr), "--add-label", ",".join(missing))
+            out.write(f"#{pr}: + {', '.join(missing)}\n")
+        added[pr] = missing
+    return added

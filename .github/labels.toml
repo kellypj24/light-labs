@@ -1,0 +1,75 @@
+# The repo's PR labels. `lab git labels --apply` syncs them to GitHub (`--prune` also
+# deletes labels not named here or under [keep]); `lab git ship` and `lab git label`
+# add a PR's type (from its conventional title) and areas (from its changed paths).
+
+[types.feat]
+color = "1d76db"
+description = "Adds a capability"
+
+[types.fix]
+color = "d73a4a"
+description = "Corrects broken behaviour"
+
+[types.docs]
+color = "0075ca"
+description = "Documentation only"
+
+[types.ci]
+color = "5319e7"
+description = "CI, hooks, check configuration"
+
+[types.refactor]
+color = "c5def5"
+description = "Same behaviour, new shape"
+
+[types.test]
+color = "bfd4f2"
+description = "Tests only"
+
+[types.chore]
+color = "ededed"
+description = "Dependencies, cleanup"
+
+[areas.evals]
+color = "fbca04"
+description = "Eval runner, stages, results"
+paths = ["evals/", "light_labs/evals/"]
+
+[areas.analytics]
+color = "0e8a16"
+description = "dbt project over the lab's data"
+paths = ["analytics/"]
+
+[areas.orchestration]
+color = "006b75"
+description = "Dagster code location and daemon"
+paths = ["light_labs/orchestration/", "ops/orchestration/", "ops/com.pjkelly.light-labs.dagster.plist"]
+
+[areas.rush]
+color = "f9d0c4"
+description = "DLN-100 Rush"
+paths = ["light_labs/agents/rush/", "ops/com.pjkelly.light-labs.rush.plist"]
+
+[areas.guts-man]
+color = "f9d0c4"
+description = "DLN-101 Guts Man"
+paths = ["light_labs/agents/guts_man/"]
+
+[areas.roll]
+color = "f9d0c4"
+description = "DLN-102 Roll"
+paths = ["light_labs/agents/roll/"]
+
+[areas.git]
+color = "bfdadc"
+description = "lab git commands"
+paths = ["light_labs/gitops.py"]
+
+[areas.skills]
+color = "d4c5f9"
+description = "Skills for Auto and the robots"
+paths = [".claude/skills/"]
+
+# Set by other tools; never pruned.
+[keep]
+labels = ["dependencies", "python:uv", "github_actions"]

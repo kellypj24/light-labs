@@ -186,7 +186,14 @@ lab git status                      # branch, changes, open PRs with CI state, D
 lab git ship -F msg.txt             # just check, then commit, push, open or find the PR
 lab git land 21                     # wait for CI; merge on green, else print the failing log tail
 lab git tidy                        # merged/abandoned branches and worktrees; --apply deletes
+lab git labels                      # label set vs .github/labels.toml; --apply, --prune
+lab git label [<pr> ...]            # add type/area labels (default: every open PR)
 ```
+
+Labels: `type: <type>` from the PR's conventional title, `area: <area>` from its changed
+paths, both defined in `.github/labels.toml`. `ship` labels the PR it opens. Labels are
+added locally with `gh`, not by a workflow: labelling from Actions on a public repo needs
+`pull_request_target` with write access.
 
 `tidy` deletes only work that is safe to lose: branches whose PR merged (unless they moved
 after the merge), branches already contained in `main`, and branches of PRs closed
