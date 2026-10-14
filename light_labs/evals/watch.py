@@ -1,4 +1,8 @@
-"""Follow a fight from a second terminal: `lab evals watch [run_id]`.
+"""Follow fights from a second terminal: `lab evals watch [run_id]`.
+
+With no run_id it follows: the latest fight, then whichever fight starts next, until
+Ctrl-C, so one terminal can stay on it all day. With a run_id it shows that run and exits
+when it ends.
 
 Reads what the Go runner writes as it goes: the run record (<run_id>.run.json), the
 samples (<run_id>.jsonl, one line per finished sample) and the telemetry
@@ -20,9 +24,11 @@ def latest_record(directory=RESULTS):
 
 
 def _lines(path):
+    if not path:
+        return []
     try:
         return [json.loads(line) for line in Path(path).read_text().splitlines() if line]
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError):
         return []
 
 
@@ -87,20 +93,44 @@ def render(record, samples, telemetry, now=None):
     return "\n".join(lines)
 
 
-def watch(run_id=None, directory=RESULTS, every=2.0, out=sys.stdout):
+def _screen(path):
+    record = json.loads(path.read_text())
+    screen = render(
+        record,
+        _lines(record.get("samples_file", "")),
+        _lines(record.get("telemetry_file", "")),
+    )
+    return record, screen
+
+
+def watch(run_id=None, directory=RESULTS, every=2.0, out=sys.stdout, sleep=time.sleep):
+    """Redraw every `every` seconds. Returns the last record shown."""
+    follow = run_id is None
     path = Path(directory) / f"{run_id}.run.json" if run_id else latest_record(directory)
-    if not path or not path.exists():
-        sys.exit("no fight to watch: no *.run.json in var/evals")
+    if not follow and not path.exists():
+        sys.exit(f"no run {run_id} in {directory}")
     tty = out.isatty()
-    while True:
-        record = json.loads(path.read_text())
-        screen = render(
-            record,
-            _lines(record.get("samples_file", "")),
-            _lines(record.get("telemetry_file", "")),
-        )
-        out.write(("\033[H\033[J" if tty else "\n") + screen + "\n")
-        out.flush()
-        if record["status"] != "running":
-            return record
-        time.sleep(every)
+    record = None
+    try:
+        while True:
+            if follow:
+                path = latest_record(directory) or path
+            if path is None:
+                screen = "no fights yet; waiting for the first (Ctrl-C to quit)"
+            else:
+                try:
+                    record, screen = _screen(path)
+                except (OSError, json.JSONDecodeError):
+                    sleep(every)  # the runner is replacing the file: next tick
+                    continue
+                if record["status"] != "running":
+                    if not follow:
+                        out.write(("\033[H\033[J" if tty else "\n") + screen + "\n")
+                        return record
+                    screen += "\n\nwaiting for the next fight (Ctrl-C to quit)"
+            out.write(("\033[H\033[J" if tty else "\n") + screen + "\n")
+            out.flush()
+            sleep(every)
+    except KeyboardInterrupt:
+        out.write("\n")
+        return record

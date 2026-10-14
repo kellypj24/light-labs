@@ -147,7 +147,7 @@ finishes, so stopping loses nothing. It also writes `var/evals/<run_id>.run.json
 reason, progress) and heat readings every 30 seconds.
 
 ```bash
-just watch                                      # live view from a second terminal
+just watch                                      # live view; stays open and follows each next fight
 just eval dbt-model mega-man 3 -cool-above 40   # pause while the battery is over 40°C
                                                 # or macOS throttles the CPU
 uv run lab evals cancel <run_id> --reason "machine hot"   # after Ctrl-C: say why

@@ -100,6 +100,60 @@ class RunHealthTest(unittest.TestCase):
         ]:
             self.assertIn(want, screen)
 
+    def fresh_dir(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return Path(tmp.name)
+
+    def test_watch_follows_into_the_next_fight(self):
+        import io
+        import os
+
+        d = self.fresh_dir()
+        done = {
+            **RECORD,
+            "run_id": "a-1",
+            "status": "completed",
+            "samples_file": "",
+            "telemetry_file": "",
+        }
+        (d / "a-1.run.json").write_text(json.dumps(done))
+        os.utime(d / "a-1.run.json", (1, 1))
+        ticks = []
+
+        def sleep(_):
+            ticks.append(1)
+            if len(ticks) == 1:  # a new fight starts while the old screen is up
+                nxt = {**done, "run_id": "b-2", "status": "running"}
+                (d / "b-2.run.json").write_text(json.dumps(nxt))
+            elif len(ticks) == 3:
+                raise KeyboardInterrupt
+
+        out = io.StringIO()
+        last = watch.watch(directory=d, out=out, sleep=sleep)
+        text = out.getvalue()
+        self.assertIn("a-1  COMPLETED", text)
+        self.assertIn("waiting for the next fight", text)
+        self.assertIn("b-2  RUNNING", text)
+        self.assertEqual(last["run_id"], "b-2")
+
+    def test_watch_a_named_run_exits_when_it_ends(self):
+        import io
+
+        d = self.fresh_dir()
+        done = {
+            **RECORD,
+            "run_id": "a-1",
+            "status": "completed",
+            "samples_file": "",
+            "telemetry_file": "",
+        }
+        (d / "a-1.run.json").write_text(json.dumps(done))
+        out = io.StringIO()
+        last = watch.watch("a-1", directory=d, out=out, sleep=lambda _: self.fail("slept"))
+        self.assertEqual(last["status"], "completed")
+        self.assertNotIn("waiting for the next fight", out.getvalue())
+
     def test_cancel_closes_a_running_record_with_its_reason(self):
         with mock.patch.object(results, "RESULTS", self.dir):
             cli.main(["evals", "cancel", "s-1", "--reason", "machine hot"])
