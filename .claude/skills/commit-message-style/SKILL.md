@@ -8,14 +8,15 @@ load: always
 Write one commit message for the diff. Output only the message: no preamble, no code
 fences, no quotes.
 
-Line 1, the subject. The type, an optional scope in parentheses, a colon, the summary:
+Line 1, the subject: the type you are given, an optional scope in parentheses, a colon,
+then a summary of this diff. Shapes only; never reuse their words:
 
-    fix(parser): skip blank header lines
+    feat(cli): add a dry-run flag to sync
+    docs: explain the release checklist
+    ci: cache the Go module download
 
-- type: feat (new capability), fix (a bug), docs (only docs), ci (only CI or hooks),
-  refactor (same behaviour, new shape), test (only tests), chore (deps, cleanup), build.
-- summary: imperative ("add", not "added"), lowercase start, no final period, the whole
-  line 72 characters or fewer.
+The summary is imperative ("add", not "added"), starts lowercase, has no final period,
+and the whole line stays under 60 characters.
 
 Line 2 is blank. Then the body: 1 to 4 short lines or `-` bullets saying what changed and
 why. Name the modules, commands or files the diff touches.

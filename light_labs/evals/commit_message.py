@@ -88,17 +88,21 @@ def flags(message, inp):
 
 def run_sample(brain, inp):
     from light_labs.agents import roll
+    from light_labs.agents.roll import writer
     from light_labs.core.brain import Mock
 
     if isinstance(brain, Mock):  # the oracle: proves every reference passes every check
-        raw = inp["reference"]
+        raw, how = inp["reference"], "oracle"
     else:
         user = prompt(inp)
-        raw = brain.think(
-            roll.system_prompt(user), user, temperature=roll.TEMPERATURE, num_ctx=roll.NUM_CTX
+        paths = [f["path"] for f in inp["files"]]
+        kind, how = writer.classify(brain, paths, user, num_ctx=roll.NUM_CTX)
+        raw = writer.write(
+            brain, roll.system_prompt(user), user, kind, roll.TEMPERATURE, roll.NUM_CTX
         )
     message = clean(raw)
     result, notes = flags(message, inp)
+    notes = f"type by {how}; {notes}" if notes else ""
     return {"raw": raw, "draft": message, "flags": result, "notes": notes}
 
 

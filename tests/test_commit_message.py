@@ -79,6 +79,52 @@ class BuildTest(unittest.TestCase):
         self.assertIn("docs", cm.accept_types("feat", ["README.md", "docs/a.md"]))
 
 
+class Scripted:
+    """Answers think() calls in order and records what it was asked."""
+
+    def __init__(self, *answers):
+        self.answers = list(answers)
+        self.calls = []
+
+    def think(self, system, user, temperature=None, num_ctx=None):
+        self.calls.append((system, user, temperature, num_ctx))
+        return self.answers.pop(0)
+
+
+class WriterTest(unittest.TestCase):
+    def test_files_that_decide_the_type(self):
+        from light_labs.agents.roll.writer import rule_type
+
+        self.assertEqual(rule_type(["README.md", "docs/a.md"]), "docs")
+        self.assertEqual(rule_type([".github/workflows/ci.yml", ".pre-commit-config.yaml"]), "ci")
+        self.assertEqual(rule_type(["tests/test_a.py", "evals/scorer_test.go"]), "test")
+        self.assertIsNone(rule_type(["README.md", "light_labs/a.py"]))
+        self.assertIsNone(rule_type(["requirements.txt"]))
+
+    def test_classify_by_rule_skips_the_model(self):
+        from light_labs.agents.roll.writer import classify
+
+        brain = Scripted()
+        self.assertEqual(classify(brain, ["README.md"], "p"), ("docs", "rule"))
+        self.assertEqual(brain.calls, [])
+
+    def test_classify_reads_the_first_type_word(self):
+        from light_labs.agents.roll.writer import classify
+
+        brain = Scripted("Type: Feat.", "no idea")
+        self.assertEqual(classify(brain, ["a.py"], "p", num_ctx=8192), ("feat", "model"))
+        self.assertEqual(brain.calls[0][2:], (0, 8192))
+        self.assertEqual(classify(brain, ["a.py"], "p"), ("chore", "fallback"))
+
+    def test_write_fixes_the_type(self):
+        from light_labs.agents.roll.writer import write
+
+        brain = Scripted("ci: x\n\ny")
+        write(brain, "sys", "diff here", "ci", 0.2, 8192)
+        self.assertIn("The type is `ci`", brain.calls[0][1])
+        self.assertIn("diff here", brain.calls[0][1])
+
+
 @unittest.skipUnless(importlib.util.find_spec("yaml"), "needs the analytics dependency group")
 class StageTest(unittest.TestCase):
     @classmethod
