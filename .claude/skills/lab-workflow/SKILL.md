@@ -22,6 +22,10 @@ audience: [auto]
    abandoned branches and worktrees. `tidy --apply` deletes, so run it only when PJ asks;
    `review` rows are never deleted.
 5. `lab git` works in any of PJ's repos (`lab git -C ~/<repo> ...`).
-6. Never commit `.env`, `var/`, or any `memory.md`; they hold deployment details about
+6. Labels come from `.github/labels.toml`: `ship` labels its PR; `lab git label` backfills
+   open PRs. `lab git labels --apply` (and `--prune`) changes the repo's label set, so
+   only when PJ asks. A new top-level area of the code gets an `[areas.<name>]` entry in
+   the same PR.
+7. Never commit `.env`, `var/`, or any `memory.md`; they hold deployment details about
    other people's systems. `scripts/gitleaks.sh` and push protection are the backstop,
    not the plan.

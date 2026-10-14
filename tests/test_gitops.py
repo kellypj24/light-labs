@@ -210,6 +210,81 @@ class LandTest(RepoCase):
         self.assertFalse(any(c[:2] == ("pr", "merge") for c in self.repo.calls))
 
 
+LABELS = """
+[types.feat]
+color = "1D76DB"
+description = "Adds a capability"
+[types.fix]
+color = "d73a4a"
+[areas.evals]
+color = "fbca04"
+paths = ["evals/", "light_labs/evals/"]
+[areas.git]
+color = "bfdadc"
+paths = ["light_labs/gitops.py"]
+[keep]
+labels = ["dependencies"]
+"""
+
+
+class LabelsTest(RepoCase):
+    def setUp(self):
+        super().setUp()
+        (self.path / ".github").mkdir()
+        (self.path / ".github/labels.toml").write_text(LABELS)
+
+    def test_labels_for_a_pr(self):
+        labels, keep = gitops.load_labels(self.repo)
+        self.assertEqual(keep, {"dependencies"})
+        got = gitops.labels_for(
+            "feat(evals): add a stage", ["evals/stages/x.yaml", "light_labs/gitops.py"], labels
+        )
+        self.assertEqual(got, ["type: feat", "area: evals", "area: git"])
+        self.assertEqual(gitops.labels_for("Rename things", ["README.md"], labels), [])
+
+    def test_sync_plans_create_update_and_prune_but_keeps_tool_labels(self):
+        self.repo.responses[("label", "list")] = (
+            '[{"name": "type: feat", "color": "1d76db", "description": "Adds a capability"},'
+            '{"name": "type: fix", "color": "000000", "description": ""},'
+            '{"name": "bug", "color": "d73a4a", "description": ""},'
+            '{"name": "dependencies", "color": "0366d6", "description": ""}]'
+        )
+        changes = gitops.sync_labels(self.repo, prune=True, out=io.StringIO())
+        plan = {(verb, name) for verb, name, _ in changes}
+        self.assertEqual(
+            plan,
+            {("update", "type: fix"), ("create", "area: evals"), ("create", "area: git"),
+             ("delete", "bug")},
+        )  # fmt: skip
+        self.assertFalse(
+            any(c[:2] in (("label", "create"), ("label", "delete")) for c in self.repo.calls)
+        )
+
+    def test_label_prs_adds_only_whats_missing(self):
+        self.repo.responses[("pr", "view")] = (
+            '{"title": "fix: x", "files": [{"path": "evals/a.go"}],'
+            ' "labels": [{"name": "type: fix"}, {"name": "dependencies"}]}'
+        )
+        self.repo.responses[("label", "list")] = '[{"name": "area: evals"}, {"name": "type: fix"}]'
+        added = gitops.label_prs(self.repo, [7], out=io.StringIO())
+        self.assertEqual(added, {7: ["area: evals"]})
+        edit = next(c for c in self.repo.calls if c[:2] == ("pr", "edit"))
+        self.assertEqual(edit, ("pr", "edit", "7", "--add-label", "area: evals"))
+
+    def test_labels_not_synced_yet_are_skipped_with_a_note(self):
+        self.repo.responses[("pr", "view")] = '{"title": "feat: x", "files": [], "labels": []}'
+        self.repo.responses[("label", "list")] = "[]"
+        out = io.StringIO()
+        self.assertEqual(gitops.label_prs(self.repo, [7], out=out), {7: []})
+        self.assertIn("lab git labels --apply", out.getvalue())
+        self.assertFalse(any(c[:2] == ("pr", "edit") for c in self.repo.calls))
+
+    def test_no_labels_file_means_no_labelling(self):
+        (self.path / ".github/labels.toml").unlink()
+        self.assertEqual(gitops.label_prs(self.repo, [7], out=io.StringIO()), {})
+        self.assertEqual(self.repo.calls, [])
+
+
 class ChecksStateTest(unittest.TestCase):
     def test_rollup(self):
         ok = {"status": "COMPLETED", "conclusion": "SUCCESS"}

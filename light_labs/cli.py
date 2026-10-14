@@ -231,6 +231,12 @@ def cmd_git(args):
                 print("orchestration changed: `just dagster-restart` to load it")
         elif args.cmd == "tidy":
             gitops.tidy(repo, apply=args.apply, stale_days=args.stale_days)
+        elif args.cmd == "labels":
+            gitops.sync_labels(repo, apply=args.apply, prune=args.prune)
+        elif args.cmd == "label":
+            if gitops.load_labels(repo) is None:
+                sys.exit(f"lab git label: no {gitops.LABELS_FILE} here")
+            gitops.label_prs(repo, args.prs or None)
     except gitops.GitError as e:
         sys.exit(f"lab git {args.cmd}: {e}")
 
@@ -278,6 +284,11 @@ def main(argv=None):
     tidy_p = gcmd.add_parser("tidy", help="merged or abandoned branches and worktrees")
     tidy_p.add_argument("--apply", action="store_true", help="delete (default: list only)")
     tidy_p.add_argument("--stale-days", type=int, default=30)
+    labels_p = gcmd.add_parser("labels", help="sync the label set from .github/labels.toml")
+    labels_p.add_argument("--apply", action="store_true", help="write (default: list only)")
+    labels_p.add_argument("--prune", action="store_true", help="also delete labels not in it")
+    label_p = gcmd.add_parser("label", help="add type/area labels to PRs (default: all open)")
+    label_p.add_argument("prs", nargs="*", type=int)
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
