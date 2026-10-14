@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab evals {ingest,runs} | lab queue ingest | lab rush {...}"""
+"""lab roster | lab skills | lab evals {...} | lab queue {...} | lab git {...} | lab rush {...}"""
 
 import argparse
 import json
@@ -213,6 +213,28 @@ def rush_escalate(args, store, rush):
     subprocess.run(["claude", "-p", prompt], check=True)
 
 
+def cmd_git(args):
+    from light_labs import gitops
+
+    repo = gitops.Repo(args.repo)
+    try:
+        if args.cmd == "status":
+            gitops.status(repo)
+        elif args.cmd == "ship":
+            message = Path(args.file).read_text() if args.file else args.message
+            body = Path(args.body_file).read_text() if args.body_file else None
+            check = args.check.split() if args.check else None
+            gitops.ship(repo, message, title=args.title, body=body, check=check)
+        elif args.cmd == "land":
+            files = gitops.land(repo, args.pr, wait=not args.no_wait)
+            if any(f.startswith("light_labs/orchestration/") for f in files):
+                print("orchestration changed: `just dagster-restart` to load it")
+        elif args.cmd == "tidy":
+            gitops.tidy(repo, apply=args.apply, stale_days=args.stale_days)
+    except gitops.GitError as e:
+        sys.exit(f"lab git {args.cmd}: {e}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
@@ -239,6 +261,23 @@ def main(argv=None):
         "--root", help="directory holding <robot>/queue (default: var/)"
     )
     qcmd.add_parser("status", help="per robot and draft kind: ready to skip approval?")
+    git_p = sub.add_parser("git", help="git and GitHub chores, compact output (any repo)")
+    git_p.add_argument("-C", dest="repo", default=".", help="repository (default: cwd)")
+    gcmd = git_p.add_subparsers(dest="cmd", required=True)
+    gcmd.add_parser("status", help="branch, working tree, open PRs with CI, Dependabot")
+    ship_p = gcmd.add_parser("ship", help="check, commit, push, open or find the PR")
+    msg = ship_p.add_mutually_exclusive_group()
+    msg.add_argument("-m", "--message", help="commit message")
+    msg.add_argument("-F", "--file", help="commit message from a file")
+    ship_p.add_argument("--title", help="PR title (default: the commit subject)")
+    ship_p.add_argument("--body-file", help="PR body (default: commit body + test plan)")
+    ship_p.add_argument("--check", help="check command (default: `just check`)")
+    land_p = gcmd.add_parser("land", help="wait for CI, squash-merge, update main, clean up")
+    land_p.add_argument("pr", type=int)
+    land_p.add_argument("--no-wait", action="store_true", help="merge without waiting on CI")
+    tidy_p = gcmd.add_parser("tidy", help="merged or abandoned branches and worktrees")
+    tidy_p.add_argument("--apply", action="store_true", help="delete (default: list only)")
+    tidy_p.add_argument("--stale-days", type=int, default=30)
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
@@ -258,7 +297,7 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills"):
+    if args.robot in ("roster", "skills", "git"):
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue"):
