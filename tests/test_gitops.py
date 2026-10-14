@@ -126,6 +126,30 @@ class TidyTest(RepoCase):
         self.assertEqual(worktree, (False, "feature/wt: uncommitted changes"))
         self.assertNotIn(("local", "feature/wt"), got)
 
+    def test_locked_worktree_is_kept(self):
+        merged = self.branch("feature/lk", merge=True)
+        wt = self.path.parent / "lk"
+        sh(self.path, "git", "worktree", "add", "-q", str(wt), "feature/lk")
+        sh(self.path, "git", "worktree", "lock", "--reason", "agent pid 1", str(wt))
+        prs = [{"number": 7, "headRefName": "feature/lk", "headRefOid": merged, "state": "MERGED"}]
+        got = self.plan(prs)
+        worktree = next(v for (kind, _), v in got.items() if kind == "worktree")
+        self.assertFalse(worktree[0])
+        self.assertIn("locked (agent pid 1)", worktree[1])
+        self.assertNotIn(("local", "feature/lk"), got)
+
+    def test_one_failed_deletion_does_not_stop_the_rest(self):
+        merged = self.branch("feature/a", merge=True)
+        actions = [
+            gitops.Action("local", "no-such-branch", "x", True),
+            gitops.Action("local", "feature/a", "PR merged", True),
+        ]
+        out = io.StringIO()
+        failed = gitops.apply_tidy(self.repo, actions, out=out)
+        self.assertEqual([a.target for a in failed], ["no-such-branch"])
+        self.assertIn("deleted local feature/a", out.getvalue())
+        self.assertTrue(merged)
+
     def test_apply_deletes_only_the_delete_rows(self):
         merged = self.branch("feature/done", push=True, merge=True)
         self.branch("feature/wip")
