@@ -269,11 +269,13 @@ def plan_tidy(repo, prs, now=None, stale_days=30):
     by_branch = _pr_by_branch(prs)
     actions = []
 
-    worktrees = {}
+    worktrees, locked = {}, {}
     for block in repo.git("worktree", "list", "--porcelain").split("\n\n"):
-        fields = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
+        fields = dict((line.split(" ", 1) + [""])[:2] for line in block.splitlines())
         if "branch" in fields:
             worktrees[fields["branch"].removeprefix("refs/heads/")] = fields["worktree"]
+            if "locked" in fields:
+                locked[fields["worktree"]] = fields["locked"] or "no reason given"
     primary = str(repo.path.resolve())
 
     def contained(sha):
@@ -310,10 +312,16 @@ def plan_tidy(repo, prs, now=None, stale_days=30):
         if branch in worktrees and worktrees[branch] != primary:
             path = worktrees[branch]
             dirty = repo.sh("git", "-C", path, "status", "--porcelain", check=False)
-            if delete and not dirty:
+            if delete and not dirty and path not in locked:
                 actions.append(Action("worktree", path, f"{branch}: {reason}", True))
             else:
-                why = "uncommitted changes" if dirty else reason
+                why = (
+                    "uncommitted changes"
+                    if dirty
+                    else f"locked ({locked[path]}); {reason}"
+                    if path in locked
+                    else reason
+                )
                 actions.append(Action("worktree", path, f"{branch}: {why}", False))
                 continue
         if not delete:
@@ -342,17 +350,25 @@ def plan_tidy(repo, prs, now=None, stale_days=30):
 
 
 def apply_tidy(repo, actions, out=sys.stdout):
+    """Delete the delete rows. One failure doesn't stop the rest; returns the failures."""
+    failed = []
     for a in actions:
         if not a.delete:
             continue
-        if a.kind == "worktree":
-            repo.git("worktree", "remove", a.target)
-        elif a.kind == "local":
-            repo.git("branch", "-D", a.target)
-        elif a.kind == "remote":
-            repo.git("push", "-q", "origin", "--delete", a.target)
+        try:
+            if a.kind == "worktree":
+                repo.git("worktree", "remove", a.target)
+            elif a.kind == "local":
+                repo.git("branch", "-D", a.target)
+            elif a.kind == "remote":
+                repo.git("push", "-q", "origin", "--delete", a.target)
+        except GitError as e:
+            failed.append(a)
+            out.write(f"FAILED  {a.kind} {a.target}: {str(e).splitlines()[0]}\n")
+            continue
         out.write(f"deleted {a.kind} {a.target}\n")
     repo.git("worktree", "prune")
+    return failed
 
 
 def tidy(repo, apply=False, stale_days=30, out=sys.stdout):
@@ -369,7 +385,8 @@ def tidy(repo, apply=False, stale_days=30, out=sys.stdout):
         verb = ("delete" if apply else "would delete") if a.delete else "review"
         out.write(f"{verb:12} {a.kind:8} {a.target:40} {a.reason}\n")
     if apply:
-        apply_tidy(repo, actions, out)
+        if apply_tidy(repo, actions, out):
+            raise GitError("some deletions failed; see FAILED rows")
     elif any(a.delete for a in actions):
         out.write("\nlab git tidy --apply deletes the first kind; `review` rows are yours.\n")
     return actions
