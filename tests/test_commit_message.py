@@ -99,6 +99,8 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(rule_type([".github/workflows/ci.yml", ".pre-commit-config.yaml"]), "ci")
         self.assertEqual(rule_type(["tests/test_a.py", "evals/scorer_test.go"]), "test")
         self.assertIsNone(rule_type(["README.md", "light_labs/a.py"]))
+        self.assertEqual(rule_type([".github/workflows/x.yml", "docs/ci-cd.md"]), "ci")
+        self.assertEqual(rule_type(["tests/test_a.py", "README.md"]), "test")
         self.assertIsNone(rule_type(["requirements.txt"]))
 
     def test_classify_by_rule_skips_the_model(self):
@@ -115,6 +117,17 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(classify(brain, ["a.py"], "p", num_ctx=8192), ("feat", "model"))
         self.assertEqual(brain.calls[0][2:], (0, 8192))
         self.assertEqual(classify(brain, ["a.py"], "p"), ("chore", "fallback"))
+
+    def test_the_model_is_never_offered_docs_or_test(self):
+        from light_labs.agents.roll.writer import QUESTIONS, classifier, classify
+
+        menu = classifier(list(QUESTIONS))
+        self.assertNotIn("-> docs", menu)
+        self.assertNotIn("-> test", menu)
+        self.assertLess(menu.index("-> ci"), menu.index("-> fix"))
+        self.assertLess(menu.index("-> fix"), menu.index("-> feat"))
+        brain = Scripted("docs")  # off the menu: not accepted
+        self.assertEqual(classify(brain, ["a.py", "README.md"], "p"), ("chore", "fallback"))
 
     def test_write_fixes_the_type(self):
         from light_labs.agents.roll.writer import write
