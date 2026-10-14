@@ -26,11 +26,15 @@ class Brain:
         self.timeout = timeout
         self.last = {}
 
-    def think(self, system, user, temperature=0.7):
+    def think(self, system, user, temperature=0.7, num_ctx=None):
+        """`num_ctx` sets the context window; Ollama silently truncates a prompt past it."""
+        options = {"temperature": temperature}
+        if num_ctx:
+            options["num_ctx"] = num_ctx
         body = {
             "model": self.model,
             "stream": False,
-            "options": {"temperature": temperature},
+            "options": options,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }
         req = urllib.request.Request(
@@ -64,7 +68,7 @@ class ClaudeCLI:
         self.timeout = timeout
         self.last = {}
 
-    def think(self, system, user, temperature=None):
+    def think(self, system, user, temperature=None, num_ctx=None):
         isolated = bool(os.environ.get("ANTHROPIC_API_KEY"))  # else: subscription
         cmd = [
             "claude",
@@ -118,7 +122,7 @@ class Mock:
         self.model = model
         self.last = {}
 
-    def think(self, system, user, temperature=None):
+    def think(self, system, user, temperature=None, num_ctx=None):
         message = user.split("<message>")[-1].split("</message>")[0]
         self.last = {"latency_s": 0.0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
         if self.WORK.search(message):

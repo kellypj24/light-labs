@@ -42,7 +42,14 @@ def dbt_model(brain, memory, inp):
     return stage.run_sample(brain, inp)
 
 
-STAGES = {"reply-draft": reply_draft, "dbt-model": dbt_model}
+def commit_message(brain, memory, inp):
+    """Roll writing a commit message for a merged PR's diff."""
+    from light_labs.evals import commit_message as stage
+
+    return stage.run_sample(brain, inp)
+
+
+STAGES = {"reply-draft": reply_draft, "dbt-model": dbt_model, "commit-message": commit_message}
 
 
 def run(payload):
