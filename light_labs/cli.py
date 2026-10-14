@@ -245,9 +245,9 @@ def main(argv=None):
     ecmd.add_parser("ingest", help="load var/evals/*.jsonl (idempotent)").add_argument(
         "paths", nargs="*", help="specific JSONL files (default: all)"
     )
-    ecmd.add_parser("watch", help="follow a fight live (default: the latest)").add_argument(
-        "run_id", nargs="?"
-    )
+    ecmd.add_parser(
+        "watch", help="follow fights live; no run_id: the latest, then each next one"
+    ).add_argument("run_id", nargs="?")
     cancel_p = ecmd.add_parser("cancel", help="record why a fight was stopped")
     cancel_p.add_argument("run_id")
     cancel_p.add_argument("--reason", required=True)
