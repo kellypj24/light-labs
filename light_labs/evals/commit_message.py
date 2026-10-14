@@ -157,6 +157,10 @@ def reference(message):
 def accept_types(kind, paths):
     """The reference's type, plus the neighbours a fair reviewer would also accept."""
     neighbours = {
+        # fix and feat: a change that corrects behaviour by adding code reads as either, and
+        # Bass misses the line too; a reviewer relabels it in seconds.
+        "feat": ["fix"],
+        "fix": ["feat"],
         "refactor": ["chore"],
         "chore": ["build", "refactor", "ci"],
         "ci": ["build", "chore"],

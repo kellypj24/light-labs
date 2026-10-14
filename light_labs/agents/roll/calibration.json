@@ -1,0 +1,48 @@
+{
+  "ollama:llama3.1:8b": {
+    "brain": "ollama:llama3.1:8b",
+    "built": "2026-10-14",
+    "baselines": {
+      "deps": 0.3979
+    },
+    "types": {
+      "chore": 5,
+      "feat": 10,
+      "fix": 6
+    },
+    "by_type": {
+      "chore": {
+        "deps": 0.75
+      },
+      "feat": {
+        "deps": 0.178
+      },
+      "fix": {
+        "deps": 0.2667
+      }
+    },
+    "prs": [
+      "data-engineering:84",
+      "data-engineering:63",
+      "light-labs:26",
+      "light-labs:24",
+      "scouter:17",
+      "scouter:12",
+      "data-engineering:208",
+      "data-engineering:172",
+      "data-engineering:165",
+      "data-engineering:138",
+      "data-engineering:42",
+      "data-engineering:225",
+      "data-engineering:224",
+      "data-engineering:223",
+      "data-engineering:220",
+      "data-engineering:209",
+      "data-engineering:207",
+      "data-engineering:180",
+      "data-engineering:179",
+      "data-engineering:177",
+      "data-engineering:175"
+    ]
+  }
+}
