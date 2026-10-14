@@ -91,6 +91,18 @@ class Scripted:
         return self.answers.pop(0)
 
 
+class Choosing(Scripted):
+    """A brain with answer probabilities: `deps` is its yes-probability for any question."""
+
+    def __init__(self, model, deps, answer="feat"):
+        super().__init__(answer)
+        self.model = model
+        self.deps = deps
+
+    def choose(self, system, user, choices, num_ctx=None):
+        return {"yes": self.deps, "no": 1 - self.deps}
+
+
 class WriterTest(unittest.TestCase):
     def test_files_that_decide_the_type(self):
         from light_labs.agents.roll.writer import rule_type
@@ -110,13 +122,27 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(classify(brain, ["README.md"], "p"), ("docs", "rule"))
         self.assertEqual(brain.calls, [])
 
-    def test_classify_reads_the_first_type_word(self):
+    def test_a_clear_deps_answer_is_chore_without_the_type_call(self):
         from light_labs.agents.roll.writer import classify
 
-        brain = Scripted("Type: Feat.", "no idea")
-        self.assertEqual(classify(brain, ["a.py"], "p", num_ctx=8192), ("feat", "model"))
-        self.assertEqual(brain.calls[0][2:], (0, 8192))
-        self.assertEqual(classify(brain, ["a.py"], "p"), ("chore", "fallback"))
+        brain = Choosing(model="llama3.1:8b", deps=0.85)
+        kind, how = classify(brain, ["pyproject.toml", "uv.lock"], "p")
+        self.assertEqual(kind, "chore")
+        self.assertIn("lift", how)
+        self.assertEqual(brain.calls, [])  # no text call
+
+    def test_otherwise_the_type_call_decides(self):
+        from light_labs.agents.roll.writer import classify
+
+        brain = Choosing(model="llama3.1:8b", deps=0.3, answer="fix")
+        self.assertEqual(classify(brain, ["a.py"], "p"), ("fix", "model"))
+        self.assertEqual(len(brain.calls), 1)
+
+    def test_brains_without_probabilities_skip_the_deps_gate(self):
+        from light_labs.agents.roll.writer import classify
+
+        brain = Scripted("feat")
+        self.assertEqual(classify(brain, ["a.py"], "p"), ("feat", "model"))
 
     def test_the_model_is_never_offered_docs_or_test(self):
         from light_labs.agents.roll.writer import QUESTIONS, classifier, classify

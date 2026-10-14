@@ -3,9 +3,15 @@ evals.
 
 The type comes first because a writer asked for both anchors on whatever type its prompt
 shows (the first commit-message fight labelled almost everything `fix`). File sets that
-can only be one type are decided by rule; the rest by a short call that sees the files
-and the diff and walks ordered yes/no questions. Docs and test are never offered to the
-model: with "docs" on the menu it called mixed code-and-docs changes docs.
+can only be one type are decided by rule; then one yes/no question answered by token
+probability (core/decide.py) catches dependency and lock changes; the rest go to a short
+call that sees the files and the diff and walks ordered questions. Docs and test are
+never offered to the model: with "docs" on the menu it called mixed code-and-docs
+changes docs.
+
+Tried and dropped (commit-message-20261014T024736Z, cancelled): every type as a yes/no
+question, calibrated against its own baseline. "Broken before?" and "adds something?"
+both scored 0.7-0.9 on most diffs, so fix vs feat came down to noise.
 """
 
 import re
@@ -20,6 +26,13 @@ QUESTIONS = {
     "refactor": "Does code behave the same afterwards, only restructured or renamed?",
     "chore": "Is it dependency bumps, lock refreshes or cleanup?",
 }
+
+
+# Scored by token probability. On 21 calibration PRs (calibrate.py) chores scored
+# 0.62-0.85 and other changes 0.04-0.30 bar one; a chore needs DEPS_MIN_LIFT over the
+# brain's calibrated baseline.
+DEPS = "Is this change only dependency version bumps, lock file refreshes, or cleanup?"
+DEPS_MIN_LIFT = 0.2
 
 
 def classifier(allowed):
@@ -52,10 +65,19 @@ def rule_type(paths):
 
 
 def classify(brain, paths, prompt, num_ctx=None):
-    """(type, how): by rule when the files decide it, else one short model call."""
+    """(type, how): by rule when the files decide it; chore when the deps question clears
+    its baseline; else one short model call."""
+    from light_labs.agents.roll.calibrate import baseline
+    from light_labs.core.decide import ask
+
     kind = rule_type(paths)
     if kind:
         return kind, "rule"
+    if hasattr(brain, "choose"):  # a probability, so the calibrated gate means something
+        deps = ask(brain, prompt, DEPS, num_ctx=num_ctx).p()
+        lift = deps - baseline(brain, "deps")
+        if lift >= DEPS_MIN_LIFT:
+            return "chore", f"deps {deps:.2f}, lift {lift:.2f}"
     allowed = list(QUESTIONS)
     raw = brain.think(classifier(allowed), prompt, temperature=0, num_ctx=num_ctx)
     for word in re.findall(r"[a-z]+", raw.lower()):
