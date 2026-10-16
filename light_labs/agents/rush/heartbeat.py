@@ -157,6 +157,15 @@ def comment_prompt(name, title, earlier, author, text):
     )
 
 
+def task_prompt(name, title, author, description):
+    """User prompt for a new board task that names Rush."""
+    return (
+        f'A new board task from {author or "someone"} names {name}: "{title}".\n'
+        f"<comment>\n{description}\n</comment>\n\n"
+        f"Draft {name}'s first comment for the task thread."
+    )
+
+
 def short_id(url):
     return url.rstrip("/").rsplit("/", 1)[-1]
 
@@ -189,18 +198,22 @@ class Heartbeat:
         temperature=None,
         meta=None,
         autosend=None,
+        mention=None,
     ):
         self.client, self.brain, self.store = client, brain, store
         self.persona, self.actor, self.watch_tasks = persona, actor, watch_tasks
         self.name, self.signoff, self.temperature = name, signoff, temperature
         self.meta = meta or {}  # recorded on every queued draft (brain, commit)
         self.autosend = autosend  # autosend.Policy, or None to queue everything
+        self.mention = mention  # compiled regex; scans the whole board when set
 
     def tick(self, backfill=False):
         state = self.store.load()
         # First run: mark the existing backlog as seen unless asked to backfill.
         seed = not state["initialized"] and not backfill
         drafted = self._inbox(state, seed) + self._tasks(state, seed)
+        if self.mention is not None:
+            drafted += self._mentions(state, backfill)
         state["initialized"] = True
         self.store.save(state)
         self.store.journal(f"tick: {len(drafted)} draft(s)" + (" (seeded backlog)" if seed else ""))
@@ -260,6 +273,61 @@ class Heartbeat:
                         text,
                     )
                 )
+        return drafted
+
+    def _mentions(self, state, backfill):
+        """Tasks and comments anywhere on the board that name Rush, since the last scan.
+
+        One draft per task per tick, answering the newest mention. Watched tasks are
+        skipped: _tasks already answers every comment there. The first scan only records
+        where the board is, unless asked to backfill."""
+        since = state.get("board_since")
+        tasks = self.client.list_tasks()
+        latest = max((t.get("updatedAt") or "" for t in tasks), default=since or "")
+        state["board_since"] = max(latest, since or "")
+        if since is None and not backfill:
+            return []
+        since = since or ""
+        drafted = []
+        for task in tasks:
+            if task["id"] in self.watch_tasks or (task.get("updatedAt") or "") <= since:
+                continue
+            comments = task.get("comments") or []
+            hit = None
+            for idx, c in enumerate(comments):
+                new = c.get("at", "") > since and c.get("author") != self.actor
+                if new and self.mention.search(c.get("text") or ""):
+                    hit = idx
+            if hit is not None:
+                c = comments[hit]
+                if any(p.get("author") == self.actor for p in comments[hit + 1 :]):
+                    continue  # already answered by hand
+                text = (c.get("text") or "")[:MAX_CONTEXT_CHARS]
+                earlier = [
+                    (p.get("author"), p.get("text") or "")
+                    for p in comments[max(0, hit - THREAD_COMMENTS) : hit]
+                ]
+                prompt = comment_prompt(
+                    self.name, task.get("title"), earlier, c.get("author"), text
+                )
+                author = c.get("author")
+            elif (task.get("createdAt") or "") > since and self.mention.search(
+                f"{task.get('title', '')}\n{task.get('description', '')}"
+            ):
+                text = (task.get("description") or "")[:MAX_CONTEXT_CHARS]
+                author = task.get("createdBy")
+                prompt = task_prompt(self.name, task.get("title"), author, text)
+            else:
+                continue
+            drafted.append(
+                self._draft(
+                    "comment",
+                    {"task_id": task["id"]},
+                    prompt,
+                    f"{author} on {task.get('title', '')[:60]}: {text[:500]}",
+                    text,
+                )
+            )
         return drafted
 
     def _draft(self, kind, target, prompt, context, message):
