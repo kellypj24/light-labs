@@ -26,6 +26,12 @@ WATCH_TASKS = [t for t in os.environ.get("RUSH_WATCH_TASKS", "").split(",") if t
 # Anywhere else on the board, Rush answers tasks and comments that name it.
 MENTION = re.compile(rf"\b({re.escape(NAME)}|{re.escape(ACTOR)}|{ENTRY['dln']})\b", re.IGNORECASE)
 
+# Phone: texts to PJ's own number for drafts waiting on him, with links to the remote page,
+# and a scheduled wake so the Mac sleeps between ticks. Unset: no texts, no wakes.
+NOTIFY_TO = os.environ.get("RUSH_NOTIFY_TO", "")
+REMOTE_URL = os.environ.get("RUSH_REMOTE_URL", "")
+WAKE_MINUTES = int(os.environ.get("RUSH_WAKE_MINUTES") or 0)
+
 HOME = config.VAR / "rush"
 
 # memory.md is local and git-ignored: it describes the people and boards Rush works with.

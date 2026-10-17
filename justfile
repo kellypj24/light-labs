@@ -84,6 +84,17 @@ dagster-daemon: _dagster-home
     cd analytics && uv run --locked --group orchestration dbt parse --quiet
     DAGSTER_HOME="$PWD/var/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
 
+# Install (or reinstall) Rush's heartbeat and phone page as launchd jobs
+rush-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for job in rush rush-remote; do
+        plist=~/Library/LaunchAgents/com.pjkelly.light-labs.$job.plist
+        launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.$job 2>/dev/null || true
+        cp ops/com.pjkelly.light-labs.$job.plist "$plist"
+        launchctl bootstrap gui/$(id -u) "$plist"
+    done
+
 # Install and start the daemon's launchd job
 dagster-install: _dagster-home
     cp ops/com.pjkelly.light-labs.dagster.plist ~/Library/LaunchAgents/

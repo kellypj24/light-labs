@@ -189,7 +189,7 @@ class Remote:
                 cls="",
             )
             cards.append(
-                f'<div class="card"><div class="meta">{esc(i["id"])} · {esc(i["kind"])} → '
+                f'<div class="card" id="{esc(i["id"])}"><div class="meta">{esc(i["id"])} · {esc(i["kind"])} → '
                 f"{esc(where)} · {esc(i['created'][:16])}</div>{tags}"
                 f'<div class="ctx">{esc(i["context"], CLIP)}</div>{approve}{reject}</div>'
             )

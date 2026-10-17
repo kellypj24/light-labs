@@ -115,11 +115,32 @@ def queue_status(args):
 
 
 def rush_tick(args, store, rush):
+    from light_labs.agents.rush import phone
+
+    if rush.WAKE_MINUTES:  # first, so a failed tick still wakes the Mac for the next one
+        ok, detail = phone.schedule_wake(rush.WAKE_MINUTES)
+        if not ok:
+            store.journal(f"could not schedule the next wake: {detail}")
+    client = Client()
+    if not phone.wait_for_edge(lambda: client.inbox(rush.ACTOR)):
+        store.journal("edge unreachable after waiting; tick skipped")
+        sys.exit("edge unreachable")
+    try:
+        _tick(args, store, rush, client)
+    finally:
+        if rush.NOTIFY_TO:
+            try:
+                phone.notify_pending(store, rush.NOTIFY_TO, rush.REMOTE_URL)
+            except (OSError, subprocess.CalledProcessError) as e:
+                store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
+
+
+def _tick(args, store, rush, client):
     from light_labs.agents.rush.autosend import Policy
     from light_labs.agents.rush.heartbeat import Heartbeat
 
     hb = Heartbeat(
-        Client(),
+        client,
         Brain(rush.MODEL),
         store,
         rush.system_prompt,  # built per message so triggered skills load

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Rush's phone page on 127.0.0.1:8787. Install with `just rush-install`; publish to the
+     tailnet with `tailscale serve --bg --http 80 http://127.0.0.1:8787`. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.rush-remote</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>/Users/pjkelly/light-labs</string>
+    <string>lab</string>
+    <string>rush</string>
+    <string>remote</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/rush/remote.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/rush/remote.log</string>
+</dict>
+</plist>
