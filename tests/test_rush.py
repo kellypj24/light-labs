@@ -201,6 +201,20 @@ class HeartbeatTest(unittest.TestCase):
         self.assertTrue(drafted[0]["draft"].startswith("On it"))
         self.assertTrue((self.store.root / "escalations" / f"{drafted[0]['id']}.md").exists())
 
+    def test_network_failure_keeps_seen_state(self):
+        self.hb.tick()
+        self.client.items = [item("b2", "bravo")]
+        self.client.messages["b2"] = {"content": "question"}
+
+        def down(task_id):
+            raise TimeoutError("edge timed out")
+
+        self.client.task = down
+        with self.assertRaises(TimeoutError):
+            self.hb.tick()
+        self.assertIn("b2", self.store.load()["seen_messages"])
+        self.assertEqual(len(self.store.pending()), 1)  # drafted once, not again next tick
+
     def test_queue_resolve(self):
         i = self.store.enqueue("reply", {"to": ["alpha"]}, "d", "c")
         self.store.resolve(i["id"], "sent", result_id="x")

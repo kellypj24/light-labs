@@ -211,9 +211,16 @@ class Heartbeat:
         state = self.store.load()
         # First run: mark the existing backlog as seen unless asked to backfill.
         seed = not state["initialized"] and not backfill
-        drafted = self._inbox(state, seed) + self._tasks(state, seed)
-        if self.mention is not None:
-            drafted += self._mentions(state, backfill)
+        drafted = []
+        try:
+            drafted += self._inbox(state, seed)
+            drafted += self._tasks(state, seed)
+            if self.mention is not None:
+                drafted += self._mentions(state, backfill)
+        except OSError as e:  # edge unreachable: keep what was seen, so nothing is redrafted
+            self.store.save(state)
+            self.store.journal(f"tick failed after {len(drafted)} draft(s): {e}")
+            raise
         state["initialized"] = True
         self.store.save(state)
         self.store.journal(f"tick: {len(drafted)} draft(s)" + (" (seeded backlog)" if seed else ""))
@@ -346,7 +353,11 @@ class Heartbeat:
             **({"held": held} if self.autosend is not None and not send else {}),
         )
         if send:
-            result = post(self.client, self.actor, item)
+            try:
+                result = post(self.client, self.actor, item)
+            except OSError as e:  # stays in the queue for PJ
+                self.store.journal(f"auto-send of {item['id']} failed, left queued: {e}")
+                return item
             item = self.store.resolve(item["id"], "sent", result_id=result.get("id"), auto=True)
             self.store.journal(f"auto-sent {item['id']} ({kind})")
             return item
