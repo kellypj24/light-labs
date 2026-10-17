@@ -32,6 +32,8 @@ NOTIFY_TO = os.environ.get("RUSH_NOTIFY_TO", "")
 REMOTE_URL = os.environ.get("RUSH_REMOTE_URL", "")
 # No texts in these local hours ("start-end", 24h); drafts wait for the next tick after.
 QUIET_HOURS = os.environ.get("RUSH_QUIET_HOURS", "0-8")
+# Testing the wake schedule: text PJ after every tick until this local time (ISO).
+PING_UNTIL = os.environ.get("RUSH_PING_UNTIL", "")
 WAKE_MINUTES = int(os.environ.get("RUSH_WAKE_MINUTES") or 0)
 
 HOME = config.VAR / "rush"

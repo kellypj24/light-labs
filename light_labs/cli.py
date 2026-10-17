@@ -125,14 +125,17 @@ def rush_tick(args, store, rush):
     if not phone.wait_for_edge(lambda: client.inbox(rush.ACTOR)):
         store.journal("edge unreachable after waiting; tick skipped")
         sys.exit("edge unreachable")
+    ok = False
     try:
         _tick(args, store, rush, client)
+        ok = True
     finally:
         if rush.NOTIFY_TO:
             try:
                 phone.notify_pending(
                     store, rush.NOTIFY_TO, rush.REMOTE_URL, quiet_hours=rush.QUIET_HOURS
                 )
+                phone.ping(store, rush.NOTIFY_TO, rush.PING_UNTIL, ok, quiet_hours=rush.QUIET_HOURS)
             except (OSError, subprocess.CalledProcessError) as e:
                 store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
 

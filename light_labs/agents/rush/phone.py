@@ -93,6 +93,22 @@ def notify_pending(store, to, remote_url=None, send=imessage, quiet_hours=None, 
     return texted
 
 
+def ping(store, to, until, ok, send=imessage, quiet_hours=None, now=None):
+    """While testing (until a local ISO time), text PJ after every tick so he can see the
+    Mac woke and the tick ran. Same quiet hours as drafts. True when a ping went out."""
+    now = now or datetime.now()
+    if not until or now >= datetime.fromisoformat(until) or quiet(quiet_hours, now):
+        return False
+    waiting = len(store.pending())
+    send(
+        to,
+        f"{PREFIX} test ping {now:%-I:%M %p}. Awake; board check "
+        f"{'ran' if ok else 'failed'}; {waiting} draft{'s' if waiting != 1 else ''} waiting.",
+    )
+    store.journal("sent PJ a test ping")
+    return True
+
+
 _WAKE = re.compile(r"wake at (\d{1,2}/\d{1,2}/\d{2,4} \d{1,2}:\d{2}:\d{2})", re.IGNORECASE)
 
 
