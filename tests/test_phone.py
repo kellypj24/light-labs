@@ -7,6 +7,7 @@ from subprocess import CompletedProcess
 from light_labs.agents.rush.phone import (
     PREFIX,
     notify_pending,
+    ping,
     quiet,
     schedule_wake,
     text_for,
@@ -89,6 +90,30 @@ class TextTest(unittest.TestCase):
         self.assertTrue(quiet("22-7", datetime(2026, 1, 1, 6)))
         self.assertFalse(quiet("22-7", datetime(2026, 1, 1, 12)))
         self.assertFalse(quiet("", datetime(2026, 1, 1, 3)))
+
+
+class PingTest(unittest.TestCase):
+    def test_pings_until_the_cutoff_and_not_in_quiet_hours(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, sent = Store(Path(tmp)), []
+
+            def send(to, text):
+                sent.append(text)
+
+            until = "2026-10-17T23:59"
+            self.assertTrue(
+                ping(store, "me", until, True, send, "0-8", datetime(2026, 10, 17, 18, 5))
+            )
+            self.assertEqual(
+                sent[0], f"{PREFIX} test ping 6:05 PM. Awake; board check ran; 0 drafts waiting."
+            )
+            self.assertFalse(
+                ping(store, "me", until, True, send, "0-8", datetime(2026, 10, 18, 0, 5))
+            )
+            self.assertFalse(
+                ping(store, "me", "", True, send, "0-8", datetime(2026, 10, 17, 18, 5))
+            )
+            self.assertEqual(len(sent), 1)
 
 
 class WakeTest(unittest.TestCase):
