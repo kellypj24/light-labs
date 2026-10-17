@@ -74,7 +74,9 @@ def digest_for(items, remote_url=None):
     return f"{PREFIX} {len(items)} drafts waiting.\n" + "\n".join(lines) + link
 
 
-def notify_pending(store, to, remote_url=None, send=imessage, quiet_hours=None, now=None):
+def notify_pending(
+    store, to, remote_url=None, send=imessage, quiet_hours=None, now=None, send_item=None
+):
     """At most one text per tick about drafts PJ hasn't heard about: the draft itself, or
     a digest when several are new. Nothing during quiet hours; they wait for the next tick
     after. Returns the ids covered."""
@@ -85,7 +87,10 @@ def notify_pending(store, to, remote_url=None, send=imessage, quiet_hours=None, 
     new = [i for i in store.pending() if i["id"] not in notified]
     if not new:
         return []
-    send(to, text_for(new[0], remote_url) if len(new) == 1 else digest_for(new, remote_url))
+    if len(new) == 1 and send_item:  # a channel with buttons (Telegram)
+        send_item(new[0], text_for(new[0], remote_url))
+    else:
+        send(to, text_for(new[0], remote_url) if len(new) == 1 else digest_for(new, remote_url))
     texted = [i["id"] for i in new]
     state["notified"] = (notified + texted)[-KEEP_NOTIFIED:]
     store.save(state)

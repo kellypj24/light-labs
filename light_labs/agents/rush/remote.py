@@ -349,6 +349,16 @@ def handler(remote):
 def serve(store, rush, host="127.0.0.1", port=8787, allowed=None, tick=None):
     remote = Remote(store, rush, allowed=allowed or [tailnet_login()], tick=tick)
     server = ThreadingHTTPServer((host, port), handler(remote))
+    if rush.TELEGRAM_CHAT:  # PJ's replies on Telegram, handled while the Mac is awake
+        from light_labs.agents.rush.telegram import Telegram
+
+        try:
+            tg = Telegram.from_keychain(rush.TELEGRAM_CHAT, store.root / "telegram.json")
+        except subprocess.CalledProcessError:
+            print("Telegram: no token in Keychain; page only")
+        else:
+            threading.Thread(target=tg.poll_forever, args=(remote,), daemon=True).start()
+            print("Telegram: polling")
     print(f"Rush remote on http://{host}:{port} for {sorted(remote.allowed)}")
     server.serve_forever()
 

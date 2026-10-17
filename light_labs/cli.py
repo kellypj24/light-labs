@@ -130,14 +130,29 @@ def rush_tick(args, store, rush):
         _tick(args, store, rush, client)
         ok = True
     finally:
-        if rush.NOTIFY_TO:
-            try:
-                phone.notify_pending(
-                    store, rush.NOTIFY_TO, rush.REMOTE_URL, quiet_hours=rush.QUIET_HOURS
-                )
-                phone.ping(store, rush.NOTIFY_TO, rush.PING_UNTIL, ok, quiet_hours=rush.QUIET_HOURS)
-            except (OSError, subprocess.CalledProcessError) as e:
-                store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
+        _text_pj(store, rush, ok)
+
+
+def _text_pj(store, rush, ok):
+    """Drafts waiting and test pings, over Telegram when it is set up, else iMessage."""
+    from light_labs.agents.rush import phone
+
+    if not (rush.TELEGRAM_CHAT or rush.NOTIFY_TO):
+        return
+    try:
+        if rush.TELEGRAM_CHAT:
+            from light_labs.agents.rush.telegram import Telegram
+
+            tg = Telegram.from_keychain(rush.TELEGRAM_CHAT, store.root / "telegram.json")
+            to, send, send_item = rush.TELEGRAM_CHAT, tg.text, tg.draft
+        else:
+            to, send, send_item = rush.NOTIFY_TO, phone.imessage, None
+        phone.notify_pending(
+            store, to, rush.REMOTE_URL, send, rush.QUIET_HOURS, send_item=send_item
+        )
+        phone.ping(store, to, rush.PING_UNTIL, ok, send, rush.QUIET_HOURS)
+    except (OSError, subprocess.CalledProcessError) as e:
+        store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
 
 
 def _tick(args, store, rush, client):
@@ -253,6 +268,17 @@ def rush_remote(args, store, rush):
     )
 
 
+def rush_telegram_link(args, store, rush):
+    """After PJ sends the bot /start: the chat ids that wrote to it, for RUSH_TELEGRAM_CHAT."""
+    from light_labs.agents.rush import telegram
+
+    chats = telegram.link(telegram.keychain_token(telegram.KEYCHAIN))
+    for chat_id, name in chats:
+        print(f"{chat_id}  {name}")
+    if not chats:
+        print("no messages yet: send the bot /start, then run this again")
+
+
 def cmd_git(args):
     from light_labs import gitops
 
@@ -343,6 +369,7 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
+    rcmd.add_parser("telegram-link", help="chat ids that messaged the bot (RUSH_TELEGRAM_CHAT)")
     remote_p = rcmd.add_parser("remote", help="phone page for the queue and board (tailnet only)")
     remote_p.add_argument("--port", type=int, default=8787)
     remote_p.add_argument(
@@ -361,7 +388,7 @@ def main(argv=None):
         return
     from light_labs.agents import rush
 
-    globals()[f"rush_{args.cmd}"](args, Store(rush.HOME), rush)
+    globals()[f"rush_{args.cmd.replace('-', '_')}"](args, Store(rush.HOME), rush)
 
 
 if __name__ == "__main__":
