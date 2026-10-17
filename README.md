@@ -51,7 +51,7 @@ whatever a robot escalates. It never competes.
 
 | DLN | Name | Status | Job |
 |---|---|---|---|
-| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox and watched board tasks on Agent Net, drafts replies, escalates work to Auto. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
+| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox, watched board tasks, and any task or comment that names it on Agent Net, drafts replies, escalates work to Auto. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
 | DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
 | DLN-102 | Roll | training | Housekeeper. Drafts commit messages from a diff for review; later PR bodies and triage of the branches `lab git tidy` leaves for review. Scored on 44 of PJ's merged PRs: conventional subject, a body, the right type, nothing named that the diff doesn't show. |
 

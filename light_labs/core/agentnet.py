@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+import time
+import urllib.error
 import urllib.request
 
 from light_labs import config
@@ -14,6 +16,11 @@ def keychain_token(service=config.KEYCHAIN_SERVICE):
         text=True,
         check=True,
     ).stdout.strip()
+
+
+# The edge rate-limits bursts with 429.
+RETRIES = 3
+BACKOFF = 5
 
 
 class Client:
@@ -38,8 +45,15 @@ class Client:
             method=method,
             headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            raw = resp.read().decode()
+        for attempt in range(RETRIES + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    raw = resp.read().decode()
+                break
+            except urllib.error.HTTPError as e:
+                if e.code != 429 or attempt == RETRIES:
+                    raise
+                time.sleep(BACKOFF * (attempt + 1))
         # The edge emits unescaped control characters in some strings.
         return json.loads(raw, strict=False) if raw else {}
 
@@ -61,6 +75,10 @@ class Client:
         if in_reply_to:
             note["inReplyTo"] = in_reply_to
         return self._call("POST", f"/inbox/actors/{actor}/outbox", note)
+
+    def list_tasks(self):
+        """Every board task, comments included."""
+        return self._call("GET", "/board/tasks")
 
     def task(self, task_id):
         return self._call("GET", f"/board/tasks/{task_id}")

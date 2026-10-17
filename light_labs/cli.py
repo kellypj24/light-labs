@@ -130,6 +130,7 @@ def rush_tick(args, store, rush):
         temperature=rush.TEMPERATURE,
         meta=_draft_meta(f"ollama:{rush.MODEL}"),
         autosend=Policy(rush.AUTO_SEND, store),
+        mention=rush.MENTION,
     )
     for item in hb.tick(backfill=args.backfill):
         print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))
