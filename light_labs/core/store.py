@@ -54,6 +54,13 @@ class Store:
     def get(self, item_id):
         return json.loads(self._path("pending", item_id).read_text())
 
+    def update(self, item_id, **fields):
+        """Change a pending item in place (PJ's edit to a draft)."""
+        item = self.get(item_id)
+        item.update(fields)
+        self._path("pending", item_id).write_text(json.dumps(item, indent=2) + "\n")
+        return item
+
     def resolve(self, item_id, outcome, **extra):
         item = self.get(item_id)
         item.update(extra, resolved=now())

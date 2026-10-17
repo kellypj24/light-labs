@@ -214,6 +214,19 @@ def rush_escalate(args, store, rush):
     subprocess.run(["claude", "-p", prompt], check=True)
 
 
+def rush_remote(args, store, rush):
+    """The phone page: queue, board, inbox. Publish with `tailscale serve`."""
+    from light_labs.agents.rush import remote
+
+    remote.serve(
+        store,
+        rush,
+        port=args.port,
+        allowed=args.allow or None,
+        tick=remote.cli_tick(store, rush),
+    )
+
+
 def cmd_git(args):
     from light_labs import gitops
 
@@ -304,6 +317,11 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
+    remote_p = rcmd.add_parser("remote", help="phone page for the queue and board (tailnet only)")
+    remote_p.add_argument("--port", type=int, default=8787)
+    remote_p.add_argument(
+        "--allow", action="append", help="Tailscale login allowed in (default: this machine's)"
+    )
     reject_p = rcmd.add_parser("reject")
     reject_p.add_argument("id")
     reject_p.add_argument("--reason", help="why, for the queue analytics")
