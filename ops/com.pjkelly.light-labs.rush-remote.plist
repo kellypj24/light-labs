@@ -15,6 +15,11 @@
     <string>rush</string>
     <string>remote</string>
   </array>
+  <!-- launchd's PATH lacks /usr/local/bin, where the tailscale CLI lives. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/rush/remote.log</string>
