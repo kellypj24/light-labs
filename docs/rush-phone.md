@@ -8,7 +8,18 @@ Rush runs on the MacBook. The phone reaches it two ways:
 | Texts (`RUSH_NOTIFY_TO`) | At most one iMessage per tick, starting `Rush:`: the waiting draft with a link to it, or a digest when several are new. None in quiet hours (`RUSH_QUIET_HOURS`, default `0-8`) | Messages signed in on the Mac; Automation access to Messages (one prompt) |
 | Wake schedule (`RUSH_WAKE_MINUTES`) | Each tick schedules the next wake, so the Mac sleeps between ticks | One sudoers line for `pmset schedule wake` |
 
-Rush only sends texts. It never reads Messages, so nothing needs Full Disk Access.
+| Telegram (`RUSH_TELEGRAM_CHAT`) | Replaces iMessage when set: Rush is its own contact, drafts come with Send / Reject buttons, a reply to a draft sends PJ's text (or rejects on "no …"), `/queue`, `/tick` | A bot from @BotFather, its token in Keychain |
+
+Over iMessage Rush only sends; it never reads Messages, so nothing needs Full Disk Access.
+Over Telegram, replies are read by the remote's process while the Mac is awake (Telegram
+holds them for a day), and message contents pass through Telegram's servers.
+
+## Telegram
+
+1. In Telegram, message @BotFather: `/newbot`, name it Rush, pick a username ending in `bot`.
+2. Store the token: `security add-generic-password -s light-labs-rush-telegram -a rush -w '<token>'`
+3. Send the bot `/start`, then `lab rush telegram-link` prints the chat id.
+4. `.env`: `RUSH_TELEGRAM_CHAT=<chat id>`, then `just rush-install` to restart the remote.
 
 ## Setup
 
