@@ -1,8 +1,10 @@
 """Rush and PJ's phone: texts through Messages, and waking the Mac for the next tick.
 
 Texts go to PJ's own number, so every message Rush sends starts with PREFIX to tell it
-apart from PJ's. Each text links to the draft on the remote page (remote.py), where PJ
-sends or rejects it; Rush never reads Messages, so it needs no Full Disk Access.
+apart from PJ's. At most one text per tick, and none in PJ's quiet hours (RUSH_QUIET_HOURS,
+default midnight to 8am); that covers texts only, not Rush's work on the board. Each text
+links to the remote page (remote.py), where PJ sends or rejects drafts; Rush never reads
+Messages, so it needs no Full Disk Access.
 
 The Mac sleeps between ticks. Each tick schedules the next wake with `pmset schedule
 wake`, which needs root: one sudoers line limited to that command (see docs/rush-phone.md).
@@ -18,6 +20,7 @@ from datetime import datetime, timedelta
 PREFIX = "Rush:"
 DRAFT_CHARS = 300
 KEEP_NOTIFIED = 200
+DIGEST_LINES = 5
 
 _SEND = """on run argv
   tell application "Messages"
@@ -48,21 +51,45 @@ def text_for(item, remote_url=None):
     return f"{PREFIX} {who} on {where}, {why}.\n\n{draft}{link}"
 
 
-def notify_pending(store, to, remote_url=None, send=imessage):
-    """Text PJ once per draft waiting in the queue. Returns the ids texted."""
+def quiet(hours, now=None):
+    """True inside PJ's quiet hours, given as "start-end" in local 24h hours ("0-8")."""
+    if not hours:
+        return False
+    start, end = (int(h) for h in hours.split("-"))
+    hour = (now or datetime.now()).hour
+    return start <= hour < end if start < end else hour >= start or hour < end
+
+
+def digest_for(items, remote_url=None):
+    """One text for several waiting drafts, so a backlog never arrives as a burst."""
+    lines = [
+        f"- {i['context'].split(':', 1)[0][:40]} on {i['target'].get('task_id') or 'inbox'}"
+        + (" (needs you)" if i.get("escalate") else "")
+        for i in items[:DIGEST_LINES]
+    ]
+    more = len(items) - DIGEST_LINES
+    if more > 0:
+        lines.append(f"- and {more} more")
+    link = f"\n\n{remote_url.rstrip('/')}/" if remote_url else ""
+    return f"{PREFIX} {len(items)} drafts waiting.\n" + "\n".join(lines) + link
+
+
+def notify_pending(store, to, remote_url=None, send=imessage, quiet_hours=None, now=None):
+    """At most one text per tick about drafts PJ hasn't heard about: the draft itself, or
+    a digest when several are new. Nothing during quiet hours; they wait for the next tick
+    after. Returns the ids covered."""
+    if quiet(quiet_hours, now):
+        return []
     state = store.load()
     notified = state.get("notified", [])
-    texted = []
-    for item in store.pending():
-        if item["id"] in notified:
-            continue
-        send(to, text_for(item, remote_url))
-        notified.append(item["id"])
-        texted.append(item["id"])
-    if texted:
-        state["notified"] = notified[-KEEP_NOTIFIED:]
-        store.save(state)
-        store.journal(f"texted PJ about {', '.join(texted)}")
+    new = [i for i in store.pending() if i["id"] not in notified]
+    if not new:
+        return []
+    send(to, text_for(new[0], remote_url) if len(new) == 1 else digest_for(new, remote_url))
+    texted = [i["id"] for i in new]
+    state["notified"] = (notified + texted)[-KEEP_NOTIFIED:]
+    store.save(state)
+    store.journal(f"texted PJ about {', '.join(texted)}")
     return texted
 
 

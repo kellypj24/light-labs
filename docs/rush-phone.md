@@ -5,7 +5,7 @@ Rush runs on the MacBook. The phone reaches it two ways:
 | Piece | What it does | Needs |
 |---|---|---|
 | Remote page (`lab rush remote`) | Queue (edit and send, reject), board, inbox, comment as PJ | Tailscale on the phone; `tailscale serve` on the Mac |
-| Texts (`RUSH_NOTIFY_TO`) | One iMessage per draft waiting on PJ, starting `Rush:`, with a link to it on the remote page | Messages signed in on the Mac; Automation access to Messages (one prompt) |
+| Texts (`RUSH_NOTIFY_TO`) | At most one iMessage per tick, starting `Rush:`: the waiting draft with a link to it, or a digest when several are new. None in quiet hours (`RUSH_QUIET_HOURS`, default `0-8`) | Messages signed in on the Mac; Automation access to Messages (one prompt) |
 | Wake schedule (`RUSH_WAKE_MINUTES`) | Each tick schedules the next wake, so the Mac sleeps between ticks | One sudoers line for `pmset schedule wake` |
 
 Rush only sends texts. It never reads Messages, so nothing needs Full Disk Access.

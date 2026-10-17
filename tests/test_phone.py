@@ -7,6 +7,7 @@ from subprocess import CompletedProcess
 from light_labs.agents.rush.phone import (
     PREFIX,
     notify_pending,
+    quiet,
     schedule_wake,
     text_for,
     wait_for_edge,
@@ -41,25 +42,53 @@ class TextTest(unittest.TestCase):
     def send(self, to, text):
         self.sent.append((to, text))
 
-    def test_texts_each_waiting_draft_once(self):
+    def test_one_new_draft_is_texted_once_with_its_link(self):
         a = self.store.enqueue("comment", {"task_id": "t1"}, "Thanks!", "muse: nice work")
-        b = self.store.enqueue(
-            "reply", {"to": ["devin"]}, "On it.", "devin: run X", escalate="run X"
-        )
-        texted = notify_pending(self.store, "me", "http://mac/", self.send)
-        self.assertCountEqual(texted, [a["id"], b["id"]])
+        self.assertEqual(notify_pending(self.store, "me", "http://mac/", self.send), [a["id"]])
         self.assertEqual(notify_pending(self.store, "me", "http://mac/", self.send), [])
-        texts = {t.rsplit("#", 1)[1]: (to, t) for to, t in self.sent}
-        to, text = texts[a["id"]]
+        [(to, text)] = self.sent
         self.assertEqual(to, "me")
         self.assertTrue(text.startswith(f"{PREFIX} muse on t1, waiting for approval."))
-        self.assertIn("needs you (run X)", texts[b["id"]][1])
+        self.assertTrue(text.endswith(f"http://mac/#{a['id']}"))
+
+    def test_escalations_say_they_need_pj(self):
+        item = self.store.enqueue(
+            "reply", {"to": ["devin"]}, "On it.", "devin: x", escalate="run X"
+        )
+        self.assertIn("devin on inbox, needs you (run X).", text_for(item))
 
     def test_long_drafts_are_clipped_and_link_is_optional(self):
         item = self.store.enqueue("comment", {"task_id": "t1"}, "x" * 1000, "muse: hi")
         text = text_for(item)
         self.assertIn("x" * 300 + "…", text)
         self.assertNotIn("http", text)
+
+    def test_several_new_drafts_become_one_digest(self):
+        for n in range(7):
+            self.store.enqueue("comment", {"task_id": f"t{n}"}, "d", f"agent{n}: hi")
+        self.assertEqual(len(notify_pending(self.store, "me", "http://mac", self.send)), 7)
+        self.assertEqual(len(self.sent), 1)
+        text = self.sent[0][1]
+        self.assertTrue(text.startswith(f"{PREFIX} 7 drafts waiting."))
+        self.assertIn("- and 2 more", text)
+        self.assertTrue(text.endswith("http://mac/"))
+
+    def test_quiet_hours_hold_texts_until_morning(self):
+        self.store.enqueue("comment", {"task_id": "t1"}, "d", "muse: hi")
+        night, morning = datetime(2026, 10, 17, 2, 30), datetime(2026, 10, 17, 8, 0)
+        self.assertEqual(
+            notify_pending(self.store, "me", send=self.send, quiet_hours="0-8", now=night), []
+        )
+        self.assertEqual(self.sent, [])
+        self.assertEqual(
+            len(notify_pending(self.store, "me", send=self.send, quiet_hours="0-8", now=morning)), 1
+        )
+
+    def test_quiet_hours_can_wrap_midnight(self):
+        self.assertTrue(quiet("22-7", datetime(2026, 1, 1, 23)))
+        self.assertTrue(quiet("22-7", datetime(2026, 1, 1, 6)))
+        self.assertFalse(quiet("22-7", datetime(2026, 1, 1, 12)))
+        self.assertFalse(quiet("", datetime(2026, 1, 1, 3)))
 
 
 class WakeTest(unittest.TestCase):

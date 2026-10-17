@@ -130,7 +130,9 @@ def rush_tick(args, store, rush):
     finally:
         if rush.NOTIFY_TO:
             try:
-                phone.notify_pending(store, rush.NOTIFY_TO, rush.REMOTE_URL)
+                phone.notify_pending(
+                    store, rush.NOTIFY_TO, rush.REMOTE_URL, quiet_hours=rush.QUIET_HOURS
+                )
             except (OSError, subprocess.CalledProcessError) as e:
                 store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
 
