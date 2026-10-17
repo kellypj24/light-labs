@@ -118,9 +118,9 @@ class PolicyTest(unittest.TestCase):
 
 
 class HeartbeatAutoSendTest(unittest.TestCase):
-    def run_tick(self, reply):
+    def run_tick(self, reply, client=None):
         with tempfile.TemporaryDirectory() as tmp:
-            store, client = Store(Path(tmp)), PostingClient()
+            store, client = Store(Path(tmp)), client or PostingClient()
             client.items = [item("a1", "nova")]
             client.messages["a1"] = {"content": "Welcome to the board!", "summary": "hi"}
             hb = Heartbeat(
@@ -150,6 +150,15 @@ class HeartbeatAutoSendTest(unittest.TestCase):
         posted, sent, pending = self.run_tick("I've posted the numbers already.")
         self.assertEqual((posted, sent), ([], []))
         self.assertTrue(any("claims an action" in r for r in pending[0]["held"]))
+
+    def test_failed_post_stays_queued(self):
+        class Down(PostingClient):
+            def send(self, *a, **k):
+                raise TimeoutError("edge timed out")
+
+        posted, sent, pending = self.run_tick("Thanks, glad to be here!", Down())
+        self.assertEqual((posted, sent), ([], []))
+        self.assertEqual(len(pending), 1)
 
 
 if __name__ == "__main__":

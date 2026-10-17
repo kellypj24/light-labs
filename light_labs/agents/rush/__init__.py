@@ -1,6 +1,7 @@
 """DLN-100 Rush: the lab's heartbeat and messenger."""
 
 import os
+import re
 from pathlib import Path
 
 from light_labs import config
@@ -21,6 +22,9 @@ AUTO_SEND = ENTRY.get("auto_send", {})
 
 # Board tasks Rush watches for new comments.
 WATCH_TASKS = [t for t in os.environ.get("RUSH_WATCH_TASKS", "").split(",") if t]
+
+# Anywhere else on the board, Rush answers tasks and comments that name it.
+MENTION = re.compile(rf"\b({re.escape(NAME)}|{re.escape(ACTOR)}|{ENTRY['dln']})\b", re.IGNORECASE)
 
 HOME = config.VAR / "rush"
 

@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +20,7 @@ def item(mid, sender, broadcast=False):
 
 class FakeClient:
     def __init__(self):
-        self.items, self.messages, self.tasks = [], {}, {}
+        self.items, self.messages, self.tasks, self.board = [], {}, {}, []
 
     def inbox(self, actor):
         return {"items": self.items}
@@ -29,6 +30,9 @@ class FakeClient:
 
     def task(self, task_id):
         return self.tasks[task_id]
+
+    def list_tasks(self):
+        return self.board
 
 
 class FakeBrain:
@@ -197,11 +201,123 @@ class HeartbeatTest(unittest.TestCase):
         self.assertTrue(drafted[0]["draft"].startswith("On it"))
         self.assertTrue((self.store.root / "escalations" / f"{drafted[0]['id']}.md").exists())
 
+    def test_network_failure_keeps_seen_state(self):
+        self.hb.tick()
+        self.client.items = [item("b2", "bravo")]
+        self.client.messages["b2"] = {"content": "question"}
+
+        def down(task_id):
+            raise TimeoutError("edge timed out")
+
+        self.client.task = down
+        with self.assertRaises(TimeoutError):
+            self.hb.tick()
+        self.assertIn("b2", self.store.load()["seen_messages"])
+        self.assertEqual(len(self.store.pending()), 1)  # drafted once, not again next tick
+
     def test_queue_resolve(self):
         i = self.store.enqueue("reply", {"to": ["alpha"]}, "d", "c")
         self.store.resolve(i["id"], "sent", result_id="x")
         self.assertEqual(self.store.pending(), [])
         self.assertTrue((self.store.root / "queue/sent" / f"{i['id']}.json").exists())
+
+
+def board_task(tid, updated, comments=(), title="Fight", description="", created="2026-01-01"):
+    return {
+        "id": tid,
+        "title": title,
+        "description": description,
+        "createdBy": "devin",
+        "createdAt": created,
+        "updatedAt": updated,
+        "comments": list(comments),
+    }
+
+
+class MentionTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name))
+        self.client, self.brain = FakeClient(), FakeBrain()
+        self.client.tasks["t1"] = {"title": "Lenses", "comments": []}
+        self.hb = Heartbeat(
+            self.client,
+            self.brain,
+            self.store,
+            "persona",
+            actor="pj_agent",
+            watch_tasks=["t1"],
+            name="Rush",
+            signoff="— Rush",
+            mention=re.compile(r"\b(rush|pj_agent|DLN-100)\b", re.IGNORECASE),
+        )
+        self.client.board = [
+            board_task("old", "2026-01-02", [{"author": "a", "text": "rush?", "at": "2026-01-02"}])
+        ]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_first_scan_records_position_only(self):
+        self.assertEqual(self.hb.tick(), [])
+        self.assertEqual(self.store.load()["board_since"], "2026-01-02")
+
+    def test_one_draft_per_task_for_newest_mention(self):
+        self.hb.tick()
+        self.client.board = [
+            board_task(
+                "x",
+                "2026-01-05",
+                [
+                    {"author": "devin", "text": "for rush: fight one", "at": "2026-01-03"},
+                    {"author": "devin", "text": "unrelated", "at": "2026-01-04"},
+                    {"author": "muse", "text": "Rush, fight two", "at": "2026-01-05"},
+                ],
+            ),
+            board_task(
+                "y", "2026-01-05", [{"author": "muse", "text": "no names", "at": "2026-01-05"}]
+            ),
+        ]
+        drafted = self.hb.tick()
+        self.assertEqual([d["target"] for d in drafted], [{"task_id": "x"}])
+        self.assertIn("fight two", self.brain.prompts[-1])
+        self.assertIn("fight one", self.brain.prompts[-1])  # earlier thread is context
+        self.assertEqual(self.hb.tick(), [])  # nothing drafted twice
+
+    def test_new_task_naming_rush(self):
+        self.hb.tick()
+        self.client.board = [
+            board_task(
+                "n",
+                "2026-01-06",
+                title="For Rush: trial",
+                description="run it",
+                created="2026-01-06",
+            )
+        ]
+        drafted = self.hb.tick()
+        self.assertEqual(drafted[0]["target"], {"task_id": "n"})
+        self.assertIn("new board task", self.brain.prompts[-1])
+
+    def test_skips_watched_answered_and_own(self):
+        self.hb.tick()
+        self.client.board = [
+            board_task("t1", "2026-01-07", [{"author": "a", "text": "rush", "at": "2026-01-07"}]),
+            board_task(
+                "z",
+                "2026-01-07",
+                [
+                    {"author": "a", "text": "rush?", "at": "2026-01-06"},
+                    {"author": "pj_agent", "text": "answered", "at": "2026-01-07"},
+                ],
+            ),
+            board_task(
+                "w",
+                "2026-01-07",
+                [{"author": "pj_agent", "text": "— Rush (DLN-100, pj_agent)", "at": "2026-01-07"}],
+            ),
+        ]
+        self.assertEqual(self.hb.tick(), [])
 
 
 class HelpersTest(unittest.TestCase):
