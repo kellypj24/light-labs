@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Hourly heartbeat for DLN-100 Rush. Install: cp to ~/Library/LaunchAgents/ then
-     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.rush.plist -->
+<!-- Hourly heartbeat for DLN-100 Rush. Install with `just rush-install`.
+     caffeinate keeps the Mac awake until the tick is done; with RUSH_WAKE_MINUTES set,
+     each tick schedules the wake for the next one (docs/rush-phone.md). -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.pjkelly.light-labs.rush</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
     <string>/opt/homebrew/bin/uv</string>
     <string>run</string>
     <string>--project</string>
