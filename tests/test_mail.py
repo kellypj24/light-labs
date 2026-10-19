@@ -28,19 +28,31 @@ class TriageTest(unittest.TestCase):
         out = mail.triage(brain, msg(category="promotions", unsubscribe=True, subject="Sale"))
         self.assertEqual((out["label"], out["by"], brain.calls), ("newsletter", "rule", []))
 
-    def test_model_label_and_summary(self):
-        brain = Brain("LABEL: needs_reply\nSUMMARY: Dana asks if 3pm Thursday works.")
+    def test_classify_then_summarize(self):
+        class Two:
+            def __init__(self):
+                self.calls = []
+
+            def think(self, system, user, **kw):
+                self.calls.append((system, user))
+                return "needs_reply" if len(self.calls) == 1 else "Dana asks about 3pm Thursday."
+
+        brain = Two()
         out = mail.triage(brain, msg())
         self.assertEqual(
-            (out["label"], out["summary"]), ("needs_reply", "Dana asks if 3pm Thursday works.")
+            (out["label"], out["summary"]), ("needs_reply", "Dana asks about 3pm Thursday.")
         )
-        self.assertIn("Unsubscribe header: no", brain.calls[0])
+        self.assertEqual(brain.calls[0][0], mail.CLASSIFY)
+        self.assertIn("Unsubscribe header: no", brain.calls[0][1])
+        self.assertIn("what the sender wants", brain.calls[1][0])
 
-    def test_parse_tolerates_decoration_and_rejects_unknown_labels(self):
-        self.assertEqual(mail.parse("**LABEL:** Needs Reply\nSUMMARY: x")[0], "needs_reply")
-        self.assertEqual(mail.parse("LABEL: urgent\nSUMMARY: x")[0], None)
+    def test_parse_tolerates_decoration_and_unknown_answers_are_unsorted(self):
+        self.assertEqual(mail.parse_label("**Needs reply**"), "needs_reply")
+        self.assertEqual(mail.parse_label("Label: spam."), "spam")
+        self.assertIsNone(mail.parse_label("urgent"))
+        self.assertEqual(mail.parse_summary('SUMMARY: "Order shipped."\nmore'), "Order shipped.")
         out = mail.triage(Brain("I think this is important."), msg())
-        self.assertEqual((out["label"], out["by"]), ("fyi", "model-unparsed"))
+        self.assertEqual((out["label"], out["by"]), ("unsorted", "model-unparsed"))
 
 
 class FakeGmail:
@@ -62,7 +74,7 @@ class CheckTest(unittest.TestCase):
         self.store = Store(Path(self.tmp.name))
         self.sent = []
         self.gmail = FakeGmail(["a"])
-        self.brain = Brain("LABEL: needs_reply\nSUMMARY: asks a question.")
+        self.brain = Brain("needs_reply")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -78,7 +90,7 @@ class CheckTest(unittest.TestCase):
         self.assertEqual((item["id"], item["label"]), ("b", "needs_reply"))
         self.assertEqual(self.run_check(), [])
         self.assertEqual(len(self.sent), 1)
-        self.assertIn("Person b: asks a question.", self.sent[0])
+        self.assertIn("Person b: needs_reply", self.sent[0])
         self.assertTrue(self.sent[0].endswith("http://mac/mail"))
         logged = (self.store.root / "mail" / "me@x.jsonl").read_text().splitlines()
         self.assertNotIn("snippet", json.loads(logged[0]))  # contents are not kept
@@ -101,7 +113,7 @@ class CheckTest(unittest.TestCase):
         self.assertIn("mail check failed for me@x", (self.store.root / "journal.md").read_text())
 
     def test_nothing_to_reply_to_sends_nothing(self):
-        self.brain = Brain("LABEL: receipt\nSUMMARY: order shipped.")
+        self.brain = Brain("receipt")
         self.run_check()
         self.gmail.ids = ["b", "a"]
         self.run_check()
