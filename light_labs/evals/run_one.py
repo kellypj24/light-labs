@@ -49,7 +49,20 @@ def commit_message(brain, memory, inp):
     return stage.run_sample(brain, inp)
 
 
-STAGES = {"reply-draft": reply_draft, "dbt-model": dbt_model, "commit-message": commit_message}
+def mail_triage(brain, memory, inp):
+    """Rush labelling one email: the triage function the hourly mail check runs."""
+    from light_labs.agents.rush.mail import triage
+
+    out = triage(brain, inp)
+    return {"raw": out["raw"], "draft": out["summary"], "label": out["label"], "notes": out["by"]}
+
+
+STAGES = {
+    "reply-draft": reply_draft,
+    "dbt-model": dbt_model,
+    "commit-message": commit_message,
+    "mail-triage": mail_triage,
+}
 
 
 def run(payload):

@@ -209,6 +209,61 @@ class LandTest(RepoCase):
         self.assertIn("AssertionError: 1 != 2", out.getvalue())
         self.assertFalse(any(c[:2] == ("pr", "merge") for c in self.repo.calls))
 
+    def land_from(self, path):
+        """Land feature/x from `path` with GitHub faked: merge squashes it into origin's main,
+        the API call deletes origin's branch."""
+        repo = FakeGh(path)
+        repo.responses = self.repo.responses
+        self.repo.responses[("pr", "view")] = (
+            '{"state": "OPEN", "headRefName": "feature/x", "files": []}'
+        )
+
+        def merge(args):
+            clone = self.path.parent / "github"
+            sh(self.path.parent, "git", "clone", "-q", str(self.remote), str(clone))
+            sh(clone, "git", "merge", "-q", "--squash", "origin/feature/x")
+            sh(clone, "git", "-c", "user.name=gh", "-c", "user.email=g@h", "commit", "-qm", "x")
+            sh(clone, "git", "push", "-q", "origin", "main")
+
+        self.repo.responses[("pr", "merge")] = merge
+        self.repo.responses[("api", "-X")] = lambda args: sh(
+            self.path, "git", "push", "-q", "origin", "--delete", "feature/x"
+        )
+        out = io.StringIO()
+        gitops.land(repo, 9, wait=False, out=out)
+        return repo, out.getvalue()
+
+    def assert_gone(self):
+        self.assertEqual(sh(self.path, "git", "branch", "--list", "feature/x"), "")
+        self.assertNotIn("feature/x", sh(self.path, "git", "ls-remote", "--heads", "origin"))
+
+    def test_lands_while_another_worktree_has_main(self):
+        self.branch("feature/x", push=True)
+        wt = self.path.parent / "wt"
+        sh(self.path, "git", "worktree", "add", "-q", str(wt), "feature/x")
+        repo, out = self.land_from(wt)
+        self.assertEqual(repo.branch(), "")  # detached: main is the other worktree's
+        self.assertEqual(sh(wt, "git", "log", "-1", "--format=%s"), "x")
+        self.assertIn("detached (main is checked out in", out)
+        self.assert_gone()
+
+    def test_lands_onto_main_when_it_is_free(self):
+        self.branch("feature/x", push=True)
+        sh(self.path, "git", "checkout", "-q", "feature/x")
+        repo, out = self.land_from(self.path)
+        self.assertEqual(repo.branch(), "main")
+        self.assertEqual(sh(self.path, "git", "log", "-1", "--format=%s"), "x")
+        self.assertIn("on main; deleted feature/x", out)
+        self.assert_gone()
+
+    def test_a_branch_open_in_another_worktree_is_kept(self):
+        self.branch("feature/x", push=True)
+        wt = self.path.parent / "wt"
+        sh(self.path, "git", "worktree", "add", "-q", str(wt), "feature/x")
+        _, out = self.land_from(self.path)  # landed from main's checkout
+        self.assertIn("kept feature/x (checked out in", out)
+        self.assertEqual(sh(wt, "git", "branch", "--show-current"), "feature/x")
+
 
 LABELS = """
 [types.feat]
@@ -222,6 +277,8 @@ paths = ["evals/", "light_labs/evals/"]
 [areas.git]
 color = "bfdadc"
 paths = ["light_labs/gitops.py"]
+[states.idea]
+color = "c2e0c6"
 [keep]
 labels = ["dependencies"]
 """
@@ -241,6 +298,8 @@ class LabelsTest(RepoCase):
         )
         self.assertEqual(got, ["type: feat", "area: evals", "area: git"])
         self.assertEqual(gitops.labels_for("Rename things", ["README.md"], labels), [])
+        self.assertIn("state: idea", labels)
+        self.assertNotIn("state: idea", gitops.labels_for("idea: x", ["evals/a"], labels))
 
     def test_sync_plans_create_update_and_prune_but_keeps_tool_labels(self):
         self.repo.responses[("label", "list")] = (
@@ -254,7 +313,7 @@ class LabelsTest(RepoCase):
         self.assertEqual(
             plan,
             {("update", "type: fix"), ("create", "area: evals"), ("create", "area: git"),
-             ("delete", "bug")},
+             ("create", "state: idea"), ("delete", "bug")},
         )  # fmt: skip
         self.assertFalse(
             any(c[:2] in (("label", "create"), ("label", "delete")) for c in self.repo.calls)

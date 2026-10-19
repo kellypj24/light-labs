@@ -39,6 +39,17 @@ func TestScoreEscalate(t *testing.T) {
 	}
 }
 
+func TestScoreLabel(t *testing.T) {
+	r := run("Dana asks about Thursday.", nil)
+	r.Result.Label = "needs_reply"
+	if !passed(score(r, Expect{Label: "needs_reply"})) {
+		t.Fatal("matching label should pass")
+	}
+	if c := checkNamed(score(r, Expect{Label: "fyi"}), "label"); c == nil || c.Passed {
+		t.Fatal("wrong label should fail the label check")
+	}
+}
+
 func TestScoreTextChecks(t *testing.T) {
 	ex := Expect{MaxChars: 10, ContainsAny: []string{"Llama"}, MustNotContain: []string{"sam"},
 		MustNotMatch: []string{`here'?s (the|my) draft`}}

@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Hourly heartbeat for DLN-100 Rush. Install: cp to ~/Library/LaunchAgents/ then
-     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.rush.plist -->
+<!-- Hourly heartbeat for DLN-100 Rush. Install with `just rush-install`.
+     caffeinate keeps the Mac awake until the tick is done; with RUSH_WAKE_MINUTES set,
+     each tick schedules the wake for the next one (docs/rush-phone.md). -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.pjkelly.light-labs.rush</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
     <string>/opt/homebrew/bin/uv</string>
     <string>run</string>
     <string>--project</string>
@@ -15,7 +18,15 @@
     <string>rush</string>
     <string>tick</string>
   </array>
-  <key>StartInterval</key><integer>3600</integer>
+  <!-- Top of every hour, the same slot the tick schedules its wake for (phone.py).
+       A StartInterval timer counts from the last run and drifts off the wakes. -->
+  <!-- launchd's PATH lacks the CLIs the tick shells out to: gh (GitHub watch), claude
+       (Auto's drafts, the mail teacher), tailscale. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/pjkelly/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>0</integer></dict>
   <!-- Tick on load too: without it, every bootstrap (e.g. after pausing Rush for an
        eval) restarts the hour before the first tick. -->
   <key>RunAtLoad</key><true/>

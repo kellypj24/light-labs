@@ -226,18 +226,40 @@ def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
             out.write("FAILED\n" + failure_report(repo, checks) + "\n")
             raise GitError(f"#{pr} not merged")
         out.write(f"green ({len(checks)} checks)\n")
-    repo.gh("pr", "merge", str(pr), "--squash", "--delete-branch")
-    main = repo.main_branch()
+    # Merge and delete the branch on GitHub only: `gh pr merge --delete-branch` also
+    # switches this checkout to main, which git refuses while another worktree has it.
+    repo.gh("pr", "merge", str(pr), "--squash")
     head = info["headRefName"]
+    repo.gh("api", "-X", "DELETE", f"repos/{{owner}}/{{repo}}/git/refs/heads/{head}", check=False)
+    main = repo.main_branch()
+    repo.git("fetch", "-q", "--prune", "origin")
+    held = _worktree_of(repo, main)
     if repo.branch() == head:
-        repo.git("checkout", "-q", main)
+        if held:
+            repo.git("checkout", "-q", "--detach", f"origin/{main}")
+        else:
+            repo.git("checkout", "-q", main)
     if repo.branch() == main:
-        repo.git("pull", "-q", "--ff-only")
-    repo.git("branch", "-D", head, check=False)
-    repo.git("fetch", "-q", "origin", main)  # not on main: origin/main is otherwise stale
+        repo.git("merge", "-q", "--ff-only", f"origin/{main}")
+    kept = _worktree_of(repo, head)
+    if not kept:
+        repo.git("branch", "-D", head, check=False)
     out.write(f"merged #{pr}: {repo.git('log', '-1', '--format=%h %s', f'origin/{main}')}\n")
-    out.write(f"on {repo.branch()}; deleted {head}\n")
+    where = repo.branch() or f"origin/{main}, detached ({main} is checked out in {held})"
+    gone = f"kept {head} (checked out in {kept})" if kept else f"deleted {head}"
+    out.write(f"on {where}; {gone}\n")
     return [f["path"] for f in info.get("files", [])]
+
+
+def _worktree_of(repo, branch):
+    """Path of another worktree that has `branch` checked out, or None."""
+    here = Path(repo.git("rev-parse", "--show-toplevel")).resolve()
+    for block in repo.git("worktree", "list", "--porcelain").split("\n\n"):
+        fields = dict(line.partition(" ")[::2] for line in block.splitlines())
+        path = Path(fields.get("worktree", "")).resolve()
+        if fields.get("branch") == f"refs/heads/{branch}" and path != here:
+            return str(path)
+    return None
 
 
 # --- tidy -------------------------------------------------------------------------------
@@ -405,7 +427,8 @@ def load_labels(repo):
     """{name: {color, description, paths?}} from .github/labels.toml, or None without one.
 
     [types.<type>] become `type: <type>`; [areas.<area>] (with `paths` prefixes) become
-    `area: <area>`; [keep].labels are labels other tools set (Dependabot), left alone."""
+    `area: <area>`; [states.<state>] become `state: <state>` (issue states, never set by
+    `ship`/`label`); [keep].labels are labels other tools set (Dependabot), left alone."""
     import tomllib
 
     path = repo.path / LABELS_FILE
@@ -413,7 +436,7 @@ def load_labels(repo):
         return None
     data = tomllib.loads(path.read_text())
     labels = {}
-    for kind in ("types", "areas"):
+    for kind in ("types", "areas", "states"):
         for key, spec in data.get(kind, {}).items():
             labels[f"{kind[:-1]}: {key}"] = spec
     return labels, set(data.get("keep", {}).get("labels", []))

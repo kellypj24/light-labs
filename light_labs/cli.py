@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab evals {...} | lab queue {...} | lab git {...} | lab rush {...}"""
+"""lab roster | lab skills | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...}"""
 
 import argparse
 import json
@@ -96,6 +96,15 @@ def queue_ingest(args):
     print(f"db: {results.DB}")
 
 
+def claude_ingest(args):
+    from light_labs.core import claude_results
+    from light_labs.evals import results
+
+    new, total = claude_results.ingest(args.projects or None)
+    print(f"loaded {new} new transcript records ({total} in all)")
+    print(f"db: {results.DB}")
+
+
 def queue_status(args):
     from light_labs.evals import results
 
@@ -115,11 +124,93 @@ def queue_status(args):
 
 
 def rush_tick(args, store, rush):
+    from light_labs.agents.rush import phone
+
+    if rush.WAKE_MINUTES:  # first, so a failed tick still wakes the Mac for the next one
+        ok, detail = phone.schedule_wake(rush.WAKE_MINUTES)
+        if not ok:
+            store.journal(f"could not schedule the next wake: {detail}")
+    client = Client()
+    if not phone.wait_for_edge(lambda: client.inbox(rush.ACTOR)):
+        store.journal("edge unreachable after waiting; tick skipped")
+        sys.exit("edge unreachable")
+    ok = False
+    try:
+        _tick(args, store, rush, client)
+        ok = True
+    finally:
+        _text_pj(store, rush, ok)
+        if rush.MAIL_ACCOUNTS and (rush.TELEGRAM_CHAT or rush.NOTIFY_TO):
+            _mail(store, rush)
+
+
+def _mail(store, rush):
+    """Triage new mail with Rush's local brain; texts PJ about what needs a reply."""
+    from light_labs.agents.rush import mail
+    from light_labs.core.google import Gmail
+
+    try:
+        to, send, _ = _phone(store, rush)
+    except (OSError, subprocess.CalledProcessError) as e:
+        store.journal(f"mail skipped, no phone channel: {e}")
+        return
+    teacher = None
+    if rush.MAIL_TEACHER and not rush.mail_weapon():
+        from light_labs.core.brain import brain_for
+
+        teacher = brain_for(rush.MAIL_TEACHER)
+    mail.check(
+        store,
+        rush.MAIL_ACCOUNTS,
+        Brain(rush.MAIL_MODEL),
+        lambda account: Gmail("rush", account),
+        send,
+        to,
+        rush.REMOTE_URL,
+        rush.QUIET_HOURS,
+        teacher=teacher,
+    )
+
+
+def _phone(store, rush):
+    """(to, send, send_item) for PJ's phone: Telegram when it is set up, else iMessage."""
+    from light_labs.agents.rush import phone
+
+    if rush.TELEGRAM_CHAT:
+        from light_labs.agents.rush.telegram import Telegram
+
+        tg = Telegram.from_keychain(rush.TELEGRAM_CHAT, store.root / "telegram.json")
+        return rush.TELEGRAM_CHAT, tg.text, tg.draft
+    return rush.NOTIFY_TO, phone.imessage, None
+
+
+def _text_pj(store, rush, ok):
+    """Drafts waiting, test pings, then GitHub news, over PJ's phone channel."""
+    from light_labs.agents.rush import phone
+
+    if not (rush.TELEGRAM_CHAT or rush.NOTIFY_TO):
+        return
+    try:
+        to, send, send_item = _phone(store, rush)
+        phone.notify_pending(
+            store, to, rush.REMOTE_URL, send, rush.QUIET_HOURS, send_item=send_item
+        )
+        phone.ping(store, to, rush.PING_UNTIL, ok, send, rush.QUIET_HOURS)
+    except (OSError, subprocess.CalledProcessError) as e:
+        store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
+        return
+    if rush.GITHUB:
+        from light_labs.agents.rush import github
+
+        github.notify(store, to, send, rush.GITHUB_REPOS, rush.QUIET_HOURS)
+
+
+def _tick(args, store, rush, client):
     from light_labs.agents.rush.autosend import Policy
     from light_labs.agents.rush.heartbeat import Heartbeat
 
     hb = Heartbeat(
-        Client(),
+        client,
         Brain(rush.MODEL),
         store,
         rush.system_prompt,  # built per message so triggered skills load
@@ -130,9 +221,27 @@ def rush_tick(args, store, rush):
         temperature=rush.TEMPERATURE,
         meta=_draft_meta(f"ollama:{rush.MODEL}"),
         autosend=Policy(rush.AUTO_SEND, store),
+        mention=rush.MENTION,
+        auto=_auto(rush),
     )
     for item in hb.tick(backfill=args.backfill):
         print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))
+
+
+def _auto(rush):
+    """Auto's side of escalations: the brain, its system prompt with Rush's notes."""
+    if not rush.AUTO_BRAIN:
+        return None
+    from light_labs.agents.rush.heartbeat import AUTO_SYSTEM
+    from light_labs.core.brain import brain_for
+
+    notes = (rush.MEMORY if rush.MEMORY.exists() else rush.HERE / "memory.example.md").read_text()
+    return {
+        "brain": brain_for(rush.AUTO_BRAIN),
+        "system": AUTO_SYSTEM + notes,
+        "signoff": rush.AUTO_SIGNOFF,
+        "meta": {"brain": rush.AUTO_BRAIN},
+    }
 
 
 def rush_queue(args, store, rush):
@@ -213,6 +322,79 @@ def rush_escalate(args, store, rush):
     subprocess.run(["claude", "-p", prompt], check=True)
 
 
+def rush_remote(args, store, rush):
+    """The phone page: queue, board, inbox. Publish with `tailscale serve`."""
+    from light_labs.agents.rush import remote
+
+    remote.serve(
+        store,
+        rush,
+        port=args.port,
+        allowed=args.allow or None,
+        tick=remote.cli_tick(store, rush),
+    )
+
+
+def rush_mail_fixtures(args, store, rush):
+    """Teacher/local disagreements on real mail, rewritten as synthetic fixture candidates."""
+    from light_labs.agents.rush import mail
+    from light_labs.core.brain import brain_for
+
+    if not rush.MAIL_TEACHER:
+        sys.exit("RUSH_MAIL_TEACHER is not set")
+    made = mail.fixture_candidates(store, brain_for(rush.MAIL_TEACHER), args.limit)
+    for fx in made:
+        print(f"{fx['id']}: {fx['label']} (local said {fx['student_label']})")
+    print(f"{len(made)} candidate(s) in {store.root / 'mail' / 'fixture-candidates.jsonl'}")
+
+
+def rush_telegram_link(args, store, rush):
+    """After PJ sends the bot /start: the chat ids that wrote to it, for RUSH_TELEGRAM_CHAT."""
+    from light_labs.agents.rush import telegram
+
+    chats = telegram.link(telegram.keychain_token(telegram.KEYCHAIN))
+    for chat_id, name in chats:
+        print(f"{chat_id}  {name}")
+    if not chats:
+        print("no messages yet: send the bot /start, then run this again")
+
+
+def cmd_google(args):
+    """Robots' Google sign-ins: `auth <robot>` stores its token, `check <robot>` reads its
+    mailbox profile to prove the token works."""
+    from light_labs.core import google
+
+    if args.cmd == "auth":
+        account, scopes = google.authorize(args.who, login_hint=args.account)
+        print(f"{args.who}: signed in to {account} with {', '.join(scopes)}")
+    elif args.cmd == "check":
+        p = google.Gmail(args.who, args.account).profile()
+        print(f"{args.who}: {p['emailAddress']}, {p['messagesTotal']} messages")
+
+
+def cmd_roll(args):
+    """DLN-102 Roll: inbox report (read-only) and undo of an approved rule."""
+    from light_labs.agents import roll
+    from light_labs.agents.roll import inbox
+
+    if not roll.TELEGRAM_CHAT:
+        sys.exit("ROLL_TELEGRAM_CHAT is not set")
+    bot = roll.bot()
+    if args.cmd == "report":
+        report = inbox.survey(bot.gmail)
+        bot.send_report(report)
+        for r in report["rules"]:
+            print(f"{r['id']:18} {r['count']:>7,}")
+        print(f"inbox {report['inbox']:,}, unread {report['unread']:,}; rules sent to Telegram")
+    elif args.cmd == "apply":
+        print(f"{args.rule}: archived {bot.apply(args.rule):,}")
+        if args.label_archived:
+            print(f"{args.rule}: labelled {bot.label_archived(args.rule):,} already archived")
+    elif args.cmd == "undo":
+        n = bot.undo(args.rule)
+        print(f"{n} back in the inbox" if n is not None else "nothing to undo")
+
+
 def cmd_git(args):
     from light_labs import gitops
 
@@ -241,10 +423,17 @@ def cmd_git(args):
         sys.exit(f"lab git {args.cmd}: {e}")
 
 
+def cmd_mcp(args):
+    from light_labs.core import mcp_server
+
+    mcp_server.serve()
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
+    sub.add_parser("mcp", help="serve the lab over MCP on stdio (read-only; for Hermes)")
     sub.add_parser("skills", help="list skills, their audience and which robots carry them")
     evals_p = sub.add_parser("evals", help="eval results in DuckDB (var/lab.duckdb)")
     ecmd = evals_p.add_subparsers(dest="cmd", required=True)
@@ -267,6 +456,17 @@ def main(argv=None):
         "--root", help="directory holding <robot>/queue (default: var/)"
     )
     qcmd.add_parser("status", help="per robot and draft kind: ready to skip approval?")
+    claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
+    ccmd = claude_p.add_subparsers(dest="cmd", required=True)
+    cingest = ccmd.add_parser(
+        "ingest", help="append transcript records not loaded before (idempotent)"
+    )
+    cingest.add_argument(
+        "--projects",
+        nargs="*",
+        help="transcript roots holding <project>/<session>.jsonl "
+        "(default: ~/.claude/projects and var/claude/projects)",
+    )
     git_p = sub.add_parser("git", help="git and GitHub chores, compact output (any repo)")
     git_p.add_argument("-C", dest="repo", default=".", help="repository (default: cwd)")
     gcmd = git_p.add_subparsers(dest="cmd", required=True)
@@ -289,6 +489,26 @@ def main(argv=None):
     labels_p.add_argument("--prune", action="store_true", help="also delete labels not in it")
     label_p = gcmd.add_parser("label", help="add type/area labels to PRs (default: all open)")
     label_p.add_argument("prs", nargs="*", type=int)
+    roll_p = sub.add_parser("roll", help="DLN-102 Roll: inbox cleanup by approved rules")
+    rocmd = roll_p.add_subparsers(dest="cmd", required=True)
+    rocmd.add_parser("report", help="count the inbox, send proposed rules to Telegram")
+    ap = rocmd.add_parser("apply", help="label and archive a rule's matches (PJ approved it)")
+    ap.add_argument("rule")
+    ap.add_argument("--label-archived", action="store_true", help="also label its archived mail")
+    rocmd.add_parser("undo", help="put a rule's last archive back").add_argument("rule")
+    google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
+    gocmd = google_p.add_subparsers(dest="cmd", required=True)
+    for name, text in (
+        ("auth", "sign a robot in with its scopes"),
+        ("check", "prove a token works"),
+    ):
+        gp = gocmd.add_parser(name, help=text)
+        gp.add_argument("who", choices=["rush", "roll"])
+        gp.add_argument(
+            "--account",
+            required=name == "check",
+            help="mailbox: for auth a hint (the token is stored under whoever signs in)",
+        )
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
@@ -303,20 +523,29 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
+    rcmd.add_parser(
+        "mail-fixtures", help="teacher/local disagreements -> synthetic fixture candidates"
+    ).add_argument("--limit", type=int, default=20)
+    rcmd.add_parser("telegram-link", help="chat ids that messaged the bot (RUSH_TELEGRAM_CHAT)")
+    remote_p = rcmd.add_parser("remote", help="phone page for the queue and board (tailnet only)")
+    remote_p.add_argument("--port", type=int, default=8787)
+    remote_p.add_argument(
+        "--allow", action="append", help="Tailscale login allowed in (default: this machine's)"
+    )
     reject_p = rcmd.add_parser("reject")
     reject_p.add_argument("id")
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git"):
+    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp"):
         globals()[f"cmd_{args.robot}"](args)
         return
-    if args.robot in ("evals", "queue"):
+    if args.robot in ("evals", "queue", "claude"):
         globals()[f"{args.robot}_{args.cmd}"](args)
         return
     from light_labs.agents import rush
 
-    globals()[f"rush_{args.cmd}"](args, Store(rush.HOME), rush)
+    globals()[f"rush_{args.cmd.replace('-', '_')}"](args, Store(rush.HOME), rush)
 
 
 if __name__ == "__main__":

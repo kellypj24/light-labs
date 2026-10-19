@@ -17,6 +17,25 @@ TEMPERATURE = 0.2
 NUM_CTX = 8192
 
 
+# Inbox cleanup (inbox.py): the mailbox Roll cleans and its Telegram chat.
+INBOX_ACCOUNT = os.environ.get("ROLL_INBOX_ACCOUNT", "kellypj24@gmail.com")
+TELEGRAM_CHAT = os.environ.get("ROLL_TELEGRAM_CHAT", "")
+TELEGRAM_KEYCHAIN = "light-labs-roll-telegram"
+HOME = config.VAR / "roll"
+
+
+def bot():
+    """Roll's Telegram bot on its mailbox."""
+    from light_labs.agents.roll.inbox import RollBot
+    from light_labs.core.agentnet import keychain_token
+    from light_labs.core.google import Gmail
+
+    HOME.mkdir(parents=True, exist_ok=True)
+    return RollBot(
+        keychain_token(TELEGRAM_KEYCHAIN), TELEGRAM_CHAT, HOME, Gmail("roll", INBOX_ACCOUNT)
+    )
+
+
 def system_prompt(text=""):
     """Persona + skills; on-match skills load when `text` triggers them."""
     loaded = skills.for_robot(ENTRY.get("skills", []))
