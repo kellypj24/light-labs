@@ -130,7 +130,7 @@ def authorize(robot, login_hint=None, open_browser=webbrowser.open, put=_keychai
     state = secrets.token_urlsafe(16)
     verifier, challenge = pkce()
     url = auth_url(client, SCOPES[robot], redirect_uri, state, challenge, login_hint)
-    print(f"Opening Google sign-in for {robot}. If no browser opens, visit:\n{url}")
+    print(f"Opening Google sign-in for {robot}. If no browser opens, visit:\n{url}", flush=True)
     open_browser(url)
     try:
         code = _wait_for_code(server, state)
