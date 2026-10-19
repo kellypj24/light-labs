@@ -31,12 +31,15 @@ class AuthUrlTest(unittest.TestCase):
         self.assertEqual(q["include_granted_scopes"], ["false"])
         self.assertEqual(q["login_hint"], ["me@x"])
 
-    def test_no_robot_can_send_mail(self):
-        sends = [
-            s for scopes in google.SCOPES.values() for s in scopes if "send" in s or "compose" in s
-        ]
-        self.assertEqual(sends, [])
-        self.assertFalse(any("send" in name.lower() for name in dir(google.Gmail)))
+    def test_no_robot_can_send_or_delete_mail(self):
+        scopes = [s for group in google.SCOPES.values() for s in group]
+        self.assertFalse([s for s in scopes if "send" in s or "compose" in s])
+        for word in ("send", "delete", "trash"):
+            self.assertFalse(any(word in name.lower() for name in dir(google.Gmail)), word)
+
+    def test_only_roll_may_relabel(self):
+        with self.assertRaises(PermissionError):
+            google.Gmail("rush", "me@x", get=lambda s: "{}").relabel(["m1"], remove=["INBOX"])
 
 
 class RedirectTest(unittest.TestCase):

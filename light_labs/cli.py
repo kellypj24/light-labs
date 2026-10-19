@@ -363,6 +363,25 @@ def cmd_google(args):
         print(f"{args.who}: {p['emailAddress']}, {p['messagesTotal']} messages")
 
 
+def cmd_roll(args):
+    """DLN-102 Roll: inbox report (read-only) and undo of an approved rule."""
+    from light_labs.agents import roll
+    from light_labs.agents.roll import inbox
+
+    if not roll.TELEGRAM_CHAT:
+        sys.exit("ROLL_TELEGRAM_CHAT is not set")
+    bot = roll.bot()
+    if args.cmd == "report":
+        report = inbox.survey(bot.gmail)
+        bot.send_report(report)
+        for r in report["rules"]:
+            print(f"{r['id']:18} {r['count']:>7,}")
+        print(f"inbox {report['inbox']:,}, unread {report['unread']:,}; rules sent to Telegram")
+    elif args.cmd == "undo":
+        n = bot.undo(args.rule)
+        print(f"{n} back in the inbox" if n is not None else "nothing to undo")
+
+
 def cmd_git(args):
     from light_labs import gitops
 
@@ -439,6 +458,10 @@ def main(argv=None):
     labels_p.add_argument("--prune", action="store_true", help="also delete labels not in it")
     label_p = gcmd.add_parser("label", help="add type/area labels to PRs (default: all open)")
     label_p.add_argument("prs", nargs="*", type=int)
+    roll_p = sub.add_parser("roll", help="DLN-102 Roll: inbox cleanup by approved rules")
+    rocmd = roll_p.add_subparsers(dest="cmd", required=True)
+    rocmd.add_parser("report", help="count the inbox, send proposed rules to Telegram")
+    rocmd.add_parser("undo", help="put a rule's last archive back").add_argument("rule")
     google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
     gocmd = google_p.add_subparsers(dest="cmd", required=True)
     for name, text in (
@@ -480,7 +503,7 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git", "google"):
+    if args.robot in ("roster", "skills", "git", "google", "roll"):
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue"):
