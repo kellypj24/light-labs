@@ -112,6 +112,32 @@ class LabelArchivedTest(RollInboxTest):
             self.bot.poll_forever(sleep=stop)
         self.assertIn("something failed", self.wire.calls[-1][1]["text"])
 
+    def test_a_dropped_long_poll_retries_quietly(self):
+        def drop(req, timeout=None):
+            raise TimeoutError("The read operation timed out")
+
+        self.bot.opener = drop
+        with self.assertRaises(KeyboardInterrupt):
+            self.bot.poll_forever(sleep=self._stop_after_one)
+        self.assertEqual(self.wire.calls, [])  # nothing sent to PJ
+        self.assertFalse((Path(self.tmp.name) / "journal.md").exists())
+
+    def test_a_tap_that_fails_on_the_network_is_still_reported(self):
+        def slow(query, cap=20000):
+            raise TimeoutError("The read operation timed out")
+
+        self.gmail.ids = slow
+        self.press("apply:promotions-30d")
+        self.assertIn(
+            "something failed: The read operation timed out", self.wire.calls[-1][1]["text"]
+        )
+        journal = (Path(self.tmp.name) / "journal.md").read_text()
+        self.assertIn("poll failed: The read operation timed out", journal)
+
+    @staticmethod
+    def _stop_after_one(seconds):
+        raise KeyboardInterrupt
+
 
 if __name__ == "__main__":
     unittest.main()
