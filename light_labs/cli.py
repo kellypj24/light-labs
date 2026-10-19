@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab evals {...} | lab queue {...} | lab git {...} | lab rush {...}"""
+"""lab roster | lab skills | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...}"""
 
 import argparse
 import json
@@ -93,6 +93,15 @@ def queue_ingest(args):
 
     for robot, n in queue_results.ingest(args.root).items():
         print(f"loaded {robot} ({n} queue items)")
+    print(f"db: {results.DB}")
+
+
+def claude_ingest(args):
+    from light_labs.core import claude_results
+    from light_labs.evals import results
+
+    new, total = claude_results.ingest(args.projects or None)
+    print(f"loaded {new} new transcript records ({total} in all)")
     print(f"db: {results.DB}")
 
 
@@ -447,6 +456,17 @@ def main(argv=None):
         "--root", help="directory holding <robot>/queue (default: var/)"
     )
     qcmd.add_parser("status", help="per robot and draft kind: ready to skip approval?")
+    claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
+    ccmd = claude_p.add_subparsers(dest="cmd", required=True)
+    cingest = ccmd.add_parser(
+        "ingest", help="append transcript records not loaded before (idempotent)"
+    )
+    cingest.add_argument(
+        "--projects",
+        nargs="*",
+        help="transcript roots holding <project>/<session>.jsonl "
+        "(default: ~/.claude/projects and var/claude/projects)",
+    )
     git_p = sub.add_parser("git", help="git and GitHub chores, compact output (any repo)")
     git_p.add_argument("-C", dest="repo", default=".", help="repository (default: cwd)")
     gcmd = git_p.add_subparsers(dest="cmd", required=True)
@@ -520,7 +540,7 @@ def main(argv=None):
     if args.robot in ("roster", "skills", "git", "google", "roll", "mcp"):
         globals()[f"cmd_{args.robot}"](args)
         return
-    if args.robot in ("evals", "queue"):
+    if args.robot in ("evals", "queue", "claude"):
         globals()[f"{args.robot}_{args.cmd}"](args)
         return
     from light_labs.agents import rush

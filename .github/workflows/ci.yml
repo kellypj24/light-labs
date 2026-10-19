@@ -135,6 +135,7 @@ jobs:
         run: |
           uv run lab evals ingest analytics/fixtures/*.jsonl
           uv run lab queue ingest --root analytics/fixtures/queue
+          uv run lab claude ingest --projects analytics/fixtures/claude/projects
       - name: dbt build
         working-directory: analytics
         run: uv run dbt build

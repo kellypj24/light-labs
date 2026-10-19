@@ -73,6 +73,19 @@ def queue_items(context: AssetExecutionContext) -> None:
     context.add_output_metadata({"robots": len(loaded), "rows": sum(loaded.values())})
 
 
+@asset(
+    key=AssetKey(["raw", "claude_records"]),
+    group_name="landing",
+    retry_policy=LOCKED,
+    description="Claude Code transcripts from ~/.claude/projects (`lab claude ingest`).",
+)
+def claude_records(context: AssetExecutionContext) -> None:
+    from light_labs.core import claude_results
+
+    new, total = claude_results.ingest()
+    context.add_output_metadata({"new": new, "rows": total})
+
+
 class Translator(DagsterDbtTranslator):
     """dbt models grouped by layer: staging, intermediate, marts."""
 
@@ -87,5 +100,5 @@ def analytics(context: AssetExecutionContext, dbt: DbtCliResource):
     yield from dbt.cli(["build"], context=context).stream()
 
 
-LANDING = [eval_samples, eval_run_health, queue_items]
+LANDING = [eval_samples, eval_run_health, queue_items, claude_records]
 ALL_ASSETS = [*LANDING, analytics]

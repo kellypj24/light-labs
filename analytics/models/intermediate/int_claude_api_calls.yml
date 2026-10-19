@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: int_claude_api_calls
+    description: One row per API response Claude Code received, main loop and subagents.
+    columns:
+      - name: message_id
+        tests:
+          - unique
+          - not_null
+      - name: input_tokens
+        description: Uncached input tokens
+      - name: cache_read_tokens
+        description: Input tokens read from the prompt cache
+      - name: cache_write_tokens
+        description: Input tokens written to the prompt cache
+
+unit_tests:
+  - name: split_message_counts_once
+    description: Two records of one message carry the same usage; it counts once.
+    model: int_claude_api_calls
+    given:
+      - input: ref('stg_claude_records')
+        rows:
+          - {record_type: assistant, message_id: m1, model_id: claude-opus-5-5, recorded_at: "2026-10-12 10:00:05+00", output_tokens: 50}
+          - {record_type: assistant, message_id: m1, model_id: claude-opus-5-5, recorded_at: "2026-10-12 10:00:06+00", output_tokens: 50}
+          - {record_type: assistant, message_id: m2, model_id: "<synthetic>", recorded_at: "2026-10-12 10:00:07+00", output_tokens: 0}
+          - {record_type: user, message_id: null, model_id: null, recorded_at: "2026-10-12 10:00:08+00", output_tokens: null}
+    expect:
+      rows:
+        - {message_id: m1, output_tokens: 50}

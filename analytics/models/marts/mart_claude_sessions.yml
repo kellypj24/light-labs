@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: mart_claude_sessions
+    description: One row per Claude Code session, subagents' work included.
+    columns:
+      - name: session_id
+        tests:
+          - unique
+          - not_null
+      - name: project
+        description: Working directory's last segment when the session started
+      - name: model_id
+        description: The model that answered most API calls
+      - name: prompt_count
+        description: Prompts PJ typed
+      - name: span_seconds
+        description: First record to last; includes time away, so not working time
+      - name: tool_error_count
+        description: Tool calls that returned an error, denials included
+      - name: cache_hit_rate
+        description: cache_read / (input + cache_read + cache_write) tokens

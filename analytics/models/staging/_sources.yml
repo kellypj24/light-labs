@@ -48,3 +48,14 @@ sources:
           Heat and load readings the runner takes every 30 seconds during a run
           (<run_id>.telemetry.jsonl): battery temperature and charge, AC power, CPU speed
           limit, load, Ollama's CPU. NULL where the platform has no reading.
+      - name: claude_records
+        description: >
+          Every line of Claude Code's session transcripts (~/.claude/projects), appended by
+          `lab claude ingest` and never deleted, so sessions outlive Claude Code's 30-day
+          cleanup. `record` is the line as written; subagents' transcripts sit under
+          <session>/subagents/.
+        columns:
+          - name: record_key
+            tests:
+              - unique
+              - not_null

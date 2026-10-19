@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: int_claude_turns
+    description: One row per main-loop turn that finished (interrupted turns record no length).
+    columns:
+      - name: turn_key
+        description: record_key of the turn_duration record
+        tests:
+          - unique
+          - not_null
+      - name: started_at
+        description: ended_at less the turn's length
+      - name: duration_seconds
+        description: Wall-clock length of the turn, as Claude Code measured it

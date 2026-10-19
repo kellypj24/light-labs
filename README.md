@@ -161,6 +161,23 @@ abandoned (killed without a word), peak temperature, throttling, time on battery
 `fct_eval_category_results`, `fct_eval_check_failures`, `mart_weapon_status`. Harness
 details: [evals/README.md](evals/README.md).
 
+## Claude Code usage
+
+Auto's own work is data too: where Claude Code spends time and tokens across every repo,
+and what it keeps repeating, to decide where a new robot or skill pays off. `lab claude
+ingest` appends every new line of Claude Code's transcripts (`~/.claude/projects`, plus an
+archive in `var/claude/projects`) to `raw.claude_records` and never deletes, so sessions
+outlive Claude Code's 30-day cleanup. The `claude_daily` sensor runs it once a day.
+
+| Mart | One row per | Answers |
+|---|---|---|
+| `mart_claude_sessions` | session | project, prompts, API calls, tokens, tool errors, cache hit rate |
+| `mart_claude_tool_weekly` | week, project, tool | calls, errors, time per call |
+| `mart_claude_repeated_work` | shell command pattern, skill or subagent type | how often, across how many sessions, projects and weeks: candidates for a skill or robot |
+| `mart_claude_activity_weekly` | week, project | finished turns and working time by activity (thinking, reading, editing, shell, ...): tool time is call to result, thinking is the rest |
+
+The raw table holds full prompts and replies; they stay in `var/`, which git ignores.
+
 ## Skills
 
 `.claude/skills/<name>/SKILL.md`, in Claude Code's format, serves both Auto and the robots.
@@ -206,7 +223,8 @@ Anything else, including uncommitted worktrees, is listed for review and never d
 ## Orchestration
 
 Data reaches `var/lab.duckdb` one way: Dagster (`light_labs/orchestration`). Landing assets
-(`raw/*`, loaded by the same functions as `lab evals ingest` and `lab queue ingest`) feed
+(`raw/*`, loaded by the same functions as `lab evals ingest`, `lab queue ingest` and `lab
+claude ingest`) feed
 every dbt node as an asset, built with `dbt build`. `just analytics` executes
 `analytics_job`; the sensors run narrower jobs on their own.
 
@@ -220,8 +238,9 @@ just dagster-restart   # after merging orchestration changes
 |---|---|---|
 | `fight_finished` | `evals_job` | a fight's run record ends (completed or cancelled), 2 min after |
 | `queue_changed` | `queue_job` | a draft is queued, sent, rejected or edited (checked every 5 min) |
+| `claude_daily` | `claude_job` | once per UTC day: Claude Code's transcripts |
 
-Both are on by default and skip while a fight is running. One job runs at a time (DuckDB has one writer), and fights are never started from Dagster.
+All are on by default and skip while a fight is running. One job runs at a time (DuckDB has one writer), and fights are never started from Dagster.
 Changing it: the `dagster-orchestration` skill.
 
 ## Checks
