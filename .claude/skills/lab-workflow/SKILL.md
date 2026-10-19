@@ -16,8 +16,9 @@ audience: [auto]
    repo opted into the ack; gate with `&&`).
 3. `main` has a ruleset with no bypass: changes arrive by PR and `CI Success` must pass.
    When PJ asks for the merge: `lab git land <n>`. It waits for CI, merges only on green
-   (on red it prints the failing job's log tail), squash-merges, updates `main` and
-   deletes the branch.
+   (on red it prints the failing job's log tail), squash-merges on GitHub and deletes the
+   branch there. Locally it moves to `main` (detached at `origin/main` when another
+   worktree has `main`) and deletes the branch unless another worktree has it open.
 4. `lab git status` for the state of the repo and its PRs; `lab git tidy` lists merged or
    abandoned branches and worktrees. `tidy --apply` deletes, so run it only when PJ asks;
    `review` rows are never deleted.
