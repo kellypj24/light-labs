@@ -14,6 +14,10 @@ contestants:
   - name: proto-coder
     role: proto
     brain: ollama:qwen2.5-coder:7b
+  # The largest model that fits PJ's 16 GB M1 Pro (about 9 GB loaded, alone).
+  - name: proto-14b
+    role: proto
+    brain: ollama:qwen2.5:14b
   - name: bass
     role: bass
     brain: claude:sonnet

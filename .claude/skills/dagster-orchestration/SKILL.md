@@ -14,13 +14,14 @@ the data-engineering toolkit's `dagster-asset` skill and `orchestration/dagster`
 var/evals/*.jsonl ──────────▶ raw/eval_samples ─┐
 var/evals/*.run.json ─┬─────▶ raw/eval_run_log  ├─▶ staging/* ─▶ intermediate/* ─▶ marts/*
 var/evals/*.telemetry ┘      raw/eval_telemetry │      (one @dbt_assets: `dbt build`)
-var/<robot>/queue/ ─────────▶ raw/queue_items ──┘
+var/<robot>/queue/ ─────────▶ raw/queue_items ──┤
+~/.claude/projects/ ────────▶ raw/claude_records┘
 ```
 
 Asset keys mirror DuckDB tables: `raw/<table>` for landing, `<schema>/<model>` for dbt.
 Landing assets call the same functions as the CLI (`results.ingest`,
-`results.ingest_health`, `queue_results.ingest`); Dagster never has its own copy of the
-logic. Don't add a second path (a script that loads raw.* or runs `dbt build` itself).
+`results.ingest_health`, `queue_results.ingest`, `claude_results.ingest`); Dagster never
+has its own copy of the logic. Don't add a second path (a script that loads raw.* or runs `dbt build` itself).
 
 ## Adding a raw table
 

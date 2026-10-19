@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: int_claude_tool_calls
+    description: One row per tool call, main loop and subagents, with its result.
+    columns:
+      - name: tool_use_id
+        tests:
+          - unique
+          - not_null
+      - name: tool_name
+        description: Bash, Read, Edit, Agent, mcp__<server>__<tool>, ...
+      - name: tool_input
+        description: The call's input, JSON
+      - name: bash_command
+        description: The command, for Bash calls
+      - name: activity
+        description: reading, editing, shell, web, subagents, asking or other
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["reading", "editing", "shell", "web", "subagents", "asking", "other"]
+      - name: skill_name
+        description: The skill, for Skill calls
+      - name: subagent_type
+        description: The agent type, for Agent calls
+      - name: mcp_server
+        description: The MCP server, for mcp__ tools; empty otherwise
+      - name: is_answered
+        description: A result came back; false when interrupted or still running
+      - name: is_error
+        description: The result was an error (including a denied permission)
+      - name: duration_seconds
+        description: Call to result, permission prompts included; NULL without a result

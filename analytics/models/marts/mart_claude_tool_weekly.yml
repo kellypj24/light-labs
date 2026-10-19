@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: mart_claude_tool_weekly
+    description: One row per week (Monday), project and tool.
+    columns:
+      - name: tool_week_key
+        description: week_start | project | tool_name
+        tests:
+          - unique
+          - not_null
+      - name: error_rate
+        description: Errors / calls
+      - name: total_seconds
+        description: Summed call-to-result time; calls without a result add nothing
