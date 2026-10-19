@@ -172,9 +172,26 @@ def _tick(args, store, rush, client):
         meta=_draft_meta(f"ollama:{rush.MODEL}"),
         autosend=Policy(rush.AUTO_SEND, store),
         mention=rush.MENTION,
+        auto=_auto(rush),
     )
     for item in hb.tick(backfill=args.backfill):
         print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))
+
+
+def _auto(rush):
+    """Auto's side of escalations: the brain, its system prompt with Rush's notes."""
+    if not rush.AUTO_BRAIN:
+        return None
+    from light_labs.agents.rush.heartbeat import AUTO_SYSTEM
+    from light_labs.core.brain import brain_for
+
+    notes = (rush.MEMORY if rush.MEMORY.exists() else rush.HERE / "memory.example.md").read_text()
+    return {
+        "brain": brain_for(rush.AUTO_BRAIN),
+        "system": AUTO_SYSTEM + notes,
+        "signoff": rush.AUTO_SIGNOFF,
+        "meta": {"brain": rush.AUTO_BRAIN},
+    }
 
 
 def rush_queue(args, store, rush):

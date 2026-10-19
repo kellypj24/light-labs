@@ -6,10 +6,11 @@ default midnight to 8am); that covers texts only, not Rush's work on the board. 
 links to the remote page (remote.py), where PJ sends or rejects drafts; Rush never reads
 Messages, so it needs no Full Disk Access.
 
-The Mac sleeps between ticks. Each tick schedules the next wake with `pmset schedule
-wake`, which needs root: one sudoers line limited to that command (see docs/rush-phone.md).
-launchd runs the tick it missed on wake, under `caffeinate -i` so the Mac stays up until
-the tick is done.
+The Mac sleeps between ticks. launchd runs the tick at the top of each hour
+(StartCalendarInterval), and each tick schedules a wake for the next top of the hour with
+`pmset schedule wake`, which needs root: one sudoers line limited to that command (see
+docs/rush-phone.md). An interval timer drifts off the wakes; a clock-aligned one cannot.
+The tick runs under `caffeinate -i` so the Mac stays up until it is done.
 """
 
 import re
@@ -130,12 +131,20 @@ def scheduled_wakes(run=subprocess.run):
     return wakes
 
 
+def next_slot(minutes, now):
+    """The next clock-aligned slot: with 60, the next top of the hour. launchd runs the tick
+    on the same boundary (StartCalendarInterval), so each wake lands on a tick."""
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed = (now - midnight).total_seconds() // 60
+    return midnight + timedelta(minutes=(elapsed // minutes + 1) * minutes)
+
+
 def schedule_wake(minutes, run=subprocess.run, now=None):
-    """Ask for a wake `minutes` from now unless one is already due by then.
+    """Ask for a wake at the next slot unless one is already due by then.
 
     Returns (ok, detail). Never prompts: `sudo -n` fails when the sudoers line is missing."""
     now = now or datetime.now()
-    at = now + timedelta(minutes=minutes)
+    at = next_slot(minutes, now)
     due = [w for w in scheduled_wakes(run) if now < w <= at]
     if due:
         return True, f"wake already due {min(due):%H:%M}"
