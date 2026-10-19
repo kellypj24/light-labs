@@ -13,6 +13,7 @@ for it).
 
 import contextlib
 import json
+import urllib.error
 from collections import Counter
 from datetime import UTC, datetime
 
@@ -155,19 +156,35 @@ class RollBot(Telegram):
         self.journal(f"labelled {len(ids)} archived {rule_id} as {LABELS[rule_id]}")
         return len(ids)
 
+    def report_failure(self, e):
+        self.journal(f"poll failed: {e}")
+        with contextlib.suppress(Exception):  # offline: the journal has it
+            self.text(None, f"Roll: something failed: {e}. Still running; Auto will look.")
+
     def poll_forever(self, remote=None, sleep=None):
         import time
 
         while True:
             try:
                 self.poll_once(remote)
+            except (TimeoutError, ConnectionError, urllib.error.URLError) as e:
+                # The long poll drops while the Mac sleeps or the network blips; Rush's
+                # poller retries these quietly too. Failures handling PJ's taps are
+                # reported by handle().
+                print(f"roll poll: {e}")
+                (sleep or time.sleep)(15)
             except Exception as e:  # noqa: BLE001 - one bad update must not stop Roll
-                self.journal(f"poll failed: {e}")
-                with contextlib.suppress(Exception):  # offline: the journal has it
-                    self.text(None, f"Roll: something failed: {e}. Still running; Auto will look.")
+                self.report_failure(e)
                 (sleep or time.sleep)(15)
 
     def handle(self, update, remote=None):
+        try:
+            return self._handle(update, remote)
+        except Exception as e:  # noqa: BLE001 - a failed tap is reported, Roll keeps polling
+            self.report_failure(e)
+            return None
+
+    def _handle(self, update, remote=None):
         if "callback_query" in update:
             q = update["callback_query"]
             if not self._from_pj(q.get("message", {}).get("chat", {})):

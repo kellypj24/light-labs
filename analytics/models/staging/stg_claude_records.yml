@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: stg_claude_records
+    description: One row per Claude Code transcript record.
+    columns:
+      - name: record_key
+        description: sha256 of the transcript line
+        tests:
+          - unique
+          - not_null
+      - name: record_type
+        description: user, assistant, system, attachment, and Claude Code's bookkeeping types
+      - name: session_id
+        description: The session; a subagent's records carry its parent session's id
+      - name: agent_id
+        description: The subagent that wrote it; NULL on the main loop
+      - name: is_subagent
+        description: From a subagent's transcript (<session>/subagents/)
+      - name: project
+        description: Last segment of the working directory, e.g. light-labs
+      - name: record_duration_ms
+        description: A turn_duration record's turn length in ms, as text
+      - name: message_id
+        description: API message id; one message spans several records
+      - name: message_content
+        description: The message's content, JSON (a string for a typed prompt, else blocks)
+      - name: is_human_prompt
+        description: A prompt PJ typed, not a tool result, command expansion or subagent brief

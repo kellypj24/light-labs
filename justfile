@@ -67,6 +67,7 @@ analytics-check:
     tmp="$(mktemp -d)"
     LAB_VAR="$tmp" uv run --locked lab evals ingest analytics/fixtures/*.jsonl
     LAB_VAR="$tmp" uv run --locked lab queue ingest --root analytics/fixtures/queue
+    LAB_VAR="$tmp" uv run --locked lab claude ingest --projects analytics/fixtures/claude/projects
     cd analytics
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet
