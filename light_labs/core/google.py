@@ -2,8 +2,9 @@
 
 The OAuth client (a Desktop app in Google Cloud project light-labs) lives in Keychain as
 `light-labs-google-oauth-client`. Each robot signs in separately with only the scopes its
-job needs, and keeps its own refresh token in Keychain (`light-labs-google-<robot>`), so a
-bug in one robot can never use another's permissions:
+job needs, and keeps one refresh token per mailbox in Keychain
+(`light-labs-google-<robot>-<account>`), so a bug in one robot can never use another's
+permissions:
 
     rush  gmail.readonly             triage, summaries
     roll  gmail.modify               archive and label (inbox cleanup)
@@ -35,8 +36,10 @@ SCOPES = {
 }
 
 
-def keychain_service(robot):
-    return f"light-labs-google-{robot}"
+def keychain_service(robot, account):
+    """One Keychain item per robot per mailbox: a robot signed in to two accounts holds two
+    tokens, and never one that another robot could use."""
+    return f"light-labs-google-{robot}-{account}"
 
 
 def _keychain_get(service):
@@ -123,7 +126,8 @@ def _wait_for_code(server, state):
 
 
 def authorize(robot, login_hint=None, open_browser=webbrowser.open, put=_keychain_put):
-    """Sign `robot` in with its scopes and store its refresh token. Returns the scopes."""
+    """Sign `robot` in with its scopes and store its refresh token under the mailbox that
+    actually signed in (not the hint). Returns (account, scopes)."""
     client = client_config()
     server = HTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
     redirect_uri = f"http://127.0.0.1:{server.server_port}"
@@ -150,24 +154,33 @@ def authorize(robot, login_hint=None, open_browser=webbrowser.open, put=_keychai
     if "refresh_token" not in token:
         raise RuntimeError("Google returned no refresh token; run the sign-in again")
     granted = token.get("scope", "").split()
+    account = _profile(token["access_token"])["emailAddress"]
     put(
-        keychain_service(robot),
+        keychain_service(robot, account),
         json.dumps({"refresh_token": token["refresh_token"], "scopes": granted}),
     )
-    return granted
+    return account, granted
+
+
+def _profile(access_token, opener=urllib.request.urlopen):
+    req = urllib.request.Request(
+        f"{GMAIL}/profile", headers={"Authorization": f"Bearer {access_token}"}
+    )
+    with opener(req, timeout=30) as r:
+        return json.loads(r.read().decode())
 
 
 class Gmail:
-    """Read-side Gmail calls for one robot's token. No send, by design."""
+    """Read-side Gmail calls for one robot in one mailbox. No send, by design."""
 
-    def __init__(self, robot, get=_keychain_get, opener=urllib.request.urlopen):
-        self.robot, self.get, self.opener = robot, get, opener
+    def __init__(self, robot, account, get=_keychain_get, opener=urllib.request.urlopen):
+        self.robot, self.account, self.get, self.opener = robot, account, get, opener
         self._access = None
 
     def _access_token(self):
         if self._access is None:
             client = client_config(self.get)
-            saved = json.loads(self.get(keychain_service(self.robot)))
+            saved = json.loads(self.get(keychain_service(self.robot, self.account)))
             token = _post(
                 client.get("token_uri", TOKEN_URI),
                 {

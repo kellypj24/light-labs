@@ -78,10 +78,10 @@ class GmailTest(unittest.TestCase):
         def get(service):
             if service == google.CLIENT_KEYCHAIN:
                 return json.dumps(CLIENT)
-            self.assertEqual(service, "light-labs-google-rush")
+            self.assertEqual(service, "light-labs-google-rush-me@x")
             return json.dumps({"refresh_token": "RT"})
 
-        g = google.Gmail("rush", get=get, opener=opener)
+        g = google.Gmail("rush", "me@x", get=get, opener=opener)
         self.assertEqual(g.profile()["emailAddress"], "me@x")
         g.profile()
         self.assertEqual([c.full_url for c in calls].count("https://t"), 1)

@@ -131,6 +131,30 @@ def rush_tick(args, store, rush):
         ok = True
     finally:
         _text_pj(store, rush, ok)
+        if rush.MAIL_ACCOUNTS and (rush.TELEGRAM_CHAT or rush.NOTIFY_TO):
+            _mail(store, rush)
+
+
+def _mail(store, rush):
+    """Triage new mail with Rush's local brain; texts PJ about what needs a reply."""
+    from light_labs.agents.rush import mail
+    from light_labs.core.google import Gmail
+
+    try:
+        to, send, _ = _phone(store, rush)
+    except (OSError, subprocess.CalledProcessError) as e:
+        store.journal(f"mail skipped, no phone channel: {e}")
+        return
+    mail.check(
+        store,
+        rush.MAIL_ACCOUNTS,
+        Brain(rush.MODEL),
+        lambda account: Gmail("rush", account),
+        send,
+        to,
+        rush.REMOTE_URL,
+        rush.QUIET_HOURS,
+    )
 
 
 def _phone(store, rush):
@@ -313,10 +337,10 @@ def cmd_google(args):
     from light_labs.core import google
 
     if args.cmd == "auth":
-        scopes = google.authorize(args.who, login_hint=args.account)
-        print(f"{args.who}: signed in with {', '.join(scopes)}")
+        account, scopes = google.authorize(args.who, login_hint=args.account)
+        print(f"{args.who}: signed in to {account} with {', '.join(scopes)}")
     elif args.cmd == "check":
-        p = google.Gmail(args.who).profile()
+        p = google.Gmail(args.who, args.account).profile()
         print(f"{args.who}: {p['emailAddress']}, {p['messagesTotal']} messages")
 
 
@@ -404,8 +428,11 @@ def main(argv=None):
     ):
         gp = gocmd.add_parser(name, help=text)
         gp.add_argument("who", choices=["rush", "roll"])
-        if name == "auth":
-            gp.add_argument("--account", help="Google account to sign in with (a hint)")
+        gp.add_argument(
+            "--account",
+            required=name == "check",
+            help="mailbox: for auth a hint (the token is stored under whoever signs in)",
+        )
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(

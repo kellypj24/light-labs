@@ -38,6 +38,8 @@ TELEGRAM_CHAT = os.environ.get("RUSH_TELEGRAM_CHAT", "")
 # RUSH_GITHUB_REPOS limits it to these owner/name repos (default: PJ's active repos).
 GITHUB = os.environ.get("RUSH_GITHUB") == "1"
 GITHUB_REPOS = [r for r in os.environ.get("RUSH_GITHUB_REPOS", "").split(",") if r]
+# Mail triage (mail.py): read-only, one Google sign-in per account; empty = off.
+MAIL_ACCOUNTS = [a for a in os.environ.get("RUSH_MAIL_ACCOUNTS", "").split(",") if a]
 # Testing the wake schedule: text PJ after every tick until this local time (ISO).
 PING_UNTIL = os.environ.get("RUSH_PING_UNTIL", "")
 WAKE_MINUTES = int(os.environ.get("RUSH_WAKE_MINUTES") or 0)

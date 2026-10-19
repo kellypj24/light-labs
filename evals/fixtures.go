@@ -11,7 +11,9 @@ import (
 
 // Expect holds a fixture's assertions. Zero values mean "don't check".
 type Expect struct {
-	Escalate       *bool    `yaml:"escalate" json:"escalate,omitempty"`
+	Escalate *bool `yaml:"escalate" json:"escalate,omitempty"`
+	// Label is the class a classification stage must return.
+	Label          string   `yaml:"label" json:"label,omitempty"`
 	MaxChars       int      `yaml:"max_chars" json:"max_chars,omitempty"`
 	ContainsAny    []string `yaml:"contains_any" json:"contains_any,omitempty"`
 	MustNotContain []string `yaml:"must_not_contain" json:"must_not_contain,omitempty"`
@@ -26,6 +28,9 @@ func (e Expect) merge(over Expect) Expect {
 	out := e
 	if over.Escalate != nil {
 		out.Escalate = over.Escalate
+	}
+	if over.Label != "" {
+		out.Label = over.Label
 	}
 	if over.MaxChars > 0 {
 		out.MaxChars = over.MaxChars

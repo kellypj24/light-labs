@@ -58,7 +58,7 @@ class RemoteTest(unittest.TestCase):
         self.store = Store(Path(self.tmp.name))
         self.edge = EdgeStub()
         self.ticks = []
-        rush = SimpleNamespace(ACTOR="pj_agent")
+        rush = SimpleNamespace(ACTOR="pj_agent", MAIL_ACCOUNTS=["me@x"])
         self.remote = Remote(
             self.store, rush, client=self.edge, allowed=[PJ], tick=lambda: self.ticks.append(1)
         )
@@ -124,6 +124,17 @@ class RemoteTest(unittest.TestCase):
         self.remote.ticking.acquire()  # waits for the tick thread to finish
         self.remote.ticking.release()
         self.assertEqual(self.ticks, [1])
+
+    def test_mail_page_lists_triaged_mail_with_gmail_links(self):
+        (self.store.root / "mail").mkdir(exist_ok=True)
+        item = {"id": "m1", "thread": "t1", "account": "me@x", "from": "Dana <d@x>",
+                "subject": "Thursday?", "label": "needs_reply", "summary": "asks about 3pm",
+                "by": "model", "date": "Mon"}  # fmt: skip
+        (self.store.root / "mail" / "me@x.jsonl").write_text(json.dumps(item) + "\n")
+        body = self.call("/mail")[1]
+        self.assertIn("needs reply (1)", body)
+        self.assertIn("asks about 3pm", body)
+        self.assertIn("authuser=me@x#all/t1", body)
 
     def test_board_shows_tasks_naming_pj_or_rush_newest_first(self):
         self.assertEqual([t["id"] for t in board_view(self.edge.board, "pj_agent")], ["t3", "t1"])

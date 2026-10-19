@@ -13,9 +13,20 @@ Keychain (`light-labs-google-<robot>`):
 | Roll | `gmail.modify` | archive and label (inbox cleanup) |
 
 ```
-lab google auth rush --account kellypj24@gmail.com   # browser opens; PJ signs in and approves
-lab google check rush                                # prints the mailbox address and size
+lab google auth rush --account kellypj24@gmail.com    # browser opens; PJ signs in and approves
+lab google check rush --account kellypj24@gmail.com   # prints the mailbox address and size
 ```
+
+Tokens are per mailbox (`light-labs-google-rush-<account>`); sign in once per account.
+
+## Mail triage (Rush)
+
+With `RUSH_MAIL_ACCOUNTS` set, each tick labels new inbox mail (needs_reply, fyi, receipt,
+newsletter, spam) with Rush's local model and texts PJ once about anything that needs a
+reply: sender and a one-line summary, never the message. Mail needing a reply that lands
+in quiet hours is texted after. The phone page's Mail view lists everything triaged, with
+Gmail links. Only sender, subject, label and summary are kept (`var/rush/mail/`).
+The eval stage is `evals/stages/mail-triage.yaml`.
 
 No robot can send mail: no scope includes sending, and `light_labs/core/google.py` has no
 send call (`tests/test_google.py` checks both). Drafts, when they come, need
