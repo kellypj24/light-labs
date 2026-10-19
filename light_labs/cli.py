@@ -307,6 +307,19 @@ def rush_telegram_link(args, store, rush):
         print("no messages yet: send the bot /start, then run this again")
 
 
+def cmd_google(args):
+    """Robots' Google sign-ins: `auth <robot>` stores its token, `check <robot>` reads its
+    mailbox profile to prove the token works."""
+    from light_labs.core import google
+
+    if args.cmd == "auth":
+        scopes = google.authorize(args.who, login_hint=args.account)
+        print(f"{args.who}: signed in with {', '.join(scopes)}")
+    elif args.cmd == "check":
+        p = google.Gmail(args.who).profile()
+        print(f"{args.who}: {p['emailAddress']}, {p['messagesTotal']} messages")
+
+
 def cmd_git(args):
     from light_labs import gitops
 
@@ -383,6 +396,16 @@ def main(argv=None):
     labels_p.add_argument("--prune", action="store_true", help="also delete labels not in it")
     label_p = gcmd.add_parser("label", help="add type/area labels to PRs (default: all open)")
     label_p.add_argument("prs", nargs="*", type=int)
+    google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
+    gocmd = google_p.add_subparsers(dest="cmd", required=True)
+    for name, text in (
+        ("auth", "sign a robot in with its scopes"),
+        ("check", "prove a token works"),
+    ):
+        gp = gocmd.add_parser(name, help=text)
+        gp.add_argument("who", choices=["rush", "roll"])
+        if name == "auth":
+            gp.add_argument("--account", help="Google account to sign in with (a hint)")
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
@@ -408,7 +431,7 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git"):
+    if args.robot in ("roster", "skills", "git", "google"):
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue"):
