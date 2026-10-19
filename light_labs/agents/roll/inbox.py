@@ -11,6 +11,7 @@ newer than the rule's age. Nothing is deleted, trashed or sent (google.py has no
 for it).
 """
 
+import contextlib
 import json
 from collections import Counter
 from datetime import UTC, datetime
@@ -23,6 +24,15 @@ TOP_SENDERS = 6
 GUARD = "-is:starred"
 
 # id -> (what PJ reads, Gmail search). Each archives its matches.
+# Each rule's archived mail also gets a label, so PJ can find it and delete it in bulk
+# himself (Gmail: open the label, select all, Delete; Trash keeps it 30 days).
+LABELS = {
+    "promotions-30d": "Roll/Promotions",
+    "social-30d": "Roll/Social",
+    "forums-30d": "Roll/Forums",
+    "updates-90d": "Roll/Updates",
+    "bulk-primary-60d": "Roll/Bulk",
+}
 RULES = {
     "promotions-30d": (
         "Archive Promotions older than 30 days",
@@ -78,8 +88,8 @@ def rule_text(r):
     return (
         f"Roll: {r['title']}: {r['count']:,} emails.\n"
         f"Top senders{sample}:\n{top}\n\n"
-        "Archive only: they leave the inbox and stay in All Mail and search. Starred mail "
-        "is never touched. Undo any time."
+        "Archive only: they leave the inbox, get a Roll/ label, and stay in All Mail and "
+        "search. Starred mail is never touched. Undo any time."
     )
 
 
@@ -116,9 +126,10 @@ class RollBot(Telegram):
         (self.root / "report.json").write_text(json.dumps(report, indent=2))
 
     def apply(self, rule_id):
-        """Archive what the rule matches now; record the ids for undo."""
+        """Label and archive what the rule matches now; record the ids for undo."""
         ids = self.gmail.ids(search(rule_id), cap=CAP)
-        self.gmail.relabel(ids, remove=["INBOX"])
+        label = self.gmail.label_id(LABELS[rule_id])
+        self.gmail.relabel(ids, add=[label], remove=["INBOX"])
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         (self.root / "applied" / f"{rule_id}-{stamp}.json").write_text(json.dumps(ids))
         self.journal(f"applied {rule_id}: archived {len(ids)}")
@@ -130,10 +141,31 @@ class RollBot(Telegram):
         if not runs:
             return None
         ids = json.loads(runs[-1].read_text())
-        self.gmail.relabel(ids, add=["INBOX"])
+        self.gmail.relabel(ids, add=["INBOX"], remove=[self.gmail.label_id(LABELS[rule_id])])
         runs[-1].rename(runs[-1].with_suffix(".undone"))
         self.journal(f"undid {rule_id}: {len(ids)} back in the inbox")
         return len(ids)
+
+    def label_archived(self, rule_id):
+        """Label mail of a rule's kind that is already out of the inbox (archived earlier,
+        by PJ or by a run that did not finish), so the label holds all of it."""
+        query = search(rule_id).replace("in:inbox", "-in:inbox -in:trash -in:spam")
+        ids = self.gmail.ids(query, cap=CAP)
+        self.gmail.relabel(ids, add=[self.gmail.label_id(LABELS[rule_id])])
+        self.journal(f"labelled {len(ids)} archived {rule_id} as {LABELS[rule_id]}")
+        return len(ids)
+
+    def poll_forever(self, remote=None, sleep=None):
+        import time
+
+        while True:
+            try:
+                self.poll_once(remote)
+            except Exception as e:  # noqa: BLE001 - one bad update must not stop Roll
+                self.journal(f"poll failed: {e}")
+                with contextlib.suppress(Exception):  # offline: the journal has it
+                    self.text(None, f"Roll: something failed: {e}. Still running; Auto will look.")
+                (sleep or time.sleep)(15)
 
     def handle(self, update, remote=None):
         if "callback_query" in update:
@@ -147,7 +179,7 @@ class RollBot(Telegram):
             msg = q.get("message", {})
             if action == "apply":
                 n = self.apply(rule_id)
-                note = f"Archived {n:,}. Undo: /undo {rule_id}"
+                note = f"Archived {n:,} and labelled them {LABELS[rule_id]}. Undo: /undo {rule_id}"
             else:
                 note = "Skipped."
                 self.journal(f"skipped {rule_id}")

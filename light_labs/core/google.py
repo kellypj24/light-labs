@@ -207,8 +207,26 @@ class Gmail:
         if body is not None:
             data, headers["Content-Type"] = json.dumps(body).encode(), "application/json"
         req = urllib.request.Request(f"{GMAIL}/{path}{query}", data=data, headers=headers)
-        with self.opener(req, timeout=30) as r:
-            return json.loads(r.read().decode())
+        with self.opener(req, timeout=60) as r:
+            raw = r.read().decode()
+        return json.loads(raw) if raw.strip() else {}  # batchModify answers with no body
+
+    def label_id(self, name):
+        """The id of the user label `name`, created if missing (Roll/... labels)."""
+        if self.robot not in MODIFIERS:
+            raise PermissionError(f"{self.robot} may not change mail")
+        for label in self.call("labels").get("labels", []):
+            if label["name"] == name:
+                return label["id"]
+        made = self.call(
+            "labels",
+            body={
+                "name": name,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show",
+            },
+        )
+        return made["id"]
 
     def profile(self):
         return self.call("profile")

@@ -377,6 +377,10 @@ def cmd_roll(args):
         for r in report["rules"]:
             print(f"{r['id']:18} {r['count']:>7,}")
         print(f"inbox {report['inbox']:,}, unread {report['unread']:,}; rules sent to Telegram")
+    elif args.cmd == "apply":
+        print(f"{args.rule}: archived {bot.apply(args.rule):,}")
+        if args.label_archived:
+            print(f"{args.rule}: labelled {bot.label_archived(args.rule):,} already archived")
     elif args.cmd == "undo":
         n = bot.undo(args.rule)
         print(f"{n} back in the inbox" if n is not None else "nothing to undo")
@@ -461,6 +465,9 @@ def main(argv=None):
     roll_p = sub.add_parser("roll", help="DLN-102 Roll: inbox cleanup by approved rules")
     rocmd = roll_p.add_subparsers(dest="cmd", required=True)
     rocmd.add_parser("report", help="count the inbox, send proposed rules to Telegram")
+    ap = rocmd.add_parser("apply", help="label and archive a rule's matches (PJ approved it)")
+    ap.add_argument("rule")
+    ap.add_argument("--label-archived", action="store_true", help="also label its archived mail")
     rocmd.add_parser("undo", help="put a rule's last archive back").add_argument("rule")
     google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
     gocmd = google_p.add_subparsers(dest="cmd", required=True)

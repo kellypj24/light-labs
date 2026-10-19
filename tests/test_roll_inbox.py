@@ -25,6 +25,9 @@ class FakeGmail:
     def call(self, path, **kw):
         return {"messagesTotal": 55030, "messagesUnread": 45422}
 
+    def label_id(self, name):
+        return f"L:{name}"
+
     def relabel(self, ids, add=(), remove=()):
         self.relabels.append((list(ids), list(add), list(remove)))
 
@@ -73,9 +76,9 @@ class RollInboxTest(unittest.TestCase):
 
     def test_approve_archives_and_undo_restores(self):
         self.press("apply:promotions-30d")
-        self.assertEqual(self.gmail.relabels, [(["m1", "m2"], [], ["INBOX"])])
+        self.assertEqual(self.gmail.relabels, [(["m1", "m2"], ["L:Roll/Promotions"], ["INBOX"])])
         self.assertEqual(self.bot.undo("promotions-30d"), 2)
-        self.assertEqual(self.gmail.relabels[-1], (["m1", "m2"], ["INBOX"], []))
+        self.assertEqual(self.gmail.relabels[-1], (["m1", "m2"], ["INBOX"], ["L:Roll/Promotions"]))
         self.assertIsNone(self.bot.undo("promotions-30d"))  # already undone
 
     def test_skip_and_strangers_change_nothing(self):
@@ -83,6 +86,31 @@ class RollInboxTest(unittest.TestCase):
         self.press("apply:promotions-30d", chat=7)
         self.press("apply:not-a-rule")
         self.assertEqual(self.gmail.relabels, [])
+
+
+class LabelArchivedTest(RollInboxTest):
+    def test_labels_mail_already_out_of_the_inbox(self):
+        self.gmail.ids = lambda q, cap=0: self.gmail.queries.append(q) or ["old1"]
+        self.assertEqual(self.bot.label_archived("promotions-30d"), 1)
+        self.assertIn("-in:inbox -in:trash -in:spam", self.gmail.queries[-1])
+        self.assertNotIn(" in:inbox", self.gmail.queries[-1])
+        self.assertEqual(self.gmail.relabels[-1], (["old1"], ["L:Roll/Promotions"], []))
+
+    def test_a_failing_update_is_reported_not_fatal(self):
+        def boom(update, remote=None):
+            raise ValueError("bad json")
+
+        self.bot.handle = boom
+        calls = []
+
+        def stop(seconds):
+            calls.append(seconds)
+            raise KeyboardInterrupt
+
+        self.wire.updates = [{"update_id": 1, "message": {"chat": {"id": PJ}, "text": "x"}}]
+        with self.assertRaises(KeyboardInterrupt):
+            self.bot.poll_forever(sleep=stop)
+        self.assertIn("something failed", self.wire.calls[-1][1]["text"])
 
 
 if __name__ == "__main__":
