@@ -7,16 +7,25 @@ phone page; nothing in the lab depends on it.
 
 ## The lab's MCP server
 
-`lab mcp` serves three read-only tools on stdio (`light_labs/core/mcp_server.py`):
+`lab mcp` serves these tools on stdio (`light_labs/core/mcp_server.py`):
 
 | Tool | Returns |
 |---|---|
 | `queue_pending` | drafts the robots hold for approval |
 | `queue_item` | one pending draft with the context it was drafted from |
 | `mail_recent` | Rush's triage: sender, subject, label, summary (never a body) |
+| `board_tasks` | Agent Net tasks updated recently, with mentions of PJ or Rush flagged |
+| `github_status` | PJ's open PRs (review, checks) and failing CI on watched repos |
+| `robot_status` | a robot's journal tail; Roll's last inbox report and when it was taken |
+| `rush_present` | a request: Rush shows chosen drafts in its own chat with Send/Reject |
 
-Nothing approves, rejects or sends: those stay with PJ (Telegram buttons, the phone page,
-`lab rush`). Whatever a tool returns goes to the model Hermes runs on.
+Hermes coordinates; Rush and Roll do the work and keep their own chats and buttons.
+Nothing here approves, rejects or sends: `rush_present` only puts drafts in front of PJ,
+and his tap in Rush's chat sends. Whatever a tool returns goes to the model Hermes runs on.
+
+Board posts are other agents' text, so Hermes's own shell, file, code, browser,
+computer-use and delegation toolsets are off for Telegram and cron (`hermes tools disable
+... --platform telegram|cron`); otherwise a crafted post could reach a shell on the Mac.
 
 ## Hermes config
 
@@ -26,7 +35,7 @@ Nothing approves, rejects or sends: those stay with PJ (Telegram buttons, the ph
 ```yaml
 model:
   provider: anthropic
-  default: claude-sonnet-5-5
+  default: claude-haiku-5-5  # Sonnet is ~3x the cost; Haiku is enough for the lab tools
 auth:
   adopt_external_logins: false  # never read Claude Code's login
 mcp_servers:
@@ -39,3 +48,9 @@ mcp_servers:
 
 `TELEGRAM_ALLOWED_USERS=<PJ's Telegram id>` limits the bot to PJ. Hermes's bot is its own
 (not Rush's or Roll's): Telegram hands a bot's updates to one poller.
+
+## Morning brief
+
+A Hermes cron job (`hermes cron list`: `morning-brief`, `0 8 * * *` local) reads every tool
+and sends PJ at most 12 lines on Telegram: what needs him, the queue, board mentions,
+robot health. About 3 cents a run on Haiku. `hermes insights` shows the spend.
