@@ -57,6 +57,10 @@ whatever a robot escalates. It never competes.
 
 Planned: robot masters as new task classes get stages.
 
+Ideas for robots wait as GitHub issues labelled `state: idea` and `area: <robot>`. Work
+on one starts by relabelling it `state: claimed` and linking a branch, so two sessions
+never build the same robot feature (the `lab-workflow` skill has the commands).
+
 ## Layout
 
 ```

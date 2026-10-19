@@ -405,7 +405,8 @@ def load_labels(repo):
     """{name: {color, description, paths?}} from .github/labels.toml, or None without one.
 
     [types.<type>] become `type: <type>`; [areas.<area>] (with `paths` prefixes) become
-    `area: <area>`; [keep].labels are labels other tools set (Dependabot), left alone."""
+    `area: <area>`; [states.<state>] become `state: <state>` (issue states, never set by
+    `ship`/`label`); [keep].labels are labels other tools set (Dependabot), left alone."""
     import tomllib
 
     path = repo.path / LABELS_FILE
@@ -413,7 +414,7 @@ def load_labels(repo):
         return None
     data = tomllib.loads(path.read_text())
     labels = {}
-    for kind in ("types", "areas"):
+    for kind in ("types", "areas", "states"):
         for key, spec in data.get(kind, {}).items():
             labels[f"{kind[:-1]}: {key}"] = spec
     return labels, set(data.get("keep", {}).get("labels", []))
