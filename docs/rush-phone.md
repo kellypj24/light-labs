@@ -6,6 +6,7 @@ Rush runs on the MacBook. The phone reaches it two ways:
 |---|---|---|
 | Remote page (`lab rush remote`) | Queue (edit and send, reject), board, inbox, comment as PJ | Tailscale on the phone; `tailscale serve` on the Mac |
 | Texts (`RUSH_NOTIFY_TO`) | At most one iMessage per tick, starting `Rush:`: the waiting draft with a link to it, or a digest when several are new. None in quiet hours (`RUSH_QUIET_HOURS`, default `0-8`) | Messages signed in on the Mac; Automation access to Messages (one prompt) |
+| GitHub watch (`RUSH_GITHUB=1`) | At most one message per tick: CI on a default branch breaking or recovering, new Dependabot PRs, comments and reviews on PJ's open PRs. Rules only, no model. Repos: `RUSH_GITHUB_REPOS`, else PJ's repos pushed in the last 30 days | `gh` logged in |
 | Wake schedule (`RUSH_WAKE_MINUTES`) | Each tick schedules the next wake, so the Mac sleeps between ticks | One sudoers line for `pmset schedule wake` |
 
 | Telegram (`RUSH_TELEGRAM_CHAT`) | Replaces iMessage when set: Rush is its own contact, drafts come with Send / Reject buttons, a reply to a draft sends PJ's text (or rejects on "no …"), `/queue`, `/tick` | A bot from @BotFather, its token in Keychain |

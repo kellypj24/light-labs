@@ -133,26 +133,37 @@ def rush_tick(args, store, rush):
         _text_pj(store, rush, ok)
 
 
+def _phone(store, rush):
+    """(to, send, send_item) for PJ's phone: Telegram when it is set up, else iMessage."""
+    from light_labs.agents.rush import phone
+
+    if rush.TELEGRAM_CHAT:
+        from light_labs.agents.rush.telegram import Telegram
+
+        tg = Telegram.from_keychain(rush.TELEGRAM_CHAT, store.root / "telegram.json")
+        return rush.TELEGRAM_CHAT, tg.text, tg.draft
+    return rush.NOTIFY_TO, phone.imessage, None
+
+
 def _text_pj(store, rush, ok):
-    """Drafts waiting and test pings, over Telegram when it is set up, else iMessage."""
+    """Drafts waiting, test pings, then GitHub news, over PJ's phone channel."""
     from light_labs.agents.rush import phone
 
     if not (rush.TELEGRAM_CHAT or rush.NOTIFY_TO):
         return
     try:
-        if rush.TELEGRAM_CHAT:
-            from light_labs.agents.rush.telegram import Telegram
-
-            tg = Telegram.from_keychain(rush.TELEGRAM_CHAT, store.root / "telegram.json")
-            to, send, send_item = rush.TELEGRAM_CHAT, tg.text, tg.draft
-        else:
-            to, send, send_item = rush.NOTIFY_TO, phone.imessage, None
+        to, send, send_item = _phone(store, rush)
         phone.notify_pending(
             store, to, rush.REMOTE_URL, send, rush.QUIET_HOURS, send_item=send_item
         )
         phone.ping(store, to, rush.PING_UNTIL, ok, send, rush.QUIET_HOURS)
     except (OSError, subprocess.CalledProcessError) as e:
         store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
+        return
+    if rush.GITHUB:
+        from light_labs.agents.rush import github
+
+        github.notify(store, to, send, rush.GITHUB_REPOS, rush.QUIET_HOURS)
 
 
 def _tick(args, store, rush, client):
