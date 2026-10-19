@@ -116,6 +116,9 @@ Copy `light_labs/agents/rush/memory.example.md` to `memory.md` (git-ignored) and
 current; the 8B model invents past work without it. `ops/com.pjkelly.light-labs.rush.plist`
 runs a tick when loaded and hourly after that, while the Mac is awake.
 
+The lab over MCP (read-only: approval queues and Rush's mail triage), for an outside agent
+such as Hermes: `uv run lab mcp`. Setup and config: [docs/hermes.md](docs/hermes.md).
+
 Boss fights and results:
 
 ```bash

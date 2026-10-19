@@ -414,10 +414,17 @@ def cmd_git(args):
         sys.exit(f"lab git {args.cmd}: {e}")
 
 
+def cmd_mcp(args):
+    from light_labs.core import mcp_server
+
+    mcp_server.serve()
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
+    sub.add_parser("mcp", help="serve the lab over MCP on stdio (read-only; for Hermes)")
     sub.add_parser("skills", help="list skills, their audience and which robots carry them")
     evals_p = sub.add_parser("evals", help="eval results in DuckDB (var/lab.duckdb)")
     ecmd = evals_p.add_subparsers(dest="cmd", required=True)
@@ -510,7 +517,7 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git", "google", "roll"):
+    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp"):
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue"):
