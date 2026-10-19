@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: mart_claude_activity_weekly
+    description: >
+      One row per week (Monday) and project: finished main-loop turns and their working
+      time by activity, from the transcripts.
+    columns:
+      - name: activity_week_key
+        description: week_start | project
+        tests:
+          - unique
+          - not_null
+      - name: working_seconds
+        description: Summed turn length; the *_seconds activity columns sum to it
+      - name: thinking_seconds
+        description: Turn time with no tool call open (the model working, or Claude Code itself)
+      - name: subagent_seconds
+        description: Time inside Agent calls; the subagents' own tools are not counted again
+      - name: asking_seconds
+        description: Time waiting on PJ inside a turn (AskUserQuestion, plan approval)
+
+unit_tests:
+  - name: activity_split
+    description: >
+      Thinking is what the tools leave; parallel calls past the turn's length are scaled
+      down so the parts still add up.
+    model: mart_claude_activity_weekly
+    given:
+      - input: ref('int_claude_turns')
+        rows:
+          - {turn_key: a, session_id: s1, project: app, started_at: "2026-10-12 10:00:00+00", ended_at: "2026-10-12 10:01:00+00", duration_seconds: 60}
+          - {turn_key: b, session_id: s1, project: app, started_at: "2026-10-12 11:00:00+00", ended_at: "2026-10-12 11:00:10+00", duration_seconds: 10}
+      - input: ref('int_claude_tool_calls')
+        rows:
+          - {session_id: s1, is_subagent: false, activity: shell, called_at: "2026-10-12 10:00:05+00", duration_seconds: 20}
+          - {session_id: s1, is_subagent: true, activity: reading, called_at: "2026-10-12 10:00:06+00", duration_seconds: 5}
+          - {session_id: s1, is_subagent: false, activity: reading, called_at: "2026-10-12 11:00:01+00", duration_seconds: 10}
+          - {session_id: s1, is_subagent: false, activity: shell, called_at: "2026-10-12 11:00:01+00", duration_seconds: 10}
+    expect:
+      rows:
+        - {activity_week_key: "2026-10-12|app", turn_count: 2, working_seconds: 70, thinking_seconds: 40, shell_seconds: 25, reading_seconds: 5}

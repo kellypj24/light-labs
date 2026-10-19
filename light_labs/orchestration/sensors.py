@@ -1,6 +1,7 @@
-"""Sensors: rebuild the analytics when a fight ends or a queue changes.
+"""Sensors: rebuild the analytics when a fight ends or a queue changes, and Claude Code's
+usage once a day.
 
-Both are on by default and tick in the Dagster daemon (`just dagster-install`). They only
+All are on by default and tick in the Dagster daemon (`just dagster-install`). They only
 launch the landing + dbt jobs, never a fight, and skip while a fight is on (one heavy job
 at a time on the laptop). Turning one off in the UI persists in var/dagster.
 """
@@ -13,7 +14,7 @@ from pathlib import Path
 from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 from light_labs import config
-from light_labs.orchestration.jobs import evals_job, queue_job
+from light_labs.orchestration.jobs import claude_job, evals_job, queue_job
 
 # A fight is live while its record says running and it wrote telemetry this recently
 # (the runner reads every 30s; a killed runner leaves a stale "running" record).
@@ -107,4 +108,31 @@ def queue_changed(context: SensorEvaluationContext):
     return RunRequest(run_key=f"queues:{fingerprint}")
 
 
-ALL_SENSORS = [fight_finished, queue_changed]
+def claude_due(cursor, now=None):
+    """The UTC day to load Claude Code's usage for, or None when today's is done."""
+    today = (now or datetime.now(UTC)).date().isoformat()
+    return None if cursor == today else today
+
+
+@sensor(
+    job=claude_job,
+    minimum_interval_seconds=3600,
+    default_status=DefaultSensorStatus.RUNNING,
+    description="Loads Claude Code's transcripts once a day, well inside "
+    "Claude Code's 30-day transcript cleanup.",
+)
+def claude_daily(context: SensorEvaluationContext):
+    if run_id := live_fight(config.VAR / "evals"):
+        return SkipReason(f"fight {run_id} is running")
+    if context.cursor is None:
+        # First tick: start from now; `just analytics` loads everything on demand.
+        context.update_cursor(datetime.now(UTC).date().isoformat())
+        return SkipReason("cursor initialised")
+    day = claude_due(context.cursor)
+    if day is None:
+        return SkipReason("already loaded today")
+    context.update_cursor(day)
+    return RunRequest(run_key=f"claude:{day}")
+
+
+ALL_SENSORS = [fight_finished, queue_changed, claude_daily]

@@ -26,12 +26,14 @@ def setUpModule():
 
 
 def fixture_var(root):
-    """The CI fixtures laid out like var/: evals/ and rush/queue/."""
+    """The CI fixtures laid out like var/: evals/, rush/queue/, and the Claude Code
+    transcripts as the archive copy in claude/projects/."""
     evals = Path(root) / "evals"
     evals.mkdir()
     for path in ANALYTICS.glob("fixtures/*.json*"):
         shutil.copy(path, evals)
     shutil.copytree(ANALYTICS / "fixtures/queue/rush", Path(root) / "rush")
+    shutil.copytree(ANALYTICS / "fixtures/claude/projects", Path(root) / "claude/projects")
     return Path(root)
 
 
@@ -148,7 +150,7 @@ class SensorLogicTest(unittest.TestCase):
 
         record(self.evals, "live", "running")
         with mock.patch.object(sensors.config, "VAR", self.var):
-            for s in (sensors.fight_finished, sensors.queue_changed):
+            for s in (sensors.fight_finished, sensors.queue_changed, sensors.claude_daily):
                 result = s(build_sensor_context(cursor="2026-01-01T00:00:00+00:00"))
                 self.assertIsInstance(result, SkipReason)
                 self.assertIn("live is running", result.skip_message)
@@ -168,13 +170,27 @@ class SensorLogicTest(unittest.TestCase):
         self.assertIsInstance(request, RunRequest)
         self.assertEqual(request.tags["lab/runs"], "new")
 
+    def test_claude_daily_runs_once_per_utc_day(self):
+        from light_labs.orchestration.sensors import claude_due
+
+        now = datetime(2026, 10, 19, 23, 30, tzinfo=UTC)
+        self.assertEqual(claude_due("2026-10-18", now), "2026-10-19")
+        self.assertIsNone(claude_due("2026-10-19", now))
+        self.assertEqual(claude_due("2026-10-19", now + timedelta(hours=1)), "2026-10-20")
+
 
 @unittest.skipUnless(HAS_DAGSTER, "needs the orchestration dependency group")
 class FullRunTest(unittest.TestCase):
     def test_analytics_job_over_the_ci_fixtures(self):
         with tempfile.TemporaryDirectory() as tmp:
             var = fixture_var(tmp)
-            env = {**os.environ, "LAB_VAR": str(var), "DUCKDB_PATH": str(var / "lab.duckdb")}
+            env = {
+                **os.environ,
+                "LAB_VAR": str(var),
+                "DUCKDB_PATH": str(var / "lab.duckdb"),
+                # Never the real ~/.claude: transcripts come from the archive copy only.
+                "LAB_CLAUDE_PROJECTS": str(var / "no-live-transcripts"),
+            }
             script = (
                 "from light_labs.orchestration import defs\n"
                 "r = defs.resolve_job_def('analytics_job').execute_in_process()\n"
@@ -192,7 +208,14 @@ class FullRunTest(unittest.TestCase):
             import duckdb
 
             with duckdb.connect(str(var / "lab.duckdb"), read_only=True) as con:
-                for table in ("mart_weapon_status", "mart_queue_daily", "mart_run_health"):
+                for table in (
+                    "mart_weapon_status",
+                    "mart_queue_daily",
+                    "mart_run_health",
+                    "mart_claude_sessions",
+                    "mart_claude_repeated_work",
+                    "mart_claude_activity_weekly",
+                ):
                     n = con.execute(f"SELECT count(*) FROM marts.{table}").fetchone()[0]
                     self.assertGreater(n, 0, table)
 
