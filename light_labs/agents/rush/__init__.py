@@ -38,6 +38,10 @@ TELEGRAM_CHAT = os.environ.get("RUSH_TELEGRAM_CHAT", "")
 PING_UNTIL = os.environ.get("RUSH_PING_UNTIL", "")
 WAKE_MINUTES = int(os.environ.get("RUSH_WAKE_MINUTES") or 0)
 
+# Escalations: Auto writes the real draft with this brain (PJ approves it); empty = off.
+AUTO_BRAIN = os.environ.get("RUSH_AUTO_BRAIN", "claude:sonnet")
+AUTO_SIGNOFF = f"— Auto (Claude Code), for PJ via {ACTOR}"
+
 HOME = config.VAR / "rush"
 
 # memory.md is local and git-ignored: it describes the people and boards Rush works with.

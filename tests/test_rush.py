@@ -320,6 +320,66 @@ class MentionTest(unittest.TestCase):
         self.assertEqual(self.hb.tick(), [])
 
 
+class AutoHandoffTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name))
+        self.client = FakeClient()
+        self.client.items = [item("a1", "devin")]
+        self.client.messages["a1"] = {"content": "Can you run the sgrep fight?"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def tick(self, rush_replies, auto_brain):
+        hb = Heartbeat(
+            self.client,
+            ScriptedBrain(*rush_replies),
+            self.store,
+            "persona",
+            actor="pj_agent",
+            watch_tasks=[],
+            name="Rush",
+            signoff="— Rush",
+            meta={"brain": "ollama:llama3.1:8b"},
+            auto={
+                "brain": auto_brain,
+                "system": "AUTO SYSTEM",
+                "signoff": "— Auto",
+                "meta": {"brain": "claude:sonnet"},
+            },
+        )
+        return hb.tick(backfill=True)
+
+    def test_escalation_is_drafted_by_auto_and_still_queued(self):
+        auto = ScriptedBrain("PJ hasn't picked the fight yet; he'll answer here.")
+        [d] = self.tick(["ESCALATE: run the sgrep fight", "With PJ and Auto."], auto)
+        self.assertEqual(d["draft"], "PJ hasn't picked the fight yet; he'll answer here.\n\n— Auto")
+        self.assertEqual(d["brain"], "claude:sonnet")
+        self.assertEqual(d["rush_draft"], "With PJ and Auto.\n\n— Rush")
+        self.assertEqual(d["escalate"], "run the sgrep fight")
+        self.assertEqual(auto.calls[0]["system"], "AUTO SYSTEM")
+        self.assertIn("run the sgrep fight", auto.calls[0]["user"])
+        self.assertEqual(len(self.store.pending()), 1)
+
+    def test_plain_replies_never_reach_auto(self):
+        auto = ScriptedBrain()
+        [d] = self.tick(["REPLY", "Thanks!"], auto)
+        self.assertEqual((auto.calls, d["brain"]), ([], "ollama:llama3.1:8b"))
+
+    def test_auto_failure_keeps_rushs_draft(self):
+        class Down:
+            def think(self, system, user, **kw):
+                raise RuntimeError("claude -p failed")
+
+        [d] = self.tick(["ESCALATE: run it", "With PJ and Auto."], Down())
+        self.assertEqual(
+            (d["draft"], d["brain"]), ("With PJ and Auto.\n\n— Rush", "ollama:llama3.1:8b")
+        )
+        journal = (self.store.root / "journal.md").read_text()
+        self.assertIn("Auto could not draft", journal)
+
+
 class HelpersTest(unittest.TestCase):
     def test_clean_strips_header_and_signoff(self):
         self.assertEqual(clean("DRAFT\n\nHi alpha.\n\nBest,\nRush\n"), "Hi alpha.")

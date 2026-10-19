@@ -117,9 +117,21 @@ class PingTest(unittest.TestCase):
 
 
 class WakeTest(unittest.TestCase):
-    def test_schedules_an_hour_out_without_prompting(self):
+    def test_wakes_land_on_the_top_of_the_hour(self):
         run = Runner()
-        self.assertEqual(schedule_wake(60, run, NOW), (True, "wake at 16:00"))
+        self.assertEqual(
+            schedule_wake(60, run, datetime(2026, 10, 17, 15, 40, 12)), (True, "wake at 16:00")
+        )
+        self.assertEqual(
+            schedule_wake(30, Runner(), datetime(2026, 10, 17, 15, 5)), (True, "wake at 15:30")
+        )
+        self.assertEqual(
+            schedule_wake(60, Runner(), datetime(2026, 10, 17, 23, 0, 4)), (True, "wake at 00:00")
+        )
+
+    def test_schedules_without_prompting(self):
+        run = Runner()
+        schedule_wake(60, run, NOW)
         self.assertEqual(
             run.calls[-1],
             ["sudo", "-n", "/usr/bin/pmset", "schedule", "wake", "10/17/26 16:00:00"],
