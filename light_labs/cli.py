@@ -145,15 +145,21 @@ def _mail(store, rush):
     except (OSError, subprocess.CalledProcessError) as e:
         store.journal(f"mail skipped, no phone channel: {e}")
         return
+    teacher = None
+    if rush.MAIL_TEACHER and not rush.mail_weapon():
+        from light_labs.core.brain import brain_for
+
+        teacher = brain_for(rush.MAIL_TEACHER)
     mail.check(
         store,
         rush.MAIL_ACCOUNTS,
-        Brain(rush.MODEL),
+        Brain(rush.MAIL_MODEL),
         lambda account: Gmail("rush", account),
         send,
         to,
         rush.REMOTE_URL,
         rush.QUIET_HOURS,
+        teacher=teacher,
     )
 
 
@@ -320,6 +326,19 @@ def rush_remote(args, store, rush):
     )
 
 
+def rush_mail_fixtures(args, store, rush):
+    """Teacher/local disagreements on real mail, rewritten as synthetic fixture candidates."""
+    from light_labs.agents.rush import mail
+    from light_labs.core.brain import brain_for
+
+    if not rush.MAIL_TEACHER:
+        sys.exit("RUSH_MAIL_TEACHER is not set")
+    made = mail.fixture_candidates(store, brain_for(rush.MAIL_TEACHER), args.limit)
+    for fx in made:
+        print(f"{fx['id']}: {fx['label']} (local said {fx['student_label']})")
+    print(f"{len(made)} candidate(s) in {store.root / 'mail' / 'fixture-candidates.jsonl'}")
+
+
 def rush_telegram_link(args, store, rush):
     """After PJ sends the bot /start: the chat ids that wrote to it, for RUSH_TELEGRAM_CHAT."""
     from light_labs.agents.rush import telegram
@@ -447,6 +466,9 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
+    rcmd.add_parser(
+        "mail-fixtures", help="teacher/local disagreements -> synthetic fixture candidates"
+    ).add_argument("--limit", type=int, default=20)
     rcmd.add_parser("telegram-link", help="chat ids that messaged the bot (RUSH_TELEGRAM_CHAT)")
     remote_p = rcmd.add_parser("remote", help="phone page for the queue and board (tailnet only)")
     remote_p.add_argument("--port", type=int, default=8787)

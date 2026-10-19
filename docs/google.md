@@ -34,3 +34,13 @@ send call (`tests/test_google.py` checks both). Drafts, when they come, need
 
 Revoke any robot at https://myaccount.google.com/permissions and delete its Keychain item.
 The app's privacy policy is https://pjksystems.com/privacy.
+
+### Teacher (temporary)
+
+With `RUSH_MAIL_TEACHER=claude:sonnet`, each email is also labelled by Claude and Claude's
+label is the one acted on; the local label is kept beside it, and the journal reports
+agreement each tick. This sends the sender, subject and first 600 characters of new mail
+to Anthropic, which PJ allowed until a local model earns the mail-triage weapon. The
+teacher turns off by itself once Rush's `dln.json` entry holds that weapon.
+Disagreements stay local in `var/rush/mail/disagreements.jsonl`;
+`lab rush mail-fixtures` rewrites them into synthetic fixture candidates for review.

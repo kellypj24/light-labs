@@ -120,5 +120,46 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
+class TeacherTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name))
+        (self.store.root / "mail").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_teacher_label_wins_and_disagreement_is_kept_locally(self):
+        out = mail.teach(Brain("fyi"), Brain("needs_reply"), msg())
+        self.assertEqual(
+            (out["label"], out["agree"], out["student"]["label"]), ("needs_reply", False, "fyi")
+        )
+        self.assertTrue(out["by"].startswith("teacher-"))
+
+    def test_no_teacher_is_the_local_answer(self):
+        out = mail.teach(Brain("fyi"), None, msg())
+        self.assertNotIn("agree", out)
+
+    def test_teacher_outage_falls_back_to_local(self):
+        class Down:
+            def think(self, *a, **k):
+                raise RuntimeError("claude -p failed")
+
+        out = mail.teach(Brain("receipt"), Down(), msg())
+        self.assertEqual(out["label"], "receipt")
+        self.assertIn("teacher_error", out)
+
+    def test_disagreements_become_candidates_once(self):
+        item = {**msg(), "id": "m1", "label": "needs_reply", "student": {"label": "fyi"}}
+        mail._keep_disagreement(self.store, item)
+        rewriter = Brain(
+            '{"id": "needs_reply_lunch", "from": "A <a@example.org>", "subject": "lunch?", "category": null, "unsubscribe": false, "snippet": "free friday?"}'
+        )
+        [fx] = mail.fixture_candidates(self.store, rewriter)
+        self.assertEqual((fx["label"], fx["student_label"]), ("needs_reply", "fyi"))
+        self.assertIn("Label: needs_reply", rewriter.calls[0])
+        self.assertEqual(mail.fixture_candidates(self.store, rewriter), [])
+
+
 if __name__ == "__main__":
     unittest.main()

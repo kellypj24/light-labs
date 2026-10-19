@@ -40,6 +40,19 @@ GITHUB = os.environ.get("RUSH_GITHUB") == "1"
 GITHUB_REPOS = [r for r in os.environ.get("RUSH_GITHUB_REPOS", "").split(",") if r]
 # Mail triage (mail.py): read-only, one Google sign-in per account; empty = off.
 MAIL_ACCOUNTS = [a for a in os.environ.get("RUSH_MAIL_ACCOUNTS", "").split(",") if a]
+# Teacher for mail triage (PJ allowed a cloud model until a local one earns the weapon):
+# it labels alongside the local brain and its label is used. Off for good once Rush's
+# dln.json entry holds the mail-triage weapon, whatever this says.
+MAIL_TEACHER = os.environ.get("RUSH_MAIL_TEACHER", "")
+# The local model for triage, separate from replies: the best local contender on the
+# mail-triage stage (qwen2.5:14b scored 0.865 vs llama3.1:8b's 0.838).
+MAIL_MODEL = os.environ.get("RUSH_MAIL_MODEL", MODEL)
+
+
+def mail_weapon():
+    return any(w.get("stage") == "mail-triage" for w in ENTRY.get("weapons", []))
+
+
 # Testing the wake schedule: text PJ after every tick until this local time (ISO).
 PING_UNTIL = os.environ.get("RUSH_PING_UNTIL", "")
 WAKE_MINUTES = int(os.environ.get("RUSH_WAKE_MINUTES") or 0)
