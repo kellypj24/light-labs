@@ -277,6 +277,8 @@ paths = ["evals/", "light_labs/evals/"]
 [areas.git]
 color = "bfdadc"
 paths = ["light_labs/gitops.py"]
+[states.idea]
+color = "c2e0c6"
 [keep]
 labels = ["dependencies"]
 """
@@ -296,6 +298,8 @@ class LabelsTest(RepoCase):
         )
         self.assertEqual(got, ["type: feat", "area: evals", "area: git"])
         self.assertEqual(gitops.labels_for("Rename things", ["README.md"], labels), [])
+        self.assertIn("state: idea", labels)
+        self.assertNotIn("state: idea", gitops.labels_for("idea: x", ["evals/a"], labels))
 
     def test_sync_plans_create_update_and_prune_but_keeps_tool_labels(self):
         self.repo.responses[("label", "list")] = (
@@ -309,7 +313,7 @@ class LabelsTest(RepoCase):
         self.assertEqual(
             plan,
             {("update", "type: fix"), ("create", "area: evals"), ("create", "area: git"),
-             ("delete", "bug")},
+             ("create", "state: idea"), ("delete", "bug")},
         )  # fmt: skip
         self.assertFalse(
             any(c[:2] in (("label", "create"), ("label", "delete")) for c in self.repo.calls)

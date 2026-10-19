@@ -1,4 +1,4 @@
-# The repo's PR labels. `lab git labels --apply` syncs them to GitHub (`--prune` also
+# The repo's PR and issue labels. `lab git labels --apply` syncs them to GitHub (`--prune` also
 # deletes labels not named here or under [keep]); `lab git ship` and `lab git label`
 # add a PR's type (from its conventional title) and areas (from its changed paths).
 
@@ -69,6 +69,16 @@ paths = ["light_labs/gitops.py"]
 color = "d4c5f9"
 description = "Skills for Auto and the robots"
 paths = [".claude/skills/"]
+
+# Issue states for the robot idea backlog (lab-workflow skill). Set by hand, never by
+# `ship` or `label`.
+[states.idea]
+color = "c2e0c6"
+description = "Not started; anyone may pick it up"
+
+[states.claimed]
+color = "e99695"
+description = "A branch is working on it; see the linked branch or PR"
 
 # Set by other tools; never pruned.
 [keep]

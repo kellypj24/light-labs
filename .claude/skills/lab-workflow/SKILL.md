@@ -27,6 +27,24 @@ audience: [auto]
    open PRs. `lab git labels --apply` (and `--prune`) changes the repo's label set, so
    only when PJ asks. A new top-level area of the code gets an `[areas.<name>]` entry in
    the same PR.
-7. Never commit `.env`, `var/`, or any `memory.md`; they hold deployment details about
+7. Robot ideas go to GitHub issues, not straight into code: `gh issue create --label
+   "state: idea" --label "area: <robot>"`, title `<robot>: <capability>`, body with what
+   and why. PJ decides when one gets built. A robot without an `area:` label yet
+   (`gh label list`): leave that label off; the title names it, and its first PR adds
+   `[areas.<robot>]` (rule 6).
+8. Before starting work on a robot, check nobody else is on it:
+   `gh issue list --label "area: <robot>" --label "state: claimed"` and `gh pr list`
+   (look for its `area:` label or `light_labs/agents/<robot>/` in the files). On overlap,
+   stop and tell PJ. To claim: `gh issue edit <n> --remove-label "state: idea" --add-label
+   "state: claimed"`, then `gh issue develop <n> --name feature/<topic> --base main`
+   (creates the branch on GitHub, linked on the issue) and work on that same branch:
+   `git fetch -q origin && git worktree add ../light-labs-<topic> feature/<topic>`. The
+   PR body says `Closes #<n>`. Dropping the work unmerged: put the label back to
+   `state: idea` and comment why, so the claim does not outlive the branch.
+9. Another session may hold the main checkout (`git -C ~/light-labs branch --show-current`
+   is not `main`, or has changes). Work in a worktree: `git worktree add -b
+   feature/<topic> ../light-labs-<topic> origin/main` (or, for a claimed issue, the
+   branch from rule 8).
+10. Never commit `.env`, `var/`, or any `memory.md`; they hold deployment details about
    other people's systems. `scripts/gitleaks.sh` and push protection are the backstop,
    not the plan.
