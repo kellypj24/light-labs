@@ -170,8 +170,14 @@ def _profile(access_token, opener=urllib.request.urlopen):
         return json.loads(r.read().decode())
 
 
+# Robots allowed to change a mailbox, and only by moving labels (archive = remove INBOX).
+# Nothing here deletes, trashes or sends.
+MODIFIERS = {"roll"}
+
+
 class Gmail:
-    """Read-side Gmail calls for one robot in one mailbox. No send, by design."""
+    """Gmail calls for one robot in one mailbox. Reads for all; label changes for MODIFIERS;
+    no delete, trash or send, by design."""
 
     def __init__(self, robot, account, get=_keychain_get, opener=urllib.request.urlopen):
         self.robot, self.account, self.get, self.opener = robot, account, get, opener
@@ -194,11 +200,13 @@ class Gmail:
             self._access = token["access_token"]
         return self._access
 
-    def call(self, path, **params):
+    def call(self, path, body=None, **params):
         query = f"?{urllib.parse.urlencode(params, doseq=True)}" if params else ""
-        req = urllib.request.Request(
-            f"{GMAIL}/{path}{query}", headers={"Authorization": f"Bearer {self._access_token()}"}
-        )
+        headers = {"Authorization": f"Bearer {self._access_token()}"}
+        data = None
+        if body is not None:
+            data, headers["Content-Type"] = json.dumps(body).encode(), "application/json"
+        req = urllib.request.Request(f"{GMAIL}/{path}{query}", data=data, headers=headers)
         with self.opener(req, timeout=30) as r:
             return json.loads(r.read().decode())
 
@@ -210,3 +218,28 @@ class Gmail:
 
     def message(self, message_id, fmt="metadata", headers=("From", "Subject", "Date")):
         return self.call(f"messages/{message_id}", format=fmt, metadataHeaders=list(headers))
+
+    def ids(self, query, cap=20000):
+        """Every message id matching `query`, up to `cap`: 500 per page, ids only."""
+        out, token = [], None
+        while len(out) < cap:
+            params = {"q": query, "maxResults": 500}
+            if token:
+                params["pageToken"] = token
+            page = self.call("messages", **params)
+            out += [m["id"] for m in page.get("messages", [])]
+            token = page.get("nextPageToken")
+            if not token:
+                break
+        return out[:cap]
+
+    def relabel(self, ids, add=(), remove=()):
+        """Move labels on many messages, 1000 per call. Archive is remove=["INBOX"]."""
+        if self.robot not in MODIFIERS:
+            raise PermissionError(f"{self.robot} may not change mail")
+        for i in range(0, len(ids), 1000):
+            self.call(
+                "messages/batchModify",
+                body={"ids": ids[i : i + 1000], "addLabelIds": list(add),
+                      "removeLabelIds": list(remove)},
+            )  # fmt: skip

@@ -384,6 +384,16 @@ def serve(store, rush, host="127.0.0.1", port=8787, allowed=None, tick=None):
         else:
             threading.Thread(target=tg.poll_forever, args=(remote,), daemon=True).start()
             print("Telegram: polling")
+    from light_labs.agents import roll
+
+    if roll.TELEGRAM_CHAT:  # Roll's rule approvals, read by the same always-on process
+        try:
+            rbot = roll.bot()
+        except subprocess.CalledProcessError:
+            print("Roll: no token in Keychain")
+        else:
+            threading.Thread(target=rbot.poll_forever, args=(None,), daemon=True).start()
+            print("Roll: polling")
     print(f"Rush remote on http://{host}:{port} for {sorted(remote.allowed)}")
     server.serve_forever()
 
