@@ -42,6 +42,12 @@ func score(run *RunResult, ex Expect) []Check {
 			Detail: fmt.Sprintf("want %v, got %v", *ex.Escalate, got),
 		})
 	}
+	if ex.Label != "" {
+		checks = append(checks, Check{
+			Name: "label", Passed: run.Result.Label == ex.Label,
+			Detail: fmt.Sprintf("want %s, got %s", ex.Label, run.Result.Label),
+		})
+	}
 	noted := false // the stage's note explains the first failed flag; later ones follow from it
 	for _, name := range ex.Require {
 		c := Check{Name: name, Passed: run.Result.Flags[name]}

@@ -100,7 +100,8 @@ def page(title, body, flash=None):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title><style>{STYLE}</style></head><body>
-<header><b>Rush</b><a href="/">Queue</a><a href="/board">Board</a><a href="/inbox">Inbox</a>
+<header><b>Rush</b><a href="/">Queue</a><a href="/mail">Mail</a><a href="/board">Board</a>
+<a href="/inbox">Inbox</a>
 </header><main>{note}{body}</main></body></html>"""
 
 
@@ -240,6 +241,28 @@ class Remote:
         )
         return page(t.get("title") or task_id, body)
 
+    def mail_page(self):
+        """Triaged mail across accounts, needs_reply first, each linked to Gmail. Only
+        what triage kept (sender, subject, summary); message contents stay in Gmail."""
+        from light_labs.agents.rush.mail import LABELS, Inbox, gmail_link
+
+        items = []
+        for account in getattr(self.rush, "MAIL_ACCOUNTS", []):
+            items += Inbox(self.store, account, None).recent()
+        items.sort(key=lambda i: i.get("date", ""), reverse=True)
+        body = ""
+        for label in LABELS:
+            group = [i for i in items if i.get("label") == label]
+            if not group:
+                continue
+            body += f"<h2>{esc(label.replace('_', ' '))} ({len(group)})</h2>" + "".join(
+                f'<div class="card"><a href="{esc(gmail_link(i))}"><b>{esc(i["subject"] or "(no subject)")}</b></a>'
+                f'<div class="meta">{esc(i["from"], 80)} · {esc(i["account"])} · {esc(i.get("by"))}</div>'
+                f'<div class="ctx">{esc(i.get("summary"))}</div></div>'
+                for i in group[:30]
+            )
+        return page("Rush · mail", body or '<p class="meta">No mail triaged yet.</p>')
+
     def inbox_page(self):
         items = self.client.inbox(self.rush.ACTOR).get("items", [])[-15:]
         cards = "".join(
@@ -296,6 +319,8 @@ def handler(remote):
                     body = remote.queue_page()
                 elif parts == ["board"]:
                     body = remote.board_page()
+                elif parts == ["mail"]:
+                    body = remote.mail_page()
                 elif parts == ["inbox"]:
                     body = remote.inbox_page()
                 elif len(parts) == 2 and parts[0] == "task":

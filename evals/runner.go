@@ -15,6 +15,7 @@ type RunResult struct {
 		Raw      string          `json:"raw"`
 		Draft    string          `json:"draft"`
 		Escalate *string         `json:"escalate"`
+		Label    string          `json:"label"` // classification stages, e.g. mail-triage
 		Flags    map[string]bool `json:"flags"` // stage-specific pass/fail facts, e.g. builds
 		Notes    string          `json:"notes"`
 	} `json:"result"`
