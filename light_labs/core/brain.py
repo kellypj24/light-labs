@@ -7,6 +7,7 @@ Specs, as used in dln.json and evals/contestants.yaml:
 """
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -26,16 +27,13 @@ class Brain:
         self.timeout = timeout
         self.last = {}
 
-    def think(self, system, user, temperature=0.7, num_ctx=None):
-        """`num_ctx` sets the context window; Ollama silently truncates a prompt past it."""
-        options = {"temperature": temperature}
-        if num_ctx:
-            options["num_ctx"] = num_ctx
+    def _chat(self, system, user, options, **extra):
         body = {
             "model": self.model,
             "stream": False,
             "options": options,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            **extra,
         }
         req = urllib.request.Request(
             f"{self.base}/api/chat",
@@ -51,7 +49,41 @@ class Brain:
             "output_tokens": data.get("eval_count"),
             "cost_usd": 0.0,
         }
-        return data["message"]["content"].strip()
+        return data
+
+    def think(self, system, user, temperature=0.7, num_ctx=None):
+        """`num_ctx` sets the context window; Ollama silently truncates a prompt past it."""
+        options = {"temperature": temperature}
+        if num_ctx:
+            options["num_ctx"] = num_ctx
+        return self._chat(system, user, options)["message"]["content"].strip()
+
+    def choose(self, system, user, choices, num_ctx=None):
+        """{choice: probability} for a one-word answer, read from the first token's
+        probabilities instead of sampled: deterministic, and the spread is the confidence."""
+        options = {"temperature": 0, "num_predict": 1}
+        if num_ctx:
+            options["num_ctx"] = num_ctx
+        data = self._chat(system, user, options, logprobs=True, top_logprobs=20)
+        top = (data.get("logprobs") or [{}])[0].get("top_logprobs", [])
+        return choice_probs(top, choices)
+
+
+def choice_probs(top_logprobs, choices):
+    """Spread the first token's probability mass over the choices it begins (case and
+    surrounding space ignored), normalised over the choices; uniform if none matched."""
+    mass = dict.fromkeys(choices, 0.0)
+    for entry in top_logprobs:
+        token = entry["token"].strip().lower()
+        if not token:
+            continue
+        hits = [c for c in choices if c.lower().startswith(token)]
+        if len(hits) == 1:  # a token that begins two choices says nothing between them
+            mass[hits[0]] += math.exp(entry["logprob"])
+    total = sum(mass.values())
+    if not total:
+        return {c: 1 / len(choices) for c in choices}
+    return {c: m / total for c, m in mass.items()}
 
 
 class ClaudeCLI:

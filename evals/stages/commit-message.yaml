@@ -26,7 +26,8 @@ defaults:
   require:
     - subject_format    # type(scope)?: summary, no final period
     - subject_length    # 72 characters or fewer
-    - type_fits         # the reference's type or a fair neighbour (input.accept_types)
+    - type_fits         # the reference's type or a fair neighbour (input.accept_types;
+                        # fix and feat count for each other)
     - has_body          # blank line, then a body
     - no_unknown_files  # every file name it mentions is in the diff
     - no_invented_refs  # no #N or URL the diff does not contain
@@ -102,6 +103,7 @@ fixtures:
 
         - No dry-run footer after `--apply`.'
       accept_types:
+      - feat
       - fix
     expect:
       contains_any:
@@ -212,6 +214,7 @@ fixtures:
         housekeeper once a `commit-message` stage exists.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - gitops
@@ -363,6 +366,7 @@ fixtures:
         model and a stage.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - '  init  '
@@ -563,6 +567,7 @@ fixtures:
         battery).'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - ' sources'
@@ -667,6 +672,7 @@ fixtures:
 
         isolated; future runs are.'
       accept_types:
+      - feat
       - fix
     expect:
       contains_any:
@@ -796,6 +802,7 @@ fixtures:
         table.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - '  init  '
@@ -900,6 +907,7 @@ fixtures:
 
         within 0.05 of Bass).'
       accept_types:
+      - feat
       - fix
     expect:
       contains_any:
@@ -1296,6 +1304,7 @@ fixtures:
         Bass.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - add-robot
@@ -2066,6 +2075,7 @@ fixtures:
         only on Snowflake.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - dbt project
@@ -2464,6 +2474,7 @@ fixtures:
         footgun.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - ' cost docs'
@@ -2734,6 +2745,7 @@ fixtures:
         window is rejected.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - backfill-runbook
@@ -2838,6 +2850,7 @@ fixtures:
         blocks (models/cost/_cost_docs.md).'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - ' cost docs'
@@ -2957,6 +2970,7 @@ fixtures:
       accept_types:
       - docs
       - feat
+      - fix
     expect:
       contains_any:
       - data-profiling
@@ -3046,6 +3060,7 @@ fixtures:
       accept_types:
       - docs
       - feat
+      - fix
     expect:
       contains_any:
       - _template
@@ -3175,6 +3190,7 @@ fixtures:
         and the job fails.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - '  init  '
@@ -3276,6 +3292,7 @@ fixtures:
         keeps prod''s owners), before restoring the preservation manifest.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - clone database
@@ -3383,6 +3400,7 @@ fixtures:
         clone. Snowflake example in macros/snowflake/README.md.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - clone database
@@ -3496,6 +3514,7 @@ fixtures:
         `just dbt::dev-database [name]`.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - clone database
@@ -3577,6 +3596,7 @@ fixtures:
 
         `dbt parse` through DbtCliResource. Recorded as hardening #29.'
       accept_types:
+      - feat
       - fix
     expect:
       contains_any:
@@ -3679,6 +3699,7 @@ fixtures:
         carry toolkit/deployment and toolkit/target_database run tags.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - connections
@@ -4158,6 +4179,7 @@ fixtures:
         tolerates an unbuilt relation so `dbt compile` stays green before a build.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - staging
@@ -4407,6 +4429,7 @@ fixtures:
 
         root `just test` includes dbt again.'
       accept_types:
+      - feat
       - fix
     expect:
       contains_any:
@@ -4531,6 +4554,7 @@ fixtures:
 
         a throwaway duckdb file. conftest.py holds the shared project-copy fixture.'
       accept_types:
+      - feat
       - fix
     expect:
       contains_any:
@@ -4641,6 +4665,7 @@ fixtures:
         fails, and every seed must carry a description, meta.owner, and a test.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - dbt project
@@ -4746,6 +4771,7 @@ fixtures:
         duckdb target.'
       accept_types:
       - feat
+      - fix
     expect:
       contains_any:
       - ci
