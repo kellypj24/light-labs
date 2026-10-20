@@ -71,7 +71,7 @@ STYLE = """
 body { margin:0; background:var(--bg); color:var(--fg);
   font:16px/1.45 -apple-system, system-ui, sans-serif; }
 header { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line);
-  padding:12px 16px; display:flex; gap:16px; align-items:baseline; }
+  padding:12px 16px; display:flex; flex-wrap:wrap; gap:4px 16px; align-items:baseline; }
 header b { margin-right:auto; }
 a { color:var(--accent); text-decoration:none; }
 main { padding:12px 16px 48px; max-width:720px; margin:0 auto; }
@@ -92,6 +92,21 @@ button { font:15px inherit; padding:10px 14px; border-radius:8px; border:1px sol
   background:var(--card); color:var(--fg); }
 button.go { background:var(--accent); border-color:var(--accent); color:#fff; }
 .flash { padding:10px 12px; border-radius:8px; border:1px solid var(--ok); margin:12px 0; }
+.strip { display:flex; height:12px; border-radius:3px; overflow:hidden;
+  background:var(--line); }
+.strip span { display:block; height:100%; }
+.week { display:grid; grid-template-columns:96px minmax(0,1fr) 48px; column-gap:8px;
+  align-items:center; margin:6px 0; font-size:13px; }
+.week > :nth-child(3) { text-align:right; }
+.week > :nth-child(4) { grid-column:2 / 4; font-size:12px; }
+.week .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px; color:var(--muted); }
+.legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; }
+details > summary { list-style:none; cursor:pointer; }
+details > summary::-webkit-details-marker { display:none; }
+details > summary .name::before { content:"▸ "; color:var(--muted); }
+details[open] > summary .name::before { content:"▾ "; }
+details .week .name { padding-left:12px; }
 """
 
 
@@ -101,7 +116,7 @@ def page(title, body, flash=None):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title><style>{STYLE}</style></head><body>
 <header><b>Rush</b><a href="/">Queue</a><a href="/mail">Mail</a><a href="/board">Board</a>
-<a href="/inbox">Inbox</a>
+<a href="/inbox">Inbox</a><a href="/usage">Usage</a>
 </header><main>{note}{body}</main></body></html>"""
 
 
@@ -114,6 +129,7 @@ class Remote:
         self.allowed = set(allowed)
         self.token = secrets.token_urlsafe(16)
         self.tick = tick  # callable running one heartbeat
+        self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
         self.ticking = threading.Lock()
 
     # --- actions
@@ -167,6 +183,16 @@ class Remote:
             f'<input type="hidden" name="token" value="{self.token}">{inner}'
             f'<div class="row"><button class="{cls}">{button}</button></div></form>'
         )
+
+    def usage_page(self):
+        """Claude Code's usage over the whole history (light_labs.core.usage)."""
+        from light_labs.core import usage
+
+        try:
+            body = usage.render(usage.report(self.usage_db))
+        except usage.Unavailable as e:
+            body = f'<p class="meta">{esc(str(e))}</p>'
+        return page("Rush · usage", "<h2>Claude Code usage</h2>" + body)
 
     def queue_page(self):
         items = self.store.pending()
@@ -323,6 +349,8 @@ def handler(remote):
                     body = remote.mail_page()
                 elif parts == ["inbox"]:
                     body = remote.inbox_page()
+                elif parts == ["usage"]:
+                    body = remote.usage_page()
                 elif len(parts) == 2 and parts[0] == "task":
                     body = remote.task_page(parts[1])
                 elif len(parts) == 2 and parts[0] == "msg":

@@ -136,6 +136,16 @@ class RemoteTest(unittest.TestCase):
         self.assertIn("asks about 3pm", body)
         self.assertIn("authuser=me@x#all/t1", body)
 
+    def test_usage_page_reports_when_the_marts_are_missing(self):
+        import duckdb
+
+        self.remote.usage_db = Path(self.tmp.name) / "lab.duckdb"
+        duckdb.connect(str(self.remote.usage_db)).close()
+        code, body = self.call("/usage")
+        self.assertEqual(code, 200)
+        self.assertIn("Claude Code usage", body)
+        self.assertIn("just analytics", body)
+
     def test_board_shows_tasks_naming_pj_or_rush_newest_first(self):
         self.assertEqual([t["id"] for t in board_view(self.edge.board, "pj_agent")], ["t3", "t1"])
         self.assertIn("For Rush: a trial", self.call("/board")[1])
