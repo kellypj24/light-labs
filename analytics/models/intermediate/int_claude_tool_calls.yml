@@ -13,13 +13,35 @@ models:
       - name: tool_input
         description: The call's input, JSON
       - name: bash_command
-        description: The command, for Bash calls
+        description: The command, for Bash calls, as written
+      - name: command
+        description: >
+          The Bash command's main part: the part (split at &&, ||, ;, | and newlines,
+          setup stripped) that decides its task_type, e.g. `curl ...` in `rm -f out; curl ...`
+      - name: task_type
+        description: >
+          What the call did. read, edit, files, git, github, checks (tests, lint, `just
+          check`, `lab git ship`), wait (sleep/until loops, polling a background job),
+          network, services (launchctl, docker, ...), run (scripts and CLIs), web,
+          agent, ask, mcp, other. A shell command counts as its highest-ranked part
+          (claude_shell_task): wait, checks, github, git, network, services, edit, run,
+          files and read.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["read", "edit", "files", "git", "github", "checks", "wait", "network", "services", "run", "web", "agent", "ask", "mcp", "other"]
+      - name: output_tokens
+        description: Output tokens of the response that made the call, split over the calls it made
+      - name: context_tokens
+        description: Input tokens of that response (uncached, cache read and cache write), split the same way
       - name: project
         description: The project the call touched (file path, cd or -C target), else the cwd's
       - name: worktree
         description: The checkout within the project the call touched, as in stg_claude_records
       - name: activity
-        description: reading, editing, shell, web, subagents, asking or other
+        description: >
+          The visual-recap band's categories: reading, editing, shell, web, subagents,
+          asking or other; shell commands that read or edit files count as reading or editing
         tests:
           - accepted_values:
               arguments:
@@ -51,9 +73,40 @@ unit_tests:
           - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, worktree: null, recorded_at: "2026-10-12 10:00:02+00", message_content: '[{"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "git -C /Users/u/scouter status"}}]'}
           - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, worktree: null, recorded_at: "2026-10-12 10:00:03+00", message_content: '[{"type": "tool_use", "id": "t4", "name": "Bash", "input": {"command": "ls"}}]'}
           - {record_type: system, session_id: s, is_subagent: false, project: light-labs, folder: light-labs-bar, worktree: light-labs-bar, recorded_at: "2026-10-12 09:00:00+00", message_content: null}
+      - input: ref('int_claude_api_calls')
+        rows: []
     expect:
       rows:
         - {tool_use_id: t1, project: light-labs, worktree: light-labs}
         - {tool_use_id: t2, project: light-labs, worktree: light-labs-bar}
         - {tool_use_id: t3, project: scouter, worktree: scouter}
         - {tool_use_id: t4, project: claude-config, worktree: null}
+
+  - name: tasks_and_tokens
+    description: >
+      Shell commands are classed by what they run once setup is stripped; a response's
+      tokens are split over the calls it made.
+    model: int_claude_tool_calls
+    given:
+      - input: ref('stg_claude_records')
+        rows:
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m1, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:00+00", message_content: '[{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "D=/tmp/x; cd ~/app && git status"}}, {"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "until gh pr checks 9; do sleep 30; done"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m2, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:01+00", message_content: '[{"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "cat README.md"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m3, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:02+00", message_content: '[{"type": "tool_use", "id": "t4", "name": "Bash", "input": {"command": "sed -i s/a/b/ x.py"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m4, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:03+00", message_content: '[{"type": "tool_use", "id": "t5", "name": "Bash", "input": {"command": "uv run --locked lab git ship -F msg.txt"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m5, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:04+00", message_content: '[{"type": "tool_use", "id": "t6", "name": "Bash", "input": {"command": "env gh pr view 9"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m6, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:05+00", message_content: '[{"type": "tool_use", "id": "t7", "name": "Bash", "input": {"command": "H=\"Auth: x\"; rm -f out.json; curl -s -H \"$H\" https://b/inbox | /usr/bin/jq .items"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, message_id: m7, project: app, folder: app, worktree: app, recorded_at: "2026-10-12 10:00:06+00", message_content: '[{"type": "tool_use", "id": "t8", "name": "Bash", "input": {"command": "cat > notes.md <<EOF\ngit push\nEOF"}}]'}
+      - input: ref('int_claude_api_calls')
+        rows:
+          - {message_id: m1, output_tokens: 100, input_tokens: 10, cache_read_tokens: 1000, cache_write_tokens: 0}
+    expect:
+      rows:
+        - {tool_use_id: t1, command: "git status", task_type: git, activity: shell, output_tokens: 50, context_tokens: 505}
+        - {tool_use_id: t2, command: "until gh pr checks 9", task_type: wait, activity: shell, output_tokens: 50, context_tokens: 505}
+        - {tool_use_id: t3, command: "cat README.md", task_type: read, activity: reading, output_tokens: null, context_tokens: null}
+        - {tool_use_id: t4, command: "sed -i s/a/b/ x.py", task_type: edit, activity: editing, output_tokens: null, context_tokens: null}
+        - {tool_use_id: t5, command: "uv run --locked lab git ship -F msg.txt", task_type: checks, activity: shell, output_tokens: null, context_tokens: null}
+        - {tool_use_id: t6, command: "gh pr view 9", task_type: github, activity: shell, output_tokens: null, context_tokens: null}
+        - {tool_use_id: t7, command: "curl -s -H \"$H\" https://b/inbox", task_type: network, activity: shell, output_tokens: null, context_tokens: null}
+        - {tool_use_id: t8, command: "cat > notes.md", task_type: edit, activity: editing, output_tokens: null, context_tokens: null}
