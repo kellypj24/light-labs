@@ -365,11 +365,49 @@ def _rebuild_prompt(client, item, rush):
     return None
 
 
+def _apply_triage(store, rush):
+    """Act on the dry run's newest verdict per still-pending item: NOTE closes it as noted,
+    ANSWER and PJ replace its draft with Auto's for PJ's approval. Posts nothing."""
+    from light_labs.agents.rush.heartbeat import NOTED, clean
+
+    path = store.root / "triage-dryrun.jsonl"
+    latest = {}
+    for line in path.read_text().splitlines() if path.exists() else []:
+        row = json.loads(line)
+        latest[row["id"]] = row
+    pending = {i["id"]: i for i in store.pending()}
+    for item_id, row in latest.items():
+        item = pending.get(item_id)
+        if item is None:
+            continue
+        if row["verdict"] == "NOTE":
+            store.resolve(item_id, "rejected", reason=f"{NOTED}{item['escalate']}", triage="NOTE")
+            store.journal(f"Auto noted {item_id} ({item['escalate']}): no reply")
+            print(f"{item_id}  noted")
+            continue
+        body = f"{clean(row['reply'], 'Auto')}\n\n{rush.AUTO_SIGNOFF}"
+        store.update(
+            item_id,
+            draft=body,
+            drafted=body,
+            rush_draft=item["draft"],
+            escalate=row["question"],
+            triage=row["verdict"],
+            brain=rush.AUTO_BRAIN,
+            held=["Auto: needs PJ" if row["verdict"] == "PJ" else "Auto answered"],
+        )
+        print(f"{item_id}  {row['verdict'].lower()}: Auto's draft queued")
+
+
 def rush_triage(args, store, rush):
     """Dry run: what Auto would do with the queued escalations (note, answer, or leave for
-    PJ), written to var/rush/triage-dryrun.jsonl. Posts and resolves nothing."""
+    PJ), written to var/rush/triage-dryrun.jsonl. Posts and resolves nothing. --apply acts
+    on the results instead (_apply_triage)."""
     from light_labs.agents.rush.heartbeat import AUTO_TASK, verdict
 
+    if args.apply:
+        _apply_triage(store, rush)
+        return
     auto = _auto(rush)
     if auto is None:
         sys.exit("RUSH_AUTO_BRAIN is empty")
@@ -626,9 +664,13 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
-    rcmd.add_parser(
+    triage_p = rcmd.add_parser(
         "triage", help="dry run: what Auto would do with the queued escalations"
-    ).add_argument("ids", nargs="*")
+    )
+    triage_p.add_argument("ids", nargs="*")
+    triage_p.add_argument(
+        "--apply", action="store_true", help="act on the dry run: close notes, queue answers"
+    )
     mute_p = rcmd.add_parser(
         "mute", help="stop drafting on a board task (a log thread); no task: list"
     )
