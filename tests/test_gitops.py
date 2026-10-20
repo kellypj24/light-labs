@@ -1,4 +1,5 @@
 import io
+import json
 import subprocess
 import tempfile
 import unittest
@@ -263,6 +264,52 @@ class LandTest(RepoCase):
         _, out = self.land_from(self.path)  # landed from main's checkout
         self.assertIn("kept feature/x (checked out in", out)
         self.assertEqual(sh(wt, "git", "branch", "--show-current"), "feature/x")
+
+
+class StatusTest(RepoCase):
+    def test_checkout_worktrees_and_open_prs_in_one_look(self):
+        self.branch("feature/done", push=True, merge=True)
+        wt = self.path.parent / "wt"
+        sh(self.path, "git", "worktree", "add", "-q", str(wt), "feature/done")
+        (self.path / "new.txt").write_text("x")
+        self.repo.responses[("pr", "list")] = json.dumps([
+            {"number": 5, "title": "done", "headRefName": "feature/done", "state": "MERGED",
+             "statusCheckRollup": [], "isDraft": False},
+            {"number": 6, "title": "wip", "headRefName": "feature/wip", "state": "OPEN",
+             "statusCheckRollup": [{"name": "Tests", "status": "COMPLETED", "conclusion": "FAILURE"}],
+             "isDraft": False},
+        ])  # fmt: skip
+        out = io.StringIO()
+        gitops.status(self.repo, out=out)
+        text = out.getvalue()
+        self.assertIn("on main: 1 changed, 0 ahead / 0 behind origin/main", text)
+        self.assertIn("?? new.txt", text)
+        self.assertIn("[feature/done] 0 changed", text)
+        self.assertIn("#5 merged: done · `lab git tidy` removes it", text)
+        self.assertIn("#6 open, checks fail: wip [feature/wip]", text)
+        self.assertIn("failing: Tests", text)
+
+    def test_one_pr_in_detail(self):
+        self.repo.responses[("pr", "view")] = json.dumps({
+            "number": 7, "title": "x", "state": "OPEN", "headRefName": "feature/x",
+            "baseRefName": "main", "mergeable": "MERGEABLE", "mergeStateStatus": "BLOCKED",
+            "reviewDecision": None, "isDraft": False, "url": "https://github.com/o/r/pull/7",
+            "mergeCommit": None,
+            "statusCheckRollup": [
+                {"name": "Hooks", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                {"name": "Tests", "status": "COMPLETED", "conclusion": "FAILURE",
+                 "detailsUrl": "https://github.com/o/r/actions/runs/1/job/2"},
+                {"name": "Eval", "status": "IN_PROGRESS", "conclusion": None},
+            ],
+        })  # fmt: skip
+        out = io.StringIO()
+        gitops.status(self.repo, pr=7, fetch=False, out=out)
+        text = out.getvalue()
+        self.assertIn("#7 open, checks fail: x", text)
+        self.assertIn("mergeable: mergeable (blocked), review: none", text)
+        self.assertIn("checks: 1 fail, 1 pass, 1 pending", text)
+        self.assertIn("fail    Tests  https://github.com/o/r/actions/runs/1/job/2", text)
+        self.assertIn("pending Eval", text)
 
 
 LABELS = """

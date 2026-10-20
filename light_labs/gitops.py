@@ -89,28 +89,155 @@ def checks_state(rollup):
     return "pass"
 
 
-def status(repo, out=sys.stdout):
-    branch = repo.branch()
-    dirty = repo.dirty()
-    ahead = repo.git("rev-list", "--count", f"origin/{repo.main_branch()}..HEAD", check=False)
-    out.write(f"{branch}  {len(dirty)} changed file(s)  {ahead or '?'} commit(s) ahead of main\n")
+CHANGED_SHOWN = 8
+
+
+def _check_name(c):
+    return c.get("name") or c.get("context") or "?"
+
+
+def failing_checks(rollup):
+    """Names of the checks in a statusCheckRollup that failed."""
+    return [_check_name(c) for c in rollup or [] if checks_state([c]) == "fail"]
+
+
+def worktrees(repo):
+    """[{path, branch, head}] for every worktree; branch is None when detached."""
+    out = []
+    for block in repo.git("worktree", "list", "--porcelain").split("\n\n"):
+        fields = dict((line.split(" ", 1) + [""])[:2] for line in block.splitlines())
+        if "worktree" in fields:
+            branch = fields.get("branch", "").removeprefix("refs/heads/") or None
+            out.append({"path": fields["worktree"], "branch": branch, "head": fields.get("HEAD")})
+    return out
+
+
+def _counts(repo, path, ref):
+    """(behind, ahead) of HEAD in `path` against `ref`, or None when `ref` is missing."""
+    got = repo.sh("git", "-C", path, "rev-list", "--left-right", "--count", f"{ref}...HEAD",
+                  check=False)  # fmt: skip
+    parts = got.split()
+    return (int(parts[0]), int(parts[1])) if len(parts) == 2 else None
+
+
+def _home(path):
+    home = str(Path.home())
+    return "~" + path[len(home) :] if path.startswith(home) else path
+
+
+def _pr_line(pr):
+    """'#12 open, checks pass: title' for a PR from `gh pr list --json`."""
+    state = pr["state"].lower()
+    if pr["state"] == "OPEN":
+        state += f", checks {checks_state(pr.get('statusCheckRollup'))}"
+        if pr.get("isDraft"):
+            state += ", draft"
+    return f"#{pr['number']} {state}: {pr['title'][:60]}"
+
+
+def status(repo, pr=None, fetch=True, out=sys.stdout):
+    """One look at where the work stands, instead of git status/log/branch/worktree list
+    and gh pr view/checks: this checkout, every other worktree with its PR, open PRs.
+    With `pr`, that PR in detail."""
+    if fetch:
+        repo.git("fetch", "-q", "--prune", "origin", check=False)
+    if pr is not None:
+        return pr_status(repo, pr, out)
+    main = repo.main_branch()
     prs = repo.gh_json(
-        "pr", "list", "--json", "number,title,headRefName,statusCheckRollup,isDraft,updatedAt"
-    )
-    if prs:
+        "pr", "list", "--state", "all", "--limit", "60", "--json",
+        "number,title,headRefName,state,statusCheckRollup,isDraft",
+    )  # fmt: skip
+    by_branch = _pr_by_branch(prs)
+    here = str(Path(repo.git("rev-parse", "--show-toplevel")).resolve())
+
+    branch = repo.branch()
+    where = branch or f"detached at {repo.git('rev-parse', '--short', 'HEAD')}"
+    dirty = repo.dirty()
+    line = f"{_home(here)} on {where}: {len(dirty)} changed"
+    counts = _counts(repo, here, f"origin/{main}")
+    if counts:
+        line += f", {counts[1]} ahead / {counts[0]} behind origin/{main}"
+    if branch and branch != main:
+        upstream = _counts(repo, here, "@{u}")
+        line += (
+            f", upstream {upstream[1]} ahead / {upstream[0]} behind" if upstream
+            else ", not pushed"
+        )  # fmt: skip
+    out.write(line + "\n")
+    out.write(f"last: {repo.git('log', '-1', '--format=%h %s (%cr)')}\n")
+    for change in dirty[:CHANGED_SHOWN]:
+        out.write(f"  {change}\n")
+    if len(dirty) > CHANGED_SHOWN:
+        out.write(f"  ... {len(dirty) - CHANGED_SHOWN} more\n")
+    if branch in by_branch:
+        out.write(f"PR {_pr_line(by_branch[branch])}\n")
+
+    others = [w for w in worktrees(repo) if str(Path(w["path"]).resolve()) != here]
+    if others:
+        out.write("\nworktrees\n")
+        for w in others:
+            name = w["branch"] or f"detached at {(w['head'] or '')[:7]}"
+            changed = repo.sh("git", "-C", w["path"], "status", "--porcelain", check=False)
+            parts = [f"{len(changed.splitlines())} changed"]
+            counts = _counts(repo, w["path"], f"origin/{main}")
+            if counts:
+                parts.append(f"{counts[1]} ahead")
+            found = by_branch.get(w["branch"])
+            if found:
+                parts.append(_pr_line(found))
+                if found["state"] == "MERGED" and not changed:
+                    parts.append("`lab git tidy` removes it")
+            elif w["branch"] is None and counts and counts[1] == 0 and not changed:
+                parts.append(f"nothing beyond origin/{main}")
+            out.write(f"  {_home(w['path'])} [{name}] {' · '.join(parts)}\n")
+
+    open_prs = [p for p in prs if p["state"] == "OPEN"]
+    if open_prs:
         out.write("\nopen PRs\n")
-        for pr in prs:
-            mark = "*" if pr["headRefName"] == branch else " "
-            draft = " draft" if pr["isDraft"] else ""
-            out.write(
-                f" {mark}#{pr['number']:<4} {checks_state(pr['statusCheckRollup']):7}"
-                f" {pr['headRefName'][:28]:28} {pr['title'][:60]}{draft}\n"
-            )
+        for p in open_prs:
+            mark = "*" if p["headRefName"] == branch else " "
+            out.write(f" {mark}{_pr_line(p)} [{p['headRefName'][:28]}]\n")
+            failed = failing_checks(p.get("statusCheckRollup"))
+            if failed:
+                out.write(f"     failing: {', '.join(failed)}\n")
     else:
         out.write("\nno open PRs\n")
     alerts = alerts_summary(repo)
     if alerts:
         out.write(f"\ndependabot: {alerts}\n")
+
+
+def pr_status(repo, number, out=sys.stdout):
+    """One PR: state, branch, mergeability, review, every check, and its merge commit."""
+    pr = repo.gh_json(
+        "pr", "view", str(number), "--json",
+        "number,title,state,headRefName,baseRefName,mergeable,mergeStateStatus,"
+        "reviewDecision,statusCheckRollup,mergeCommit,isDraft,url",
+    )  # fmt: skip
+    out.write(f"{_pr_line(pr)}\n{pr['headRefName']} -> {pr['baseRefName']}  {pr['url']}\n")
+    if pr["state"] == "MERGED":
+        commit = (pr.get("mergeCommit") or {}).get("oid", "")[:7]
+        out.write(f"merged as {commit}\n")
+    elif pr["state"] == "OPEN":
+        review = (pr.get("reviewDecision") or "none").lower().replace("_", " ")
+        out.write(
+            f"mergeable: {pr['mergeable'].lower()} ({pr['mergeStateStatus'].lower()}), "
+            f"review: {review}\n"
+        )
+    rollup = pr.get("statusCheckRollup") or []
+    tally = {}
+    for c in rollup:
+        tally[checks_state([c])] = tally.get(checks_state([c]), 0) + 1
+    if rollup:
+        out.write("checks: " + ", ".join(f"{n} {s}" for s, n in sorted(tally.items())) + "\n")
+        for c in rollup:
+            verdict = checks_state([c])
+            if verdict != "pass":
+                link = c.get("detailsUrl") or c.get("targetUrl") or ""
+                out.write(f"  {verdict:7} {_check_name(c)}  {link}\n")
+    else:
+        out.write("checks: none\n")
 
 
 def alerts_summary(repo):
