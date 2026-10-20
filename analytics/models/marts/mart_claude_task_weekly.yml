@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: mart_claude_task_weekly
+    description: >
+      One row per week (Monday), project and task of Claude Code's tool calls, main
+      loop and subagents: the offload view, deterministic work apart from the model's.
+    columns:
+      - name: task_week_key
+        description: week_start | project | task_type
+        tests:
+          - unique
+          - not_null
+      - name: task_type
+        description: As in int_claude_tool_calls
+      - name: is_deterministic
+        description: git, github, checks, wait, network, files or services; a script or harness could do it
+      - name: total_seconds
+        description: Summed call-to-result time; calls without a result add nothing
+      - name: output_tokens
+        description: Output tokens Claude spent deciding on these calls
+      - name: context_tokens
+        description: Input tokens (uncached and cached) of the responses that made these calls

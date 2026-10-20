@@ -168,7 +168,8 @@ details: [evals/README.md](evals/README.md).
 ## Claude Code usage
 
 Auto's own work is data too: where Claude Code spends time and tokens across every repo,
-and what it keeps repeating, to decide where a new robot or skill pays off. `lab claude
+and what it keeps repeating, to decide what to take off Claude: work for a robot on a
+local model, or deterministic work for a script, tool or harness. `lab claude
 ingest` appends every new line of Claude Code's transcripts (`~/.claude/projects`, plus an
 archive in `var/claude/projects`) to `raw.claude_records` and never deletes, so sessions
 outlive Claude Code's 30-day cleanup. The `claude_daily` sensor runs it once a day.
@@ -176,8 +177,9 @@ outlive Claude Code's 30-day cleanup. The `claude_daily` sensor runs it once a d
 | Mart | One row per | Answers |
 |---|---|---|
 | `mart_claude_sessions` | session | project, prompts, API calls, tokens, tool errors, cache hit rate |
+| `mart_claude_task_weekly` | week, project, task | what the tool calls did (git, github, checks, wait, network, edit, read, ...), their time and the tokens Claude spent deciding on them; `is_deterministic` marks work a script or harness could take over |
 | `mart_claude_tool_weekly` | week, project, tool | calls, errors, time per call |
-| `mart_claude_repeated_work` | shell command pattern, skill or subagent type | how often, across how many sessions, projects and weeks: candidates for a skill or robot |
+| `mart_claude_repeated_work` | shell command pattern, skill or subagent type | how often, across how many sessions, projects and weeks, and its tokens: candidates for a script, skill or robot |
 | `mart_claude_activity_weekly` | week, project | finished turns and working time by activity (thinking, reading, editing, shell, ...): tool time is call to result, thinking is the rest |
 
 The raw table holds full prompts and replies; they stay in `var/`, which git ignores.

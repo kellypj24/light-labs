@@ -20,21 +20,28 @@ models:
       - name: pattern
         description: >
           bash: first word, plus the subcommand if the second word is one (`git status`,
-          `uv run`), after a leading `cd <dir> &&`; skill: its name; subagent: its type
+          `uv run`), after `cd <dir> &&` and `VAR=value;` setup; skill: its name;
+          subagent: its type
+      - name: task_type
+        description: The pattern's usual task, as in int_claude_tool_calls
       - name: week_count
         description: Distinct weeks it was used in
+      - name: output_tokens
+        description: Output tokens Claude spent deciding on these calls
+      - name: context_tokens
+        description: Input tokens (uncached and cached) of the responses that made them
 
 unit_tests:
   - name: command_patterns
-    description: A leading cd is dropped; a subcommand is kept, a flag or path is not.
+    description: A subcommand is kept, a flag or path is not.
     model: mart_claude_repeated_work
     given:
       - input: ref('int_claude_tool_calls')
         rows:
-          - {tool_use_id: t1, tool_name: Bash, bash_command: "cd /w/app && git status --short", session_id: s1, project: app, called_at: "2026-10-12 10:00:00+00", is_error: false}
-          - {tool_use_id: t2, tool_name: Bash, bash_command: "git status", session_id: s2, project: lib, called_at: "2026-10-20 10:00:00+00", is_error: true}
-          - {tool_use_id: t3, tool_name: Bash, bash_command: "ls -la /tmp", session_id: s1, project: app, called_at: "2026-10-12 10:00:00+00", is_error: false}
-          - {tool_use_id: t4, tool_name: Skill, skill_name: ship-pr, session_id: s1, project: app, called_at: "2026-10-12 10:00:00+00", is_error: false}
+          - {tool_use_id: t1, tool_name: Bash, command: "git status --short", task_type: git, session_id: s1, project: app, called_at: "2026-10-12 10:00:00+00", is_error: false}
+          - {tool_use_id: t2, tool_name: Bash, command: "git status", task_type: git, session_id: s2, project: lib, called_at: "2026-10-20 10:00:00+00", is_error: true}
+          - {tool_use_id: t3, tool_name: Bash, command: "ls -la /tmp", task_type: read, session_id: s1, project: app, called_at: "2026-10-12 10:00:00+00", is_error: false}
+          - {tool_use_id: t4, tool_name: Skill, skill_name: ship-pr, task_type: other, session_id: s1, project: app, called_at: "2026-10-12 10:00:00+00", is_error: false}
     expect:
       rows:
         - {work_key: "bash|git status", call_count: 2, session_count: 2, project_count: 2, week_count: 2, error_count: 1}
