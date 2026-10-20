@@ -19,9 +19,14 @@ audience: [auto]
    (on red it prints the failing job's log tail), squash-merges on GitHub and deletes the
    branch there. Locally it moves to `main` (detached at `origin/main` when another
    worktree has `main`) and deletes the branch unless another worktree has it open.
-4. `lab git status` for the state of the repo and its PRs; `lab git tidy` lists merged or
-   abandoned branches and worktrees. `tidy --apply` deletes, so run it only when PJ asks;
-   `review` rows are never deleted.
+4. Where things stand: `lab git status`, one call, not `git status`/`log`/`branch`/
+   `worktree list` or `gh pr view`/`checks`. It fetches, then shows this checkout
+   (branch, changes, ahead/behind main and upstream, last commit, its PR), every other
+   worktree with its PR and whether `tidy` would remove it, and open PRs with failing
+   check names. `lab git status --pr <n>`: one PR's state, mergeability, review, every
+   check that isn't passing with its link, and the merge commit. `lab git tidy` lists
+   merged or abandoned branches and worktrees. `tidy --apply` deletes, so run it only
+   when PJ asks; `review` rows are never deleted.
 5. `lab git` works in any of PJ's repos (`lab git -C ~/<repo> ...`).
 6. Labels come from `.github/labels.toml`: `ship` labels its PR; `lab git label` backfills
    open PRs. `lab git labels --apply` (and `--prune`) changes the repo's label set, so

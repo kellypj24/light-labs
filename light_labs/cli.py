@@ -401,7 +401,7 @@ def cmd_git(args):
     repo = gitops.Repo(args.repo)
     try:
         if args.cmd == "status":
-            gitops.status(repo)
+            gitops.status(repo, pr=args.pr, fetch=not args.no_fetch)
         elif args.cmd == "ship":
             message = Path(args.file).read_text() if args.file else args.message
             body = Path(args.body_file).read_text() if args.body_file else None
@@ -470,7 +470,15 @@ def main(argv=None):
     git_p = sub.add_parser("git", help="git and GitHub chores, compact output (any repo)")
     git_p.add_argument("-C", dest="repo", default=".", help="repository (default: cwd)")
     gcmd = git_p.add_subparsers(dest="cmd", required=True)
-    gcmd.add_parser("status", help="branch, working tree, open PRs with CI, Dependabot")
+    status_p = gcmd.add_parser(
+        "status",
+        help="this checkout, every worktree with its PR, open PRs with failing checks; "
+        "--pr N for one PR's checks, mergeability and merge commit",
+    )
+    status_p.add_argument("--pr", type=int, help="one PR in detail")
+    status_p.add_argument(
+        "--no-fetch", action="store_true", help="skip `git fetch` (offline, or just fetched)"
+    )
     ship_p = gcmd.add_parser("ship", help="check, commit, push, open or find the PR")
     msg = ship_p.add_mutually_exclusive_group()
     msg.add_argument("-m", "--message", help="commit message")

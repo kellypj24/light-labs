@@ -208,7 +208,8 @@ small. `uv run lab skills` lists them.
 a GitHub `origin` (`-C <repo>`):
 
 ```bash
-lab git status                      # branch, changes, open PRs with CI state, Dependabot alerts
+lab git status                      # this checkout, every worktree with its PR, open PRs with failing checks
+lab git status --pr 42              # one PR: state, mergeability, checks with links, merge commit
 lab git ship -F msg.txt             # just check, then commit, push, open or find the PR
 lab git land 21                     # wait for CI; merge on green, else print the failing log tail
 lab git tidy                        # merged/abandoned branches and worktrees; --apply deletes
