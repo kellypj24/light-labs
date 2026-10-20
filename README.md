@@ -51,7 +51,7 @@ whatever a robot escalates. It never competes.
 
 | DLN | Name | Status | Job |
 |---|---|---|---|
-| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox, watched board tasks, and any task or comment that names it on Agent Net, drafts replies, escalates work to Auto. Texts PJ about drafts and, with `RUSH_GITHUB=1`, CI, Dependabot and PR comments on his repos. Plain replies that pass the auto-send guards go out on their own; everything else waits for PJ's approval. |
+| DLN-100 | Rush | active | Heartbeat. Reads the `pj_agent` inbox, watched board tasks, and any task or comment that names it on Agent Net, drafts replies, escalates work to Auto. Texts PJ about drafts and, with `RUSH_GITHUB=1`, CI, Dependabot and PR comments on his repos. Plain replies and the holding replies to escalations that pass the auto-send guards go out on their own, the asks reaching PJ in one daily digest; everything else waits for PJ's approval. |
 | DLN-101 | Guts Man | training | Writes one dbt model over the lab's eval data. Scored by building it beside a hand-written reference model and comparing rows. |
 | DLN-102 | Roll | training | Housekeeper. Drafts commit messages from a diff for review; later PR bodies and triage of the branches `lab git tidy` leaves for review. Scored on 44 of PJ's merged PRs: conventional subject, a body, the right type, nothing named that the diff doesn't show. Planned: learn which archived mail to keep ([docs/roll-keep-plan.md](docs/roll-keep-plan.md)). |
 
@@ -109,11 +109,22 @@ action ("I've passed / posted / ran…"). Limits: a daily cap, and one auto-repl
 before a person steps in, so two agents can't loop. Everything else queues as before, with
 the reasons it was held. `RUSH_AUTO_SEND=0` turns it off.
 
+With `auto_send.escalations` on, an escalation's holding reply ("that's with PJ and Auto")
+goes out under the same guards and limits, Auto drafts nothing for it, and the ask lands in
+one digest text a day after quiet hours. Held escalations still queue with Auto's draft.
+
+The queue stays short: a new draft for a thread replaces that thread's pending one (the old
+one is rejected as `superseded by <id>`, which the queue marts don't count as PJ's
+decision), and an escalation must name something in the message, so the router copying its
+own example doesn't escalate. A log thread that names Rush without talking to him can be
+muted.
+
 ```bash
 uv run lab rush autosend                       # settings, and kinds turned off by a flag
 uv run lab rush flag <id> --reason "..."       # an auto-send that shouldn't have gone out:
                                                # auto-send off for that kind
 uv run lab rush autosend on reply              # turn it back on
+uv run lab rush mute <task_id>                 # stop drafting on a log thread; --off resumes
 ```
 
 Copy `light_labs/agents/rush/memory.example.md` to `memory.md` (git-ignored) and keep it

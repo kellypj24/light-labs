@@ -1,3 +1,4 @@
+import json
 import re
 import tempfile
 import unittest
@@ -62,13 +63,14 @@ class RouteThenWriteTest(unittest.TestCase):
             "ESCALATE: compare two models on board replies",
             "I don't have that data.\nESCALATE: something else",
         )
-        _, escalate, body = draft(brain, "SYSTEM", "PROMPT", "MESSAGE", "Rush", temperature=0.3)
+        message = "Could you compare two models on board replies?"
+        _, escalate, body = draft(brain, "SYSTEM", "PROMPT", message, "Rush", temperature=0.3)
         self.assertEqual(escalate, "compare two models on board replies")
         self.assertEqual(body, "I don't have that data.")  # writer's own ESCALATE dropped
         route_call, write_call = brain.calls
         self.assertEqual(route_call["temperature"], 0)
         self.assertIn("ESCALATE: <what needs doing>", route_call["system"])
-        self.assertEqual(route_call["user"], 'Message: "MESSAGE"')
+        self.assertEqual(route_call["user"], f'Message: "{message}"')
         self.assertIn("holding reply", write_call["user"])
         self.assertEqual(write_call["temperature"], 0.3)
 
@@ -84,7 +86,17 @@ class RouteThenWriteTest(unittest.TestCase):
             ("Reply.", None),
             ("hm", None),
         ):
-            self.assertEqual(route(ScriptedBrain(answer), "M"), want, answer)
+            self.assertEqual(route(ScriptedBrain(answer), "Thoughts on v2?"), want, answer)
+
+    def test_escalation_must_be_about_the_message(self):
+        status = "devin: MASS exhibit stage 2 deployed; rush verdicts are next"
+        copied = ScriptedBrain("ESCALATE: review the v2 parser's tie handling")
+        self.assertIsNone(route(copied, status))  # the router's own example, copied
+        self.assertIsNone(route(ScriptedBrain("ESCALATE: benchmark the gpu cluster"), status))
+        build = "Should Lenses v3 or the digest come first this week?"
+        got = route(ScriptedBrain("ESCALATE: decide whether to build v3 first"), build)
+        self.assertEqual(got, "decide whether to build v3 first")  # v3 is in the message
+        self.assertEqual(route(ScriptedBrain("ESCALATE: run it"), "Can you run it?"), "run it")
 
 
 class TemperatureTest(unittest.TestCase):
@@ -425,6 +437,132 @@ class HelpersTest(unittest.TestCase):
     def test_split_escalation(self):
         self.assertEqual(split_escalation("hi"), (None, "hi"))
         self.assertEqual(split_escalation("escalate: x\nbody"), ("x", "body"))
+
+
+class QueueHygieneTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name))
+        self.client, self.brain = FakeClient(), FakeBrain()
+        self.client.tasks["t1"] = {"title": "Lenses", "comments": []}
+        self.hb = Heartbeat(
+            self.client, self.brain, self.store, "persona", actor="pj_agent",
+            watch_tasks=["t1"], name="Rush", signoff="— Rush",
+        )  # fmt: skip
+        self.hb.tick()  # seed
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def comment(self, text):
+        self.client.tasks["t1"]["comments"].append({"author": "devin", "text": text})
+
+    def test_a_new_draft_replaces_the_threads_pending_one(self):
+        self.comment("beat one")
+        [first] = self.hb.tick()
+        self.comment("beat two")
+        [second] = self.hb.tick()
+        self.assertEqual([i["id"] for i in self.store.pending()], [second["id"]])
+        old = json.loads((self.store.root / f"queue/rejected/{first['id']}.json").read_text())
+        self.assertEqual(old["reason"], f"superseded by {second['id']}")
+
+    def test_a_muted_task_gets_no_drafts(self):
+        from types import SimpleNamespace
+
+        from light_labs.cli import rush_mute
+
+        self.comment("beat one")
+        self.assertEqual(len(self.hb.tick()), 1)
+        rush_mute(SimpleNamespace(task="t1", off=False), self.store, None)
+        self.assertEqual(self.store.pending(), [])  # its pending draft goes too
+        self.comment("beat two")
+        self.assertEqual(self.hb.tick(), [])
+        rush_mute(SimpleNamespace(task="t1", off=True), self.store, None)
+        self.comment("beat three")
+        self.assertEqual(len(self.hb.tick()), 1)
+
+
+class SendingClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.sent = []
+
+    def send(self, actor, to, content, summary=None, in_reply_to=None):
+        self.sent.append(content)
+        return {"id": "obj1"}
+
+
+class EscalationHoldingReplyTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.tmp.name))
+        self.client = SendingClient()
+        self.client.items = [item("a1", "devin")]
+        self.client.messages["a1"] = {"content": "Can you run the sgrep fight?"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def tick(self, escalations, auto):
+        from light_labs.agents.rush.autosend import Policy
+
+        policy = Policy(
+            {"enabled": True, "kinds": ["reply"], "escalations": escalations}, self.store
+        )
+        hb = Heartbeat(
+            self.client, ScriptedBrain("ESCALATE: run the sgrep fight", "With PJ and Auto."),
+            self.store, "persona", actor="pj_agent", watch_tasks=[], name="Rush",
+            signoff="— Rush", autosend=policy,
+            auto={"brain": auto, "system": "S", "signoff": "— Auto", "meta": {}},
+        )  # fmt: skip
+        return hb.tick(backfill=True)
+
+    def test_holding_reply_goes_out_and_the_ask_waits_for_the_digest(self):
+        auto = ScriptedBrain()
+        [d] = self.tick(True, auto)
+        self.assertTrue(d["auto"])
+        self.assertEqual(self.client.sent, ["With PJ and Auto.\n\n— Rush"])
+        self.assertEqual(auto.calls, [])  # no Claude draft for an ask PJ won't review
+        self.assertEqual(self.store.pending(), [])
+        [ask] = [json.loads(x) for x in (self.store.root / "asks.jsonl").read_text().splitlines()]
+        self.assertEqual(
+            (ask["ask"], ask["who"], ask["where"]), ("run the sgrep fight", "devin", "devin")
+        )
+
+    def test_without_the_setting_escalations_still_queue_for_pj(self):
+        auto = ScriptedBrain("Auto's answer.")
+        [d] = self.tick(False, auto)
+        self.assertEqual(d["held"], ["escalated"])
+        self.assertEqual(len(auto.calls), 1)
+        self.assertEqual(self.client.sent, [])
+
+
+class AskDigestTest(unittest.TestCase):
+    def test_once_a_day_after_quiet_hours(self):
+        from datetime import datetime
+
+        from light_labs.agents.rush import phone
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp))
+            asks = [{"id": "i1", "where": "task_1", "who": "devin", "ask": "review the plan",
+                     "at": "2026-10-20T01:00:00+00:00"}]  # fmt: skip
+            (store.root / "asks.jsonl").write_text("".join(json.dumps(a) + "\n" for a in asks))
+            texts = []
+
+            def send(to, text):
+                texts.append(text)
+
+            night, morning = datetime(2026, 10, 20, 6), datetime(2026, 10, 20, 9)
+            self.assertFalse(phone.ask_digest(store, "pj", "http://mac", send, "0-8", night))
+            self.assertTrue(phone.ask_digest(store, "pj", "http://mac", send, "0-8", morning))
+            self.assertIn("1 ask for you", texts[0])
+            self.assertIn("- review the plan (devin on task_1)", texts[0])
+            self.assertIn("http://mac/board", texts[0])
+            (store.root / "asks.jsonl").write_text(json.dumps(asks[0]) + "\n")
+            self.assertFalse(
+                phone.ask_digest(store, "pj", None, send, "0-8", morning)
+            )  # today's went
 
 
 if __name__ == "__main__":

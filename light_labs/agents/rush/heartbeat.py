@@ -1,7 +1,10 @@
 """One heartbeat: read what's new, draft responses into the approval queue."""
 
+import json
 import re
 import subprocess
+
+from light_labs.agents.rush.autosend import thread_key
 
 MAX_CONTEXT_CHARS = 6000
 THREAD_COMMENTS = 4
@@ -103,6 +106,26 @@ REPLY
 Message: "Do robots get weekends off?"
 REPLY"""
 _ROUTED = re.compile(r"^\W*(ESCALATE|REPLY)\b\W*(.*)$", re.IGNORECASE | re.MULTILINE)
+# The router's own example answers. A small model copies the first one onto messages
+# about something else ("review the v2 parser's tie handling" on 18 unrelated drafts).
+EXAMPLE_ASKS = {a.strip().lower() for a in re.findall(r"^ESCALATE: (.+)$", ROUTER, re.MULTILINE)}
+# Words any ask may use without saying what it is about.
+_ASK_WORDS = {
+    "review", "decide", "decision", "whether", "check", "look", "update", "write", "opinion",
+    "pjs", "with", "that", "this", "from", "into", "about", "what", "should", "need", "needs",
+}  # fmt: skip
+_WORD = re.compile(r"[a-z]{4,}|[a-z]*[0-9][a-z0-9]*")
+
+
+def grounded(escalate, message):
+    """An escalation names something in the message: not a router example, and sharing a
+    content word with it. Ungrounded ones are the model copying, not a request."""
+    ask = escalate.strip().lower()
+    if ask in EXAMPLE_ASKS:
+        return False
+    words = set(_WORD.findall(ask.replace("'", ""))) - _ASK_WORDS
+    return not words or bool(words & set(_WORD.findall(message.lower().replace("'", ""))))
+
 
 HOLDING = (
     "\n\nDecision: this goes to PJ and Auto ({work}). Write only a short holding reply: "
@@ -119,7 +142,8 @@ def route(brain, message):
     raw = brain.think(ROUTER, f'Message: "{message.strip()}"', temperature=0)
     match = _ROUTED.search(raw)
     if match and match.group(1).upper() == "ESCALATE":
-        return match.group(2).strip() or "see the message"
+        escalate = match.group(2).strip() or "see the message"
+        return escalate if grounded(escalate, message) else None
     return None
 
 
@@ -205,6 +229,10 @@ def post(client, actor, item):
     return client.comment(actor, t["task_id"], item["draft"])
 
 
+# Asks whose holding reply went out on its own, until the daily digest picks them up.
+ASKS = "asks.jsonl"
+
+
 class Heartbeat:
     def __init__(
         self,
@@ -281,7 +309,7 @@ class Heartbeat:
             comments = task.get("comments", [])
             seen = state["seen_comments"].get(task_id, 0)
             state["seen_comments"][task_id] = len(comments)
-            if seed:
+            if seed or task_id in state.get("muted", []):  # muted: seen, not answered
                 continue
             for idx in range(seen, len(comments)):
                 c = comments[idx]
@@ -323,6 +351,8 @@ class Heartbeat:
         for task in tasks:
             if task["id"] in self.watch_tasks or (task.get("updatedAt") or "") <= since:
                 continue
+            if task["id"] in state.get("muted", []):  # `lab rush mute`: a log, not a chat
+                continue
             comments = task.get("comments") or []
             hit = None
             for idx, c in enumerate(comments):
@@ -362,10 +392,16 @@ class Heartbeat:
         return drafted
 
     def _draft(self, kind, target, prompt, context, message):
+        """Draft, then send it or queue it for PJ. An escalation whose holding reply goes
+        out on its own costs no Auto draft; its ask goes to PJ's daily digest instead.
+        A queued draft replaces the thread's earlier pending ones."""
         system = self.persona(prompt) if callable(self.persona) else self.persona
         _, escalate, body = draft(self.brain, system, prompt, message, self.name, self.temperature)
+        send, held = (False, [])
+        if self.autosend is not None:
+            send, held = self.autosend.decide(kind, target, body, message, escalate)
         signoff, meta, extra = self.signoff, self.meta, {}
-        if escalate and self.auto:
+        if escalate and self.auto and not send:  # PJ reviews it anyway: Auto writes the answer
             try:
                 raw = self.auto["brain"].think(
                     self.auto["system"], prompt + AUTO_TASK.format(work=escalate)
@@ -375,9 +411,6 @@ class Heartbeat:
                 signoff, meta = self.auto["signoff"], {**self.meta, **self.auto["meta"]}
             except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
                 self.store.journal(f"Auto could not draft ({escalate}): {e}; kept Rush's draft")
-        send, held = (False, [])
-        if self.autosend is not None:
-            send, held = self.autosend.decide(kind, target, body, message, escalate)
         item = self.store.enqueue(
             kind,
             target,
@@ -388,6 +421,7 @@ class Heartbeat:
             **extra,
             **({"held": held} if self.autosend is not None and not send else {}),
         )
+        self._supersede(item)
         if send:
             try:
                 result = post(self.client, self.actor, item)
@@ -396,9 +430,31 @@ class Heartbeat:
                 return item
             item = self.store.resolve(item["id"], "sent", result_id=result.get("id"), auto=True)
             self.store.journal(f"auto-sent {item['id']} ({kind})")
+            if escalate:
+                self._ask(item, escalate)
             return item
         if escalate:
             (self.store.root / "escalations" / f"{item['id']}.md").write_text(
                 f"# Escalation {item['id']}\n\n{escalate}\n\n## Context\n\n{context}\n"
             )
         return item
+
+    def _supersede(self, item):
+        """Reject the thread's other pending drafts: PJ reviews only the newest."""
+        key = thread_key(item["kind"], item["target"])
+        for old in self.store.pending():
+            if old["id"] != item["id"] and thread_key(old["kind"], old["target"]) == key:
+                self.store.resolve(old["id"], "rejected", reason=f"superseded by {item['id']}")
+                self.store.journal(f"{old['id']} superseded by {item['id']}")
+
+    def _ask(self, item, escalate):
+        """An ask acknowledged on the board, for PJ's daily digest (phone.ask_digest)."""
+        line = {
+            "id": item["id"],
+            "where": item["target"].get("task_id") or ", ".join(item["target"].get("to", [])),
+            "who": item["context"].split(":", 1)[0].split(" on ", 1)[0][:40],
+            "ask": escalate,
+            "at": item["created"],
+        }
+        with (self.store.root / ASKS).open("a") as f:
+            f.write(json.dumps(line) + "\n")

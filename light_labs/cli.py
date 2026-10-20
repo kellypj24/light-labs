@@ -196,6 +196,7 @@ def _text_pj(store, rush, ok):
             store, to, rush.REMOTE_URL, send, rush.QUIET_HOURS, send_item=send_item
         )
         phone.ping(store, to, rush.PING_UNTIL, ok, send, rush.QUIET_HOURS)
+        phone.ask_digest(store, to, rush.REMOTE_URL, send, rush.QUIET_HOURS)
     except (OSError, subprocess.CalledProcessError) as e:
         store.journal(f"could not text PJ: {getattr(e, 'stderr', '') or e}")
         return
@@ -304,8 +305,31 @@ def rush_autosend(args, store, rush):
     print(
         f"enabled: {s.get('enabled', False) and not env_off}  kinds: {s.get('kinds', [])}  "
         f"daily cap: {s.get('daily_cap')}  per thread: {s.get('per_thread')}  "
+        f"escalations' holding replies: {s.get('escalations', False)}  "
         f"off after a flag: {sorted(off) or 'none'}"
     )
+
+
+def rush_mute(args, store, rush):
+    """Stop (or with --off, resume) drafting on a board task: a log or status thread
+    that names Rush without talking to him."""
+    state = store.load()
+    muted = set(state.get("muted", []))
+    if args.task:
+        if args.off:
+            muted.discard(args.task)
+        else:
+            muted.add(args.task)
+        state["muted"] = sorted(muted)
+        store.save(state)
+        store.journal(f"{'unmuted' if args.off else 'muted'} {args.task}")
+        if not args.off:
+            for item in store.pending():
+                if item["target"].get("task_id") == args.task:
+                    store.resolve(
+                        item["id"], "rejected", reason=f"superseded by mute of {args.task}"
+                    )
+    print("muted: " + (", ".join(sorted(muted)) or "none"))
 
 
 def rush_escalate(args, store, rush):
@@ -531,6 +555,11 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
+    mute_p = rcmd.add_parser(
+        "mute", help="stop drafting on a board task (a log thread); no task: list"
+    )
+    mute_p.add_argument("task", nargs="?")
+    mute_p.add_argument("--off", action="store_true", help="resume drafting on it")
     rcmd.add_parser(
         "mail-fixtures", help="teacher/local disagreements -> synthetic fixture candidates"
     ).add_argument("--limit", type=int, default=20)

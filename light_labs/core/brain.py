@@ -158,7 +158,9 @@ class Mock:
         message = user.split("<message>")[-1].split("</message>")[0]
         self.last = {"latency_s": 0.0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
         if self.WORK.search(message):
-            return "ESCALATE: mock work request\nPassed to Auto; PJ will follow up."
+            # Quotes the message, so the escalation passes Rush's grounding check.
+            ask = message.strip().removeprefix("Message:").strip().strip('"')[:80]
+            return f"ESCALATE: mock: {ask}\nPassed to Auto; PJ will follow up."
         return "Thanks, good to hear from you."
 
 
