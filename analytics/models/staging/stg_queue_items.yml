@@ -28,7 +28,9 @@ models:
       - name: minutes_to_decision
         description: Minutes from queued to sent or rejected; NULL while pending
       - name: reject_reason
-        description: Reason given to `lab rush reject --reason`
+        description: Reason given to `lab rush reject --reason`, or `superseded by <id>`
+      - name: is_superseded
+        description: Replaced by a newer draft for the thread, or dropped by a mute; not PJ's decision
       - name: brain
         description: Model spec that drafted it, e.g. ollama:llama3.1:8b
       - name: git_commit
@@ -49,13 +51,15 @@ unit_tests:
     given:
       - input: source('raw', 'queue_items')
         rows:
-          - {item_id: a, robot: rush, status: sent, draft: "hi there", drafted: "hi there", escalation: null, created: "2026-10-12 10:00:00+00", resolved: "2026-10-12 10:30:00+00"}
-          - {item_id: b, robot: rush, status: sent, draft: "hello there", drafted: "hi there", escalation: null, created: "2026-10-12 10:00:00+00", resolved: "2026-10-12 11:00:00+00"}
-          - {item_id: c, robot: rush, status: sent, draft: "hi", drafted: null, escalation: "do work", created: "2026-10-12 10:00:00+00", resolved: "2026-10-12 10:05:00+00"}
-          - {item_id: d, robot: rush, status: pending, draft: "hi", drafted: "hi", escalation: null, created: "2026-10-12 10:00:00+00", resolved: null}
+          - {item_id: a, robot: rush, status: sent, draft: "hi there", drafted: "hi there", escalation: null, reason: null, created: "2026-10-12 10:00:00+00", resolved: "2026-10-12 10:30:00+00"}
+          - {item_id: b, robot: rush, status: sent, draft: "hello there", drafted: "hi there", escalation: null, reason: null, created: "2026-10-12 10:00:00+00", resolved: "2026-10-12 11:00:00+00"}
+          - {item_id: c, robot: rush, status: sent, draft: "hi", drafted: null, escalation: "do work", reason: null, created: "2026-10-12 10:00:00+00", resolved: "2026-10-12 10:05:00+00"}
+          - {item_id: d, robot: rush, status: pending, draft: "hi", drafted: "hi", escalation: null, reason: null, created: "2026-10-12 10:00:00+00", resolved: null}
+          - {item_id: e, robot: rush, status: rejected, draft: "hi", drafted: "hi", escalation: null, reason: "superseded by d", created: "2026-10-12 09:00:00+00", resolved: "2026-10-12 10:00:00+00"}
     expect:
       rows:
-        - {queue_item_key: rush|a, is_edited: false, edit_similarity: 1.0, minutes_to_decision: 30, is_escalated: false}
-        - {queue_item_key: rush|b, is_edited: true, edit_similarity: 0.6363636363636364, minutes_to_decision: 60, is_escalated: false}
-        - {queue_item_key: rush|c, is_edited: null, edit_similarity: null, minutes_to_decision: 5, is_escalated: true}
-        - {queue_item_key: rush|d, is_edited: null, edit_similarity: null, minutes_to_decision: null, is_escalated: false}
+        - {queue_item_key: rush|a, is_edited: false, edit_similarity: 1.0, minutes_to_decision: 30, is_escalated: false, is_superseded: false}
+        - {queue_item_key: rush|b, is_edited: true, edit_similarity: 0.6363636363636364, minutes_to_decision: 60, is_escalated: false, is_superseded: false}
+        - {queue_item_key: rush|c, is_edited: null, edit_similarity: null, minutes_to_decision: 5, is_escalated: true, is_superseded: false}
+        - {queue_item_key: rush|d, is_edited: null, edit_similarity: null, minutes_to_decision: null, is_escalated: false, is_superseded: false}
+        - {queue_item_key: rush|e, is_edited: null, edit_similarity: null, minutes_to_decision: 60, is_escalated: false, is_superseded: true}

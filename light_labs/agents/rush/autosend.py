@@ -1,6 +1,7 @@
 """Rush's auto-send tier: which drafts go out without PJ's approval.
 
-Only drafts the router marked REPLY are eligible; escalations always queue. An eligible
+Drafts the router marked REPLY are eligible; so are escalations' holding replies when
+`escalations` is on (the ask itself goes to PJ's daily digest, not the queue). An eligible
 draft is sent when every guard passes and no limit is hit; otherwise it waits in the
 queue as before. `lab rush flag <id>` marks an auto-sent draft that should not have gone
 out and turns auto-send off for its kind until PJ turns it back on.
@@ -68,6 +69,8 @@ class Policy:
         self.kinds = set(settings.get("kinds", []))
         self.daily_cap = settings.get("daily_cap", 10)
         self.per_thread = settings.get("per_thread", 1)
+        # Holding replies to escalations, which promise nothing (heartbeat.HOLDING).
+        self.escalations = settings.get("escalations", False)
         self.store = store
         self.today = today or datetime.now(UTC).date().isoformat()
 
@@ -81,7 +84,7 @@ class Policy:
         """(send?, reasons it was held). Reasons are recorded on queued drafts."""
         if not self.enabled:
             return False, ["auto-send off"]
-        if escalate:
+        if escalate and not self.escalations:
             return False, ["escalated"]
         if kind not in self.kinds:
             return False, [f"auto-send not enabled for {kind}"]

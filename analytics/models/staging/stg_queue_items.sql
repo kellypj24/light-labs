@@ -1,5 +1,7 @@
 {#
-    One row per queued draft. A sent draft is edited when the text sent differs from
+    One row per queued draft. A draft Rush replaced with a newer one for the same thread,
+    or dropped when PJ muted the thread, is superseded: rejected on disk, but no decision
+    of PJ's, so it counts as neither decided nor rejected. A sent draft is edited when the text sent differs from
     what the robot wrote; NULL when that is unknown (queued before `drafted` was
     recorded) or the draft was not sent.
 #}
@@ -37,9 +39,14 @@ renamed AS (
         robot || '|' || item_id AS queue_item_key,
         target ->> '$.task_id' AS task_id,
         escalation IS NOT NULL AS is_escalated,
-        status IN ('sent', 'rejected') AS is_decided,
+        status = 'rejected' AND COALESCE(STARTS_WITH(reason, 'superseded by '), FALSE)
+            AS is_superseded,
+        status = 'sent'
+        OR (status = 'rejected' AND NOT COALESCE(STARTS_WITH(reason, 'superseded by '), FALSE))
+            AS is_decided,
         status = 'sent' AS is_sent,
-        status = 'rejected' AS is_rejected,
+        status = 'rejected' AND NOT COALESCE(STARTS_WITH(reason, 'superseded by '), FALSE)
+            AS is_rejected,
         DATE_DIFF('minute', created, resolved) AS minutes_to_decision,
         CASE
             WHEN status <> 'sent' OR drafted IS NULL THEN NULL

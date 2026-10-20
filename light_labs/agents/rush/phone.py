@@ -13,6 +13,7 @@ docs/rush-phone.md). An interval timer drifts off the wakes; a clock-aligned one
 The tick runs under `caffeinate -i` so the Mac stays up until it is done.
 """
 
+import json
 import re
 import subprocess
 import time
@@ -97,6 +98,37 @@ def notify_pending(
     store.save(state)
     store.journal(f"texted PJ about {', '.join(texted)}")
     return texted
+
+
+ASK_LINES = 12
+
+
+def ask_digest(store, to, remote_url=None, send=imessage, quiet_hours=None, now=None):
+    """Once a day, after quiet hours: the asks Rush acknowledged on the board and left for
+    PJ (heartbeat.ASKS), in one text. The sent batch moves to asks-sent/. True when sent."""
+    now = now or datetime.now()
+    path = store.root / "asks.jsonl"
+    done = store.root / "asks-sent"
+    if quiet(quiet_hours, now) or not path.exists():
+        return False
+    if any(p.name.startswith(f"{now:%Y-%m-%d}") for p in done.glob("*.jsonl")):
+        return False  # today's digest went out
+    asks = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if not asks:
+        return False
+    lines = [f"- {a['ask']} ({a['who']} on {a['where']})" for a in asks[:ASK_LINES]]
+    if len(asks) > ASK_LINES:
+        lines.append(f"- and {len(asks) - ASK_LINES} more")
+    link = f"\n\nBoard: {remote_url.rstrip('/')}/board" if remote_url else ""
+    send(
+        to,
+        f"{PREFIX} {len(asks)} ask{'s' if len(asks) != 1 else ''} for you since the last "
+        "digest. Each got a holding reply on the board.\n" + "\n".join(lines) + link,
+    )
+    done.mkdir(exist_ok=True)
+    path.rename(done / f"{now:%Y-%m-%dT%H%M%S}.jsonl")
+    store.journal(f"sent PJ the digest of {len(asks)} ask(s)")
+    return True
 
 
 def ping(store, to, until, ok, send=imessage, quiet_hours=None, now=None):

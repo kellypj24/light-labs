@@ -33,7 +33,8 @@
           "comment"
         ],
         "daily_cap": 10,
-        "per_thread": 1
+        "per_thread": 1,
+        "escalations": true
       }
     },
     {

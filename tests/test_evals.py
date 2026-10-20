@@ -73,7 +73,7 @@ class RunOneTest(unittest.TestCase):
             }
         )
         self.assertTrue(out["ok"], out)
-        self.assertEqual(out["result"]["escalate"], "mock work request")
+        self.assertEqual(out["result"]["escalate"], "mock: Can you review this code?")
         self.assertNotIn("ESCALATE", out["result"]["draft"])
 
     def test_comment_kind(self):
