@@ -237,8 +237,12 @@ def _auto(rush):
     from light_labs.core.brain import brain_for
 
     notes = (rush.MEMORY if rush.MEMORY.exists() else rush.HERE / "memory.example.md").read_text()
+    # Claude reads the repo to answer; nothing it can run or write.
+    repo = {"tools": "Read,Grep,Glob", "cwd": str(config.REPO), "timeout": 600}
     return {
-        "brain": brain_for(rush.AUTO_BRAIN),
+        "brain": brain_for(
+            rush.AUTO_BRAIN, **(repo if rush.AUTO_BRAIN.startswith("claude:") else {})
+        ),
         "system": AUTO_SYSTEM + notes,
         "signoff": rush.AUTO_SIGNOFF,
         "meta": {"brain": rush.AUTO_BRAIN},
@@ -330,6 +334,73 @@ def rush_mute(args, store, rush):
                         item["id"], "rejected", reason=f"superseded by mute of {args.task}"
                     )
     print("muted: " + (", ".join(sorted(muted)) or "none"))
+
+
+def _rebuild_prompt(client, item, rush):
+    """The prompt a queued draft was written from, rebuilt from the board: the comment its
+    context quotes, with the thread before it. None when the comment is gone."""
+    from light_labs.agents.rush import heartbeat as hb
+
+    context, target = item["context"], item["target"]
+    if item["kind"] == "reply":
+        msg = client.message(hb.short_id(target["in_reply_to"]))
+        content = (msg.get("content") or "")[: hb.MAX_CONTEXT_CHARS]
+        author = context.split(":", 1)[0]
+        return hb.reply_prompt(rush.NAME, author, msg.get("summary"), content), content
+    task = client.task(target["task_id"])
+    comments = task.get("comments") or []
+    for idx in range(len(comments) - 1, -1, -1):
+        c = comments[idx]
+        body = (c.get("text") or "")[: hb.MAX_CONTEXT_CHARS]
+        if body and body[:150] in context and context.startswith(f"{c.get('author')} "):
+            earlier = [
+                (e.get("author"), e.get("text") or "")
+                for e in comments[max(0, idx - hb.THREAD_COMMENTS) : idx]
+            ]
+            prompt = hb.comment_prompt(rush.NAME, task.get("title"), earlier, c.get("author"), body)
+            return prompt, body
+    body = (task.get("description") or "")[: hb.MAX_CONTEXT_CHARS]
+    if body and body[:150] in context:
+        return hb.task_prompt(rush.NAME, task.get("title"), task.get("createdBy"), body), body
+    return None
+
+
+def rush_triage(args, store, rush):
+    """Dry run: what Auto would do with the queued escalations (note, answer, or leave for
+    PJ), written to var/rush/triage-dryrun.jsonl. Posts and resolves nothing."""
+    from light_labs.agents.rush.heartbeat import AUTO_TASK, verdict
+
+    auto = _auto(rush)
+    if auto is None:
+        sys.exit("RUSH_AUTO_BRAIN is empty")
+    client = Client()
+    items = [i for i in store.pending() if i["escalate"] and (not args.ids or i["id"] in args.ids)]
+    out = store.root / "triage-dryrun.jsonl"
+    with out.open("a") as f:
+        for item in items:
+            rebuilt = _rebuild_prompt(client, item, rush)
+            if rebuilt is None:
+                print(f"{item['id']}  skipped: comment not found on the board")
+                continue
+            prompt, _ = rebuilt
+            try:
+                raw = auto["brain"].think(
+                    auto["system"], prompt + AUTO_TASK.format(work=item["escalate"])
+                )
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+                print(f"{item['id']}  Auto failed: {e}")
+                continue
+            kind, question, reply = verdict(raw, item["escalate"])
+            cost = auto["brain"].last.get("cost_usd")
+            f.write(json.dumps({"id": item["id"], "verdict": kind, "question": question,
+                                "reply": reply, "context": item["context"][:300],
+                                "cost_usd": cost}) + "\n")  # fmt: skip
+            f.flush()
+            print(f"\n{item['id']}  {kind}" + (f": {question}" if kind == "PJ" else ""))
+            print(f"  {item['context'][:120]!r}")
+            if reply:
+                print("  " + reply.replace("\n", "\n  "))
+    print(f"\nwritten to {out}")
 
 
 def rush_escalate(args, store, rush):
@@ -555,6 +626,9 @@ def main(argv=None):
     auto_p = rcmd.add_parser("autosend", help="show auto-send; turn a kind on or off")
     auto_p.add_argument("action", nargs="?", choices=["on", "off"])
     auto_p.add_argument("kind", nargs="?", choices=["reply", "comment"])
+    rcmd.add_parser(
+        "triage", help="dry run: what Auto would do with the queued escalations"
+    ).add_argument("ids", nargs="*")
     mute_p = rcmd.add_parser(
         "mute", help="stop drafting on a board task (a log thread); no task: list"
     )

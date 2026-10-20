@@ -1,7 +1,8 @@
 {#
     One row per queued draft. A draft Rush replaced with a newer one for the same thread,
-    or dropped when PJ muted the thread, is superseded: rejected on disk, but no decision
-    of PJ's, so it counts as neither decided nor rejected. A sent draft is edited when the text sent differs from
+    or dropped when PJ muted the thread, is superseded; an escalation Auto closed with no
+    reply is noted. Both are rejected on disk, but no decision of PJ's, so they count as
+    neither decided nor rejected. A sent draft is edited when the text sent differs from
     what the robot wrote; NULL when that is unknown (queued before `drafted` was
     recorded) or the draft was not sent.
 #}
@@ -41,11 +42,16 @@ renamed AS (
         escalation IS NOT NULL AS is_escalated,
         status = 'rejected' AND COALESCE(STARTS_WITH(reason, 'superseded by '), FALSE)
             AS is_superseded,
+        status = 'rejected' AND COALESCE(STARTS_WITH(reason, 'noted by Auto: '), FALSE)
+            AS is_noted,
         status = 'sent'
-        OR (status = 'rejected' AND NOT COALESCE(STARTS_WITH(reason, 'superseded by '), FALSE))
-            AS is_decided,
+        OR (
+            status = 'rejected'
+            AND NOT COALESCE(REGEXP_MATCHES(reason, '^(superseded by|noted by Auto:) '), FALSE)
+        ) AS is_decided,
         status = 'sent' AS is_sent,
-        status = 'rejected' AND NOT COALESCE(STARTS_WITH(reason, 'superseded by '), FALSE)
+        status = 'rejected'
+        AND NOT COALESCE(REGEXP_MATCHES(reason, '^(superseded by|noted by Auto:) '), FALSE)
             AS is_rejected,
         DATE_DIFF('minute', created, resolved) AS minutes_to_decision,
         CASE

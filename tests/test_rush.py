@@ -374,6 +374,28 @@ class AutoHandoffTest(unittest.TestCase):
         self.assertIn("run the sgrep fight", auto.calls[0]["user"])
         self.assertEqual(len(self.store.pending()), 1)
 
+    def test_auto_notes_an_fyi_and_closes_it(self):
+        auto = ScriptedBrain("NOTE")
+        [d] = self.tick(["ESCALATE: run the sgrep fight", "With PJ and Auto."], auto)
+        self.assertEqual(self.store.pending(), [])
+        self.assertEqual((d["triage"], d["reason"]), ("NOTE", "noted by Auto: run the sgrep fight"))
+        [ask] = [json.loads(x) for x in (self.store.root / "asks.jsonl").read_text().splitlines()]
+        self.assertEqual(ask["outcome"], "noted")
+
+    def test_auto_answer_and_question_for_pj(self):
+        auto = ScriptedBrain("ANSWER\n\nRush doesn't run fights; PJ picks them.")
+        [d] = self.tick(["ESCALATE: run the sgrep fight", "With PJ and Auto."], auto)
+        self.assertEqual(d["draft"], "Rush doesn't run fights; PJ picks them.\n\n— Auto")
+        self.assertEqual((d["triage"], d["held"]), ("ANSWER", ["Auto answered"]))
+        self.store.resolve(d["id"], "rejected")
+        self.client.items = [item("a2", "devin")]
+        self.client.messages["a2"] = {"content": "Can you run the sgrep fight?"}
+        auto = ScriptedBrain("PJ: run the sgrep fight this week?\n\nPJ will say here.")
+        [d] = self.tick(["ESCALATE: run the sgrep fight", "With PJ and Auto."], auto)
+        self.assertEqual(
+            (d["escalate"], d["held"]), ("run the sgrep fight this week?", ["Auto: needs PJ"])
+        )
+
     def test_plain_replies_never_reach_auto(self):
         auto = ScriptedBrain()
         [d] = self.tick(["REPLY", "Thanks!"], auto)
@@ -513,26 +535,24 @@ class EscalationHoldingReplyTest(unittest.TestCase):
             self.client, ScriptedBrain("ESCALATE: run the sgrep fight", "With PJ and Auto."),
             self.store, "persona", actor="pj_agent", watch_tasks=[], name="Rush",
             signoff="— Rush", autosend=policy,
-            auto={"brain": auto, "system": "S", "signoff": "— Auto", "meta": {}},
+            auto=auto and {"brain": auto, "system": "S", "signoff": "— Auto", "meta": {}},
         )  # fmt: skip
         return hb.tick(backfill=True)
 
     def test_holding_reply_goes_out_and_the_ask_waits_for_the_digest(self):
-        auto = ScriptedBrain()
-        [d] = self.tick(True, auto)
+        [d] = self.tick(True, None)  # no Auto
         self.assertTrue(d["auto"])
         self.assertEqual(self.client.sent, ["With PJ and Auto.\n\n— Rush"])
-        self.assertEqual(auto.calls, [])  # no Claude draft for an ask PJ won't review
         self.assertEqual(self.store.pending(), [])
         [ask] = [json.loads(x) for x in (self.store.root / "asks.jsonl").read_text().splitlines()]
         self.assertEqual(
             (ask["ask"], ask["who"], ask["where"]), ("run the sgrep fight", "devin", "devin")
         )
 
-    def test_without_the_setting_escalations_still_queue_for_pj(self):
-        auto = ScriptedBrain("Auto's answer.")
-        [d] = self.tick(False, auto)
-        self.assertEqual(d["held"], ["escalated"])
+    def test_auto_answers_are_never_auto_sent(self):
+        auto = ScriptedBrain("ANSWER\n\nAuto's answer.")
+        [d] = self.tick(True, auto)
+        self.assertEqual(d["held"], ["Auto answered"])
         self.assertEqual(len(auto.calls), 1)
         self.assertEqual(self.client.sent, [])
 

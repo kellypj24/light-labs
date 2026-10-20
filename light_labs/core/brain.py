@@ -89,15 +89,19 @@ def choice_probs(top_logprobs, choices):
 class ClaudeCLI:
     """Cloud model through `claude -p`: one turn, no tools, run from an empty directory.
 
+    With `tools` (e.g. "Read,Grep,Glob") and `cwd`, it may use those tools, allowed
+    without prompting, in that directory instead: read-only access to a repo.
+
     Isolated either way, so the baseline is the model, not the user's setup: with
     ANTHROPIC_API_KEY set it runs `--bare` (billed to the key); without one it uses the
     logged-in subscription with `--setting-sources project` from an empty directory, which
     skips the user's settings, hooks (no Stop chime per call) and ~/.claude/CLAUDE.md.
     """
 
-    def __init__(self, model, timeout=300):
+    def __init__(self, model, timeout=300, tools="", cwd=None):
         self.model = model
         self.timeout = timeout
+        self.tools, self.cwd = tools, cwd
         self.last = {}
 
     def think(self, system, user, temperature=None, num_ctx=None):
@@ -112,16 +116,18 @@ class ClaudeCLI:
             "--system-prompt",
             system,
             "--tools",
-            "",
+            self.tools,
             "--no-session-persistence",
             "--strict-mcp-config",
         ]
         cmd += ["--bare"] if isolated else ["--setting-sources", "project"]
+        if self.tools:
+            cmd += [f"--allowedTools={self.tools}"]  # variadic: a bare value eats the prompt
         start = time.monotonic()
         with tempfile.TemporaryDirectory() as empty:
             proc = subprocess.run(
                 cmd + [user],
-                cwd=empty,
+                cwd=self.cwd or empty,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
