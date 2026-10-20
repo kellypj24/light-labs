@@ -10,7 +10,7 @@ WITH records AS (
         session_id,
         MIN(recorded_at) AS started_at,
         MAX(recorded_at) AS ended_at,
-        ARG_MIN(project, recorded_at) AS project,
+        MODE(project) AS cwd_project,
         ARG_MIN(git_branch, recorded_at) AS git_branch,
         MAX(claude_version) AS claude_version,
         COUNT(*) FILTER (WHERE is_human_prompt) AS prompt_count,
@@ -41,7 +41,12 @@ tool_calls AS (
     SELECT
         session_id,
         COUNT(*) AS tool_call_count,
-        COUNT(*) FILTER (WHERE is_error) AS tool_error_count
+        COUNT(*) FILTER (WHERE is_error) AS tool_error_count,
+        -- Where the session worked: a session started from the home directory belongs
+        -- to the repos its tools touched.
+        MODE(project) FILTER (
+            WHERE project NOT IN ('home', 'claude-config', 'scratch', 'other')
+        ) AS project
     FROM {{ ref('int_claude_tool_calls') }}
     GROUP BY session_id
 
@@ -49,7 +54,7 @@ tool_calls AS (
 
 SELECT
     records.session_id,
-    records.project,
+    COALESCE(tool_calls.project, records.cwd_project) AS project,
     records.git_branch,
     records.claude_version,
     api_calls.model_id,
