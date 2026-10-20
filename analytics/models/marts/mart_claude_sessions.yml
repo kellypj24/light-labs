@@ -9,7 +9,9 @@ models:
           - unique
           - not_null
       - name: project
-        description: Working directory's last segment when the session started
+        description: >
+          The project most of the session's tool calls touched; the working directory
+          when none touched a project
       - name: model_id
         description: The model that answered most API calls
       - name: prompt_count

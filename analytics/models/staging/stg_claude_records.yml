@@ -18,7 +18,10 @@ models:
       - name: is_subagent
         description: From a subagent's transcript (<session>/subagents/)
       - name: project
-        description: Last segment of the working directory, e.g. light-labs
+        description: >
+          Top-level folder under the home directory the record ran in, a worktree
+          <repo>-<topic> folded into <repo>; `home`, `claude-config` (~/.claude) or
+          `scratch` (temp dirs) otherwise; NULL for records without a working directory
       - name: record_duration_ms
         description: A turn_duration record's turn length in ms, as text
       - name: message_id
@@ -27,3 +30,27 @@ models:
         description: The message's content, JSON (a string for a typed prompt, else blocks)
       - name: is_human_prompt
         description: A prompt PJ typed, not a tool result, command expansion or subagent brief
+
+unit_tests:
+  - name: projects_from_working_directories
+    description: Subfolders count as their project, worktrees as their repo, the rest as buckets.
+    model: stg_claude_records
+    given:
+      - input: source('raw', 'claude_records')
+        rows:
+          - {record_key: a, project_dir: d, transcript: s.jsonl, line_no: 1, record: '{"cwd": "/Users/u/light-labs/analytics"}'}
+          - {record_key: b, project_dir: d, transcript: s.jsonl, line_no: 2, record: '{"cwd": "/Users/u/light-labs-bar"}'}
+          - {record_key: c, project_dir: d, transcript: s.jsonl, line_no: 3, record: '{"cwd": "/Users/u"}'}
+          - {record_key: e, project_dir: d, transcript: s.jsonl, line_no: 4, record: '{"cwd": "/Users/u/.claude/projects/x/memory"}'}
+          - {record_key: f, project_dir: d, transcript: s.jsonl, line_no: 5, record: '{"cwd": "/private/tmp/claude-501/x/scratchpad"}'}
+          - {record_key: g, project_dir: d, transcript: s.jsonl, line_no: 6, record: '{"cwd": "/Users/u/data-engineering/transformation/dbt"}'}
+          - {record_key: h, project_dir: d, transcript: s.jsonl, line_no: 7, record: '{"type": "mode"}'}
+    expect:
+      rows:
+        - {record_key: a, project: light-labs}
+        - {record_key: b, project: light-labs}
+        - {record_key: c, project: home}
+        - {record_key: e, project: claude-config}
+        - {record_key: f, project: scratch}
+        - {record_key: g, project: data-engineering}
+        - {record_key: h, project: null}

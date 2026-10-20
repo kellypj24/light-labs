@@ -39,9 +39,8 @@ renamed AS (
         record -> '$.message.content' AS message_content,
         COALESCE(record ->> '$.sessionId', record ->> '$.parentSessionId') AS session_id,
         transcript LIKE '%/subagents/%' AS is_subagent,
-        COALESCE(
-            NULLIF(REGEXP_EXTRACT(record ->> '$.cwd', '([^/]+)/?$', 1), ''), project_dir
-        ) AS project,
+        -- `cwd` follows the shell's cd, so a subfolder counts as its top-level folder.
+        {{ claude_folder("record ->> '$.cwd'") }} AS folder,
         -- A prompt typed by PJ: plain text from a person, not a tool result, a
         -- slash command's expansion or a subagent's brief. Older records have no origin.
         COALESCE(
@@ -54,6 +53,31 @@ renamed AS (
         ) AS is_human_prompt
     FROM source
 
+),
+
+-- A worktree folder named <repo>-<topic> beside its repo's folder counts as that repo.
+folders AS (
+
+    SELECT DISTINCT folder
+    FROM renamed
+    WHERE folder IS NOT NULL
+
+),
+
+projects AS (
+
+    SELECT
+        folders.folder,
+        COALESCE(ARG_MAX(repos.folder, LENGTH(repos.folder)), folders.folder) AS project
+    FROM folders
+    LEFT JOIN folders AS repos
+        ON STARTS_WITH(folders.folder, repos.folder || '-')
+    GROUP BY folders.folder
+
 )
 
-SELECT * FROM renamed
+SELECT
+    renamed.*,
+    projects.project
+FROM renamed
+LEFT JOIN projects ON renamed.folder = projects.folder
