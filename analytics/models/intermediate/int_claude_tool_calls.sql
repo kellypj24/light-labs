@@ -14,6 +14,7 @@ WITH records AS (
         agent_id,
         is_subagent,
         project,
+        worktree,
         recorded_at,
         message_content
     FROM {{ ref('stg_claude_records') }}
@@ -31,6 +32,7 @@ blocks AS (
         records.agent_id,
         records.is_subagent,
         records.project,
+        records.worktree,
         records.recorded_at,
         UNNEST(FROM_JSON(records.message_content, '["JSON"]')) AS block
     FROM records
@@ -44,6 +46,7 @@ calls AS (
         agent_id,
         is_subagent,
         project AS cwd_project,
+        worktree AS cwd_worktree,
         recorded_at AS called_at,
         block ->> '$.id' AS tool_use_id,
         block ->> '$.name' AS tool_name,
@@ -136,6 +139,10 @@ SELECT
     touched.called_at,
     tool_results.returned_at,
     COALESCE(folded.project, touched.touched_folder, touched.cwd_project) AS project,
+    CASE
+        WHEN touched.touched_folder IS NOT NULL THEN {{ claude_worktree('touched.touched_path') }}
+        ELSE touched.cwd_worktree
+    END AS worktree,
     touched.tool_input ->> '$.command' AS bash_command,
     touched.tool_input ->> '$.skill' AS skill_name,
     touched.tool_input ->> '$.subagent_type' AS subagent_type,

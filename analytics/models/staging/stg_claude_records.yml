@@ -22,6 +22,10 @@ models:
           Top-level folder under the home directory the record ran in, a worktree
           <repo>-<topic> folded into <repo>; `home`, `claude-config` (~/.claude) or
           `scratch` (temp dirs) otherwise; NULL for records without a working directory
+      - name: worktree
+        description: >
+          The checkout within the project, relative to home: `light-labs`,
+          `light-labs-bar`, or `light-labs/.claude/worktrees/<name>`; NULL for a bucket
       - name: record_duration_ms
         description: A turn_duration record's turn length in ms, as text
       - name: message_id
@@ -45,12 +49,14 @@ unit_tests:
           - {record_key: f, project_dir: d, transcript: s.jsonl, line_no: 5, record: '{"cwd": "/private/tmp/claude-501/x/scratchpad"}'}
           - {record_key: g, project_dir: d, transcript: s.jsonl, line_no: 6, record: '{"cwd": "/Users/u/data-engineering/transformation/dbt"}'}
           - {record_key: h, project_dir: d, transcript: s.jsonl, line_no: 7, record: '{"type": "mode"}'}
+          - {record_key: i, project_dir: d, transcript: s.jsonl, line_no: 8, record: '{"cwd": "/Users/u/light-labs/.claude/worktrees/agent-1/analytics"}'}
     expect:
       rows:
-        - {record_key: a, project: light-labs}
-        - {record_key: b, project: light-labs}
-        - {record_key: c, project: home}
-        - {record_key: e, project: claude-config}
-        - {record_key: f, project: scratch}
-        - {record_key: g, project: data-engineering}
-        - {record_key: h, project: null}
+        - {record_key: a, project: light-labs, worktree: light-labs}
+        - {record_key: b, project: light-labs, worktree: light-labs-bar}
+        - {record_key: c, project: home, worktree: null}
+        - {record_key: e, project: claude-config, worktree: null}
+        - {record_key: f, project: scratch, worktree: null}
+        - {record_key: g, project: data-engineering, worktree: data-engineering}
+        - {record_key: h, project: null, worktree: null}
+        - {record_key: i, project: light-labs, worktree: light-labs/.claude/worktrees/agent-1}

@@ -14,6 +14,10 @@ models:
         description: The call's input, JSON
       - name: bash_command
         description: The command, for Bash calls
+      - name: project
+        description: The project the call touched (file path, cd or -C target), else the cwd's
+      - name: worktree
+        description: The checkout within the project the call touched, as in stg_claude_records
       - name: activity
         description: reading, editing, shell, web, subagents, asking or other
         tests:
@@ -42,14 +46,14 @@ unit_tests:
     given:
       - input: ref('stg_claude_records')
         rows:
-          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, recorded_at: "2026-10-12 10:00:00+00", message_content: '[{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "/Users/u/light-labs/README.md"}}]'}
-          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, recorded_at: "2026-10-12 10:00:01+00", message_content: '[{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "cd ~/light-labs-bar && just check"}}]'}
-          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, recorded_at: "2026-10-12 10:00:02+00", message_content: '[{"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "git -C /Users/u/scouter status"}}]'}
-          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, recorded_at: "2026-10-12 10:00:03+00", message_content: '[{"type": "tool_use", "id": "t4", "name": "Bash", "input": {"command": "ls"}}]'}
-          - {record_type: system, session_id: s, is_subagent: false, project: light-labs, folder: light-labs-bar, recorded_at: "2026-10-12 09:00:00+00", message_content: null}
+          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, worktree: null, recorded_at: "2026-10-12 10:00:00+00", message_content: '[{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "/Users/u/light-labs/README.md"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, worktree: null, recorded_at: "2026-10-12 10:00:01+00", message_content: '[{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "cd ~/light-labs-bar && just check"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, worktree: null, recorded_at: "2026-10-12 10:00:02+00", message_content: '[{"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "git -C /Users/u/scouter status"}}]'}
+          - {record_type: assistant, session_id: s, is_subagent: false, project: claude-config, folder: claude-config, worktree: null, recorded_at: "2026-10-12 10:00:03+00", message_content: '[{"type": "tool_use", "id": "t4", "name": "Bash", "input": {"command": "ls"}}]'}
+          - {record_type: system, session_id: s, is_subagent: false, project: light-labs, folder: light-labs-bar, worktree: light-labs-bar, recorded_at: "2026-10-12 09:00:00+00", message_content: null}
     expect:
       rows:
-        - {tool_use_id: t1, project: light-labs}
-        - {tool_use_id: t2, project: light-labs}
-        - {tool_use_id: t3, project: scouter}
-        - {tool_use_id: t4, project: claude-config}
+        - {tool_use_id: t1, project: light-labs, worktree: light-labs}
+        - {tool_use_id: t2, project: light-labs, worktree: light-labs-bar}
+        - {tool_use_id: t3, project: scouter, worktree: scouter}
+        - {tool_use_id: t4, project: claude-config, worktree: null}

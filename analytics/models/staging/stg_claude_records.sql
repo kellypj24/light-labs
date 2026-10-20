@@ -41,6 +41,7 @@ renamed AS (
         transcript LIKE '%/subagents/%' AS is_subagent,
         -- `cwd` follows the shell's cd, so a subfolder counts as its top-level folder.
         {{ claude_folder("record ->> '$.cwd'") }} AS folder,
+        {{ claude_worktree("record ->> '$.cwd'") }} AS worktree,
         -- A prompt typed by PJ: plain text from a person, not a tool result, a
         -- slash command's expansion or a subagent's brief. Older records have no origin.
         COALESCE(

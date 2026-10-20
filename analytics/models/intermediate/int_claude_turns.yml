@@ -11,5 +11,9 @@ models:
           - not_null
       - name: started_at
         description: ended_at less the turn's length
+      - name: project
+        description: The project most of the turn's tool calls touched, else the cwd's
+      - name: worktree
+        description: The checkout within that project most of those calls touched
       - name: duration_seconds
         description: Wall-clock length of the turn, as Claude Code measured it

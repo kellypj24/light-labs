@@ -1,6 +1,8 @@
 {#
-    One row per week and project: finished main-loop turns and their working time split
-    by activity. A tool's time is call to result; thinking is what is left of the turn.
+    One row per week, project and worktree (the checkout within the project; NULL for
+    home, claude-config and scratch): finished main-loop turns and their working time
+    split by activity. Sum over worktrees for a project's week. A tool's time is call
+    to result; thinking is what is left of the turn.
     Parallel tool calls each count in full, so a turn's tool time is capped at its
     length. Subagents' own tools are left out: the Agent call's time covers them.
 #}
@@ -43,6 +45,7 @@ turns AS (
 
     SELECT
         turns.project,
+        turns.worktree,
         turns.session_id,
         turns.duration_seconds,
         CAST(DATE_TRUNC('week', turns.started_at) AS DATE) AS week_start,
@@ -64,8 +67,10 @@ turns AS (
 
 SELECT
     project,
+    worktree,
     week_start,
-    CAST(week_start AS VARCHAR) || '|' || project AS activity_week_key,
+    CAST(week_start AS VARCHAR) || '|' || project || '|' || COALESCE(worktree, '-')
+        AS activity_week_key,
     COUNT(*) AS turn_count,
     COUNT(DISTINCT session_id) AS session_count,
     SUM(duration_seconds) AS working_seconds,
@@ -79,4 +84,4 @@ SELECT
     SUM(other_tool_seconds * COALESCE(tool_scale, 1)) AS other_tool_seconds,
     MEDIAN(duration_seconds) AS median_turn_seconds
 FROM turns
-GROUP BY project, week_start
+GROUP BY project, worktree, week_start
