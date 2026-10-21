@@ -7,43 +7,17 @@ at a time on the laptop). Turning one off in the UI persists in var/dagster.
 """
 
 import hashlib
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 from light_labs import config
+from light_labs.evals.fights import live_fight, run_records
 from light_labs.orchestration.jobs import claude_job, evals_job, queue_job
 
-# A fight is live while its record says running and it wrote telemetry this recently
-# (the runner reads every 30s; a killed runner leaves a stale "running" record).
-LIVE_WITHIN = timedelta(minutes=2)
 # `just eval` loads its own results when a fight ends; let that finish first.
 SETTLE = timedelta(minutes=2)
-
-
-def _records(evals_dir):
-    out = []
-    for path in Path(evals_dir).glob("*.run.json"):
-        try:
-            out.append((path, json.loads(path.read_text())))
-        except (OSError, json.JSONDecodeError):
-            continue  # mid-write or unreadable: next tick
-    return out
-
-
-def live_fight(evals_dir, now=None):
-    """run_id of a fight in progress, or None."""
-    now = now or datetime.now(UTC)
-    for path, record in _records(evals_dir):
-        if record.get("status") != "running":
-            continue
-        telemetry = path.with_name(f"{record['run_id']}.telemetry.jsonl")
-        seen = max(p.stat().st_mtime for p in (path, telemetry) if p.exists())
-        if now - datetime.fromtimestamp(seen, UTC) < LIVE_WITHIN:
-            return record["run_id"]
-    return None
 
 
 def finished_since(evals_dir, cursor, now=None):
@@ -51,7 +25,7 @@ def finished_since(evals_dir, cursor, now=None):
     now = now or datetime.now(UTC)
     after = datetime.fromisoformat(cursor) if cursor else None
     ended = []
-    for _, record in _records(evals_dir):
+    for _, record in run_records(evals_dir):
         if record.get("status") == "running" or not record.get("ended_at"):
             continue
         at = datetime.fromisoformat(record["ended_at"]).astimezone(UTC)
