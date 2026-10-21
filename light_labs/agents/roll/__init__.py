@@ -23,6 +23,10 @@ TELEGRAM_CHAT = os.environ.get("ROLL_TELEGRAM_CHAT", "")
 TELEGRAM_KEYCHAIN = "light-labs-roll-telegram"
 HOME = config.VAR / "roll"
 
+# Repo chores (chores.py): the local brain whose answers are recorded while big brother
+# decides. Mega Man's brain until a dependabot-merge fight picks one.
+CHORES_BRAIN = os.environ.get("ROLL_CHORES_BRAIN", "ollama:llama3.1:8b")
+
 
 def bot():
     """Roll's Telegram bot on its mailbox."""
