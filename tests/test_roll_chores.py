@@ -160,3 +160,17 @@ class ChoresTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SlimInstallTest(unittest.TestCase):
+    def test_roll_brain_needs_no_dagster(self):
+        # `lab` is installed without the orchestration group; dagster must stay optional.
+        import subprocess
+        import sys
+
+        code = (
+            "import sys; sys.modules['dagster'] = None\n"
+            "from light_labs.agents.roll import chores\n"
+            "chores.roll_brain(None)\n"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)

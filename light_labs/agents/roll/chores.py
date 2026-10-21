@@ -299,7 +299,7 @@ def big_brother(repo_path):
 def roll_brain(spec):
     """Roll's local brain, or None while a fight has the laptop."""
     from light_labs import config
-    from light_labs.orchestration.sensors import live_fight
+    from light_labs.evals.fights import live_fight
 
     if not spec or live_fight(config.VAR / "evals"):
         return None
