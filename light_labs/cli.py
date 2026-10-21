@@ -548,7 +548,9 @@ def roll_chores(args):
         return
     repo = gitops.Repo(args.repo)
     brain = None if args.no_roll else chores.roll_brain(roll.CHORES_BRAIN)
-    run = chores.Chores(repo, store, brain, chores.big_brother(repo.path), apply=args.apply)
+    run = chores.Chores(
+        repo, store, brain, chores.big_brother(repo.path), apply=args.apply, admin=args.admin
+    )
     try:
         for number, action, note in run.run():
             print(f"#{number:<5} {action:12} {note}")
@@ -674,6 +676,9 @@ def main(argv=None):
     )
     chores_p.add_argument("-C", dest="repo", default=".", help="repo (default: here)")
     chores_p.add_argument("--apply", action="store_true", help="merge what Claude approves")
+    chores_p.add_argument(
+        "--admin", action="store_true", help="merge past a required review (repo admin)"
+    )
     chores_p.add_argument("--no-roll", action="store_true", help="skip Roll's local answer")
     rocmd.add_parser("scorecard", help="Roll's chore answers against Claude's, by tier")
     google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")

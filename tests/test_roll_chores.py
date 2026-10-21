@@ -76,9 +76,9 @@ class ChoresTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def chores(self, repo, raw=MERGE, apply=True, roll=None, cap=10):
+    def chores(self, repo, raw=MERGE, apply=True, roll=None, cap=10, admin=False):
         self.brother = Brother(raw)
-        return chores.Chores(repo, self.store, roll or Roll(0.9), self.brother, apply, cap)
+        return chores.Chores(repo, self.store, roll or Roll(0.9), self.brother, apply, cap, admin)
 
     def test_title_and_jump(self):
         self.assertEqual(
@@ -116,6 +116,13 @@ class ChoresTest(unittest.TestCase):
         self.assertEqual(item["roll"], {"choice": "yes", "p_yes": 0.9})
         self.assertEqual(item["big_brother"]["model"], "haiku")
         self.assertEqual(item["reason"], "merged by roll")
+        self.assertNotIn("--admin", merge)
+
+    def test_admin_is_opt_in(self):
+        repo = FakeRepo([pr(7, "Bump dbt-core from 1.12.5 to 1.12.6 in /t")])
+        self.chores(repo, admin=True).run()
+        merge = next(c for c in repo.calls if c[:2] == ("pr", "merge"))
+        self.assertIn("--admin", merge)
 
     def test_dry_run_touches_nothing(self):
         repo = FakeRepo([pr(7, "Bump dbt-core from 1.12.5 to 1.12.6 in /t")])

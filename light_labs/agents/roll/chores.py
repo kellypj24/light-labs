@@ -157,8 +157,8 @@ class Chores:
     """One pass over a repo's Dependabot PRs. `roll` and `big_brother(tier)` are brains;
     `roll` may be None (no local model, or a fight is running)."""
 
-    def __init__(self, repo, store, roll, big_brother, apply=False, cap=DAILY_CAP):
-        self.repo, self.store, self.roll = repo, store, roll
+    def __init__(self, repo, store, roll, big_brother, apply=False, cap=DAILY_CAP, admin=False):
+        self.repo, self.store, self.roll, self.admin = repo, store, roll, admin
         self.big_brother, self.apply, self.cap = big_brother, apply, cap
         self.name = repo.gh_json("repo", "view", "--json", "nameWithOwner")["nameWithOwner"]
 
@@ -248,9 +248,11 @@ class Chores:
         """Squash-merge the head commit big brother reviewed; a new push makes gh refuse."""
         said = f"Roll {roll['choice']} ({roll['p_yes']:.2f})" if roll else "Roll no answer"
         body = f"{why}\n\nMerged by Roll (light-labs) on claude:{model}'s review. {said}."
+        # --admin skips a required human review only; required checks have no bypass.
+        admin = ("--admin",) if self.admin else ()
         self.repo.gh(
             "pr", "merge", str(f["number"]), "--squash", "--match-head-commit", f["head"],
-            "--body", body,
+            "--body", body, *admin,
         )  # fmt: skip
         self.repo.gh(
             "api", "-X", "DELETE", f"repos/{{owner}}/{{repo}}/git/refs/heads/{f['branch']}",
