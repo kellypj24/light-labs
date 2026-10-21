@@ -506,10 +506,12 @@ def cmd_google(args):
 
 
 def cmd_roll(args):
-    """DLN-102 Roll: inbox report (read-only) and undo of an approved rule."""
+    """DLN-102 Roll: inbox report (read-only) and undo of an approved rule; repo chores."""
     from light_labs.agents import roll
     from light_labs.agents.roll import inbox
 
+    if args.cmd in ("chores", "scorecard"):
+        return roll_chores(args)
     if not roll.TELEGRAM_CHAT:
         sys.exit("ROLL_TELEGRAM_CHAT is not set")
     bot = roll.bot()
@@ -526,6 +528,34 @@ def cmd_roll(args):
     elif args.cmd == "undo":
         n = bot.undo(args.rule)
         print(f"{n} back in the inbox" if n is not None else "nothing to undo")
+
+
+def roll_chores(args):
+    from light_labs import gitops
+    from light_labs.agents import roll
+    from light_labs.agents.roll import chores
+    from light_labs.core.store import Store
+
+    store = Store(roll.HOME)
+    if args.cmd == "scorecard":
+        rows = chores.scorecard(store)
+        print(f"{'tier':6} {'n':>4} {'agree':>6} {'false yes':>10} {'PJ overruled':>13}")
+        for tier in ("patch", "minor", "major"):
+            r = rows.get(tier)
+            if r:
+                print(f"{tier:6} {r['n']:>4} {r['agree'] / r['n']:>6.0%} "
+                      f"{r['false_yes']:>10} {r['overruled']:>13}")  # fmt: skip
+        return
+    repo = gitops.Repo(args.repo)
+    brain = None if args.no_roll else chores.roll_brain(roll.CHORES_BRAIN)
+    run = chores.Chores(repo, store, brain, chores.big_brother(repo.path), apply=args.apply)
+    try:
+        for number, action, note in run.run():
+            print(f"#{number:<5} {action:12} {note}")
+    except gitops.GitError as e:
+        sys.exit(f"lab roll chores: {e}")
+    if brain is None and not args.no_roll:
+        print("Roll sat this one out (a fight is running or no brain set)")
 
 
 def cmd_git(args):
@@ -630,13 +660,22 @@ def main(argv=None):
     labels_p.add_argument("--prune", action="store_true", help="also delete labels not in it")
     label_p = gcmd.add_parser("label", help="add type/area labels to PRs (default: all open)")
     label_p.add_argument("prs", nargs="*", type=int)
-    roll_p = sub.add_parser("roll", help="DLN-102 Roll: inbox cleanup by approved rules")
+    roll_p = sub.add_parser(
+        "roll", help="DLN-102 Roll: inbox cleanup by approved rules; Dependabot chores"
+    )
     rocmd = roll_p.add_subparsers(dest="cmd", required=True)
     rocmd.add_parser("report", help="count the inbox, send proposed rules to Telegram")
     ap = rocmd.add_parser("apply", help="label and archive a rule's matches (PJ approved it)")
     ap.add_argument("rule")
     ap.add_argument("--label-archived", action="store_true", help="also label its archived mail")
     rocmd.add_parser("undo", help="put a rule's last archive back").add_argument("rule")
+    chores_p = rocmd.add_parser(
+        "chores", help="Dependabot PRs: Roll answers, Claude decides (dry run by default)"
+    )
+    chores_p.add_argument("-C", dest="repo", default=".", help="repo (default: here)")
+    chores_p.add_argument("--apply", action="store_true", help="merge what Claude approves")
+    chores_p.add_argument("--no-roll", action="store_true", help="skip Roll's local answer")
+    rocmd.add_parser("scorecard", help="Roll's chore answers against Claude's, by tier")
     google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
     gocmd = google_p.add_subparsers(dest="cmd", required=True)
     for name, text in (
