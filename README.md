@@ -132,7 +132,9 @@ current; the 8B model invents past work without it. `ops/com.pjkelly.light-labs.
 runs a tick when loaded and hourly after that, while the Mac is awake.
 
 The lab over MCP (read-only: approval queues and Rush's mail triage), for an outside agent
-such as Hermes: `uv run lab mcp`. Setup and config: [docs/hermes.md](docs/hermes.md).
+such as Hermes: `uv run lab mcp`. Hermes runs it from a deployed commit (`lab deploy hermes
+[--ref <branch>]`; `lab git land` redeploys main). Setup and config:
+[docs/hermes.md](docs/hermes.md).
 
 Boss fights and results:
 
