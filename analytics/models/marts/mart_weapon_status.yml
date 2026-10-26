@@ -3,37 +3,39 @@ version: 2
 models:
   - name: mart_weapon_status
     description: >
-      One row per stage: whether Mega Man (the local generalist) has earned the stage's
-      weapon, judged on his latest full run against Bass's latest full run, by the bar
-      recorded on his run (the stage YAML's `bar:`), else the weapon_* vars in
-      dbt_project.yml.
+      One row per stage: whether a local brain has earned the stage's weapon. Each local
+      brain's latest full run (Mega Man or Proto) competes; the best by fixture pass rate
+      (Mega Man on a tie) is judged against Bass's latest full run, by the bar recorded on
+      that run (the stage YAML's `bar:`), else the weapon_* vars in dbt_project.yml.
     columns:
       - name: stage
         tests:
           - unique
           - not_null
+      - name: local_role
+        description: mega-man or proto, whichever brain's run was judged
       - name: local_fixture_pass_rate
-        description: Mega Man's fixture pass rate on his latest full run
+        description: Fixture pass rate of the best local brain's latest full run
       - name: cloud_fixture_pass_rate
         description: Bass's fixture pass rate on his latest full run; NULL if none
       - name: fixture_rate_gap
-        description: Bass minus Mega Man; NULL without a Bass run
+        description: Bass minus the local run; NULL without a Bass run
       - name: bar_min_fixture_rate
-        description: The floor applied, from Mega Man's run or the weapon_min_fixture_rate var
+        description: The floor applied, from the local run or the weapon_min_fixture_rate var
         tests:
           - not_null
       - name: bar_max_gap
-        description: The gap applied, from Mega Man's run or the weapon_max_gap var
+        description: The gap applied, from the local run or the weapon_max_gap var
         tests:
           - not_null
       - name: is_weapon_earned
-        description: Mega Man clears the threshold and trails Bass by no more than the gap
+        description: The local run clears the threshold and trails Bass by no more than the gap
         tests:
           - not_null
 
 unit_tests:
   - name: weapon_rules
-    description: Threshold, gap, missing baseline, filtered runs not counting, and a stage bar.
+    description: Threshold, gap, missing baseline, filtered runs not counting, a stage bar, and a Proto brain winning a stage.
     model: mart_weapon_status
     given:
       - input: ref('fct_eval_runs')
@@ -53,6 +55,13 @@ unit_tests:
           # the stage's own bar overrides the vars: 0.86 clears a 0.85 floor, 0.12 gap fits 0.15
           - {stage: s5, role: mega-man, run_id: s5-a, is_full_run: true, fixture_pass_rate: 0.86, bar_min_fixture_rate: 0.85, bar_max_gap: 0.15, started_at: "2026-10-01 00:00:00"}
           - {stage: s5, role: bass, run_id: s5-b, is_full_run: true, fixture_pass_rate: 0.98, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
+          # Proto's brain beats Mega Man's; an older, better run of a third brain was
+          # superseded by its own later run and does not count
+          - {stage: s6, role: mega-man, brain: m8b, run_id: s6-m, is_full_run: true, fixture_pass_rate: 0.78, bar_min_fixture_rate: 0.9, bar_max_gap: 0.05, started_at: "2026-10-01 00:00:00"}
+          - {stage: s6, role: proto, brain: q14b, run_id: s6-q, is_full_run: true, fixture_pass_rate: 0.92, bar_min_fixture_rate: 0.9, bar_max_gap: 0.05, started_at: "2026-10-01 00:00:00"}
+          - {stage: s6, role: proto, brain: g4b, run_id: s6-g-old, is_full_run: true, fixture_pass_rate: 0.99, bar_min_fixture_rate: 0.9, bar_max_gap: 0.05, started_at: "2026-09-01 00:00:00"}
+          - {stage: s6, role: proto, brain: g4b, run_id: s6-g, is_full_run: true, fixture_pass_rate: 0.71, bar_min_fixture_rate: 0.9, bar_max_gap: 0.05, started_at: "2026-10-01 00:00:00"}
+          - {stage: s6, role: bass, brain: sonnet, run_id: s6-b, is_full_run: true, fixture_pass_rate: 0.96, bar_min_fixture_rate: null, bar_max_gap: null, started_at: "2026-10-01 00:00:00"}
     expect:
       rows:
         - {stage: s1, local_run_id: s1-a, bar_min_fixture_rate: 0.9, is_weapon_earned: true}
@@ -60,3 +69,4 @@ unit_tests:
         - {stage: s3, local_run_id: s3-a, bar_min_fixture_rate: 0.9, is_weapon_earned: false}
         - {stage: s4, local_run_id: s4-a, bar_min_fixture_rate: 0.9, is_weapon_earned: false}
         - {stage: s5, local_run_id: s5-a, bar_min_fixture_rate: 0.85, is_weapon_earned: true}
+        - {stage: s6, local_run_id: s6-q, bar_min_fixture_rate: 0.9, is_weapon_earned: true}
