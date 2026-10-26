@@ -57,11 +57,20 @@ def mail_triage(brain, memory, inp):
     return {"raw": out["raw"], "draft": out["summary"], "label": out["label"], "notes": out["by"]}
 
 
+def mail_keep(brain, memory, inp):
+    """Roll deciding whether an archived email is kept, and as what."""
+    from light_labs.agents.roll.keep import classify
+
+    out = classify(brain, inp)
+    return {"raw": out["raw"], "draft": out["label"], "label": out["label"], "notes": out["by"]}
+
+
 STAGES = {
     "reply-draft": reply_draft,
     "dbt-model": dbt_model,
     "commit-message": commit_message,
     "mail-triage": mail_triage,
+    "mail-keep": mail_keep,
 }
 
 

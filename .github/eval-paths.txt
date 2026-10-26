@@ -9,6 +9,7 @@ dln.json
 evals/
 light_labs/__init__.py
 light_labs/agents/__init__.py
+light_labs/agents/roll/
 light_labs/agents/rush/
 light_labs/config.py
 light_labs/core/

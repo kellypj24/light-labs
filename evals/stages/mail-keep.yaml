@@ -1,0 +1,247 @@
+# Boss fight: Roll deciding what in PJ's mail archive is worth keeping.
+#
+# Task class: given one archived email's sender, subject, Gmail category, unsubscribe
+# header and snippet, return keep/<class> or discard/<class> (docs/roll-keep-plan.md).
+# The costly mistake is a keep labelled discard: that mail is later offered for deletion.
+# Everything here is synthetic: example.org/.com/.net senders, invented people. Seeded from
+# the 2026-10-19 cleanup misses, rewritten.
+#
+# Run:  just eval mail-keep mega-man
+stage: mail-keep
+robot: Roll
+
+# Fixed before the first run; recorded on every sample. Procedure: the boss-fight skill.
+# The weapon also needs zero keep->discard misses on the finance, security and health
+# fixtures; read that off the report until the marts break it out.
+bar:
+  min_fixture_rate: 0.90
+  max_gap: 0.05
+  reason: >
+    Labels decide what PJ is offered for deletion, and a kept bank, security or health
+    email labelled discard can be lost; held at the lab default until shadow labelling
+    on real archived mail says otherwise.
+
+fixtures:
+  # --- keep/finance ---------------------------------------------------------------------
+  - id: finance_card_activation
+    category: finance
+    input: {from: "Northbank Card Services <cards@northbank.example.com>", subject: "Activate your new card ending 4471", category: updates, unsubscribe: false, snippet: "Your replacement card has shipped. Activate it in the app or by phone before using it. Your old card stops working on activation."}
+    expect: {label: keep/finance}
+  - id: finance_credit_score_change
+    category: finance
+    input: {from: "ScoreWatch <alerts@scorewatch.example.net>", subject: "Your credit score changed", category: updates, unsubscribe: true, snippet: "Your score went down 12 points since last month. A new hard inquiry was reported by Lakeside Auto Finance."}
+    expect: {label: keep/finance}
+  - id: finance_401k_disclosure
+    category: finance
+    input: {from: "Harbor Retirement <plan@harborretire.example.com>", subject: "Important 401(k) plan fee disclosure", category: updates, unsubscribe: false, snippet: "This annual notice describes fees and expenses for your 401(k) plan. Review the enclosed participant fee disclosure."}
+    expect: {label: keep/finance}
+  - id: finance_payment_due
+    category: finance
+    input: {from: "Cedar Credit Union <statements@cedarcu.example.org>", subject: "Payment due Oct 28", category: updates, unsubscribe: false, snippet: "Your minimum payment of $85.00 on your Visa ending 2210 is due October 28. Statement balance $1,912.44."}
+    expect: {label: keep/finance}
+
+  # --- keep/security --------------------------------------------------------------------
+  - id: security_new_signin
+    category: security
+    input: {from: "Accounts <no-reply@accounts.example.com>", subject: "New sign-in on Mac", category: updates, unsubscribe: false, snippet: "We noticed a new sign-in to your account from a Mac in Columbus, OH. If this was you, you don't need to do anything."}
+    expect: {label: keep/security}
+  - id: security_2fa_changed
+    category: security
+    input: {from: "Northbank <security@northbank.example.com>", subject: "Two-step verification turned off", category: primary, unsubscribe: false, snippet: "Two-step verification was turned off for your online banking. If you didn't make this change, call us right away."}
+    expect: {label: keep/security}
+  - id: security_password_reset
+    category: security
+    input: {from: "CloudDrive <account@clouddrive.example.net>", subject: "Your password was changed", category: updates, unsubscribe: false, snippet: "The password for pj@example.org was changed on Oct 3. If you did not do this, recover your account now."}
+    expect: {label: keep/security}
+
+  # --- keep/receipts --------------------------------------------------------------------
+  - id: receipts_order_shipped
+    category: receipts
+    input: {from: "Riverstore <ship-confirm@riverstore.example.com>", subject: "Shipped: USB-C dock and 1 more item", category: updates, unsubscribe: false, snippet: "Your package is on the way. Order #114-2290 arriving Thursday. Track your package."}
+    expect: {label: keep/receipts}
+  - id: receipts_invoice_paid
+    category: receipts
+    input: {from: "Billing <billing@hostco.example.net>", subject: "Invoice INV-30418 paid", category: updates, unsubscribe: false, snippet: "Thanks for your payment of $24.00 for the Pro plan, Sep 1 - Sep 30. Download your invoice as PDF."}
+    expect: {label: keep/receipts}
+  - id: receipts_subscription_cancelled
+    category: receipts
+    input: {from: "StreamBox <help@streambox.example.com>", subject: "Your membership has been cancelled", category: updates, unsubscribe: false, snippet: "We've cancelled your membership as requested. You can keep watching until Nov 14. No further charges will be made."}
+    expect: {label: keep/receipts}
+  - id: receipts_flight_booking
+    category: receipts
+    input: {from: "Skyway Air <itinerary@skyway.example.com>", subject: "Your trip confirmation CVG to DEN", category: updates, unsubscribe: false, snippet: "Confirmation code QX7T2M. Depart Mar 20 7:05am. 2 travelers. Total paid $612.40."}
+    expect: {label: keep/receipts}
+
+  # --- keep/school ----------------------------------------------------------------------
+  - id: school_no_school_reminder
+    category: school
+    input: {from: "Maple Elementary <office@maple-elem.example.org>", subject: "No School Reminder - Friday", category: updates, unsubscribe: false, snippet: "Reminder: there is no school this Friday for teacher in-service. Before-care will be closed."}
+    expect: {label: keep/school}
+  - id: school_childcare_invoice
+    category: school
+    input: {from: "Little Oaks Early Learning <billing@littleoaks.example.org>", subject: "New invoice posted for Liam", category: updates, unsubscribe: false, snippet: "A new invoice of $10.00 has been posted to Liam's account for the October field trip. Pay in the parent app."}
+    expect: {label: keep/school}
+  - id: school_bus_change
+    category: school
+    input: {from: "District Transportation <transport@district.example.org>", subject: "Bus 14 route change starting Monday", category: primary, unsubscribe: false, snippet: "Starting Monday, Bus 14 will pick up at Elm and 3rd at 7:42am instead of 7:50am."}
+    expect: {label: keep/school}
+
+  # --- keep/health ----------------------------------------------------------------------
+  - id: health_pediatric_visit_notes
+    category: health
+    input: {from: "Brightside Pediatrics <portal@brightside-peds.example.com>", subject: "Visit notes are available", category: updates, unsubscribe: false, snippet: "Notes from Liam's visit with Dr. Patel on Oct 2 are now in the patient portal, including the vaccine record."}
+    expect: {label: keep/health}
+  - id: health_lab_results
+    category: health
+    input: {from: "Valley Labs <results@valleylabs.example.com>", subject: "Your test results are ready", category: updates, unsubscribe: false, snippet: "New results from your Sep 28 blood draw are ready to view. Your provider may add comments."}
+    expect: {label: keep/health}
+  - id: health_pharmacy_ready
+    category: health
+    input: {from: "Corner Pharmacy <rx@cornerrx.example.com>", subject: "Prescription ready for pickup", category: updates, unsubscribe: false, snippet: "Your prescription is ready at the Main St store. It will be held for 7 days."}
+    expect: {label: keep/health}
+
+  # --- keep/insurance -------------------------------------------------------------------
+  - id: insurance_policy_renewal
+    category: insurance
+    input: {from: "Steadfast Auto Insurance <policy@steadfast.example.com>", subject: "Your policy renews Dec 1", category: updates, unsubscribe: false, snippet: "Your auto policy renews Dec 1 with a 6-month premium of $684. Your new ID cards are attached."}
+    expect: {label: keep/insurance}
+  - id: insurance_claim_update
+    category: insurance
+    input: {from: "Claims <claims@homeshield.example.net>", subject: "Claim HS-55210 update", category: primary, unsubscribe: false, snippet: "Your adjuster approved the roof repair estimate. Payment of $3,140 will be issued within 5 business days."}
+    expect: {label: keep/insurance}
+  - id: insurance_benefits_enrollment
+    category: insurance
+    input: {from: "Benefits Center <benefits@hrportal.example.com>", subject: "Open enrollment closes Nov 15", category: updates, unsubscribe: false, snippet: "Confirm your medical, dental and vision elections for next year. If you do nothing, your current coverage carries over."}
+    expect: {label: keep/insurance}
+
+  # --- keep/legal-tax -------------------------------------------------------------------
+  - id: legaltax_1099_available
+    category: legal-tax
+    input: {from: "Harbor Brokerage <tax@harborbrokerage.example.com>", subject: "Your 2025 tax documents are ready", category: updates, unsubscribe: false, snippet: "Your Form 1099-B and 1099-DIV are available. Corrected forms, if any, will be posted by March 15."}
+    expect: {label: keep/legal-tax}
+  - id: legaltax_county_property
+    category: legal-tax
+    input: {from: "County Treasurer <treasurer@county.example.gov>", subject: "Property tax bill second half", category: primary, unsubscribe: false, snippet: "The second-half property tax bill for parcel 040-1182 is due June 20. Amount due $2,318.07."}
+    expect: {label: keep/legal-tax}
+  - id: legaltax_signed_lease
+    category: legal-tax
+    input: {from: "SignNow <noreply@esign.example.com>", subject: "Completed: Lease agreement 2026", category: updates, unsubscribe: false, snippet: "All parties have signed Lease agreement 2026. A copy of the completed document is attached."}
+    expect: {label: keep/legal-tax}
+
+  # --- keep/people ----------------------------------------------------------------------
+  - id: people_friend_photos
+    category: people
+    input: {from: "Marco <marco.v@example.com>", subject: "pics from saturday", category: primary, unsubscribe: false, snippet: "here are the ones from the lake, the one of the kids on the dock is my favorite"}
+    expect: {label: keep/people}
+  - id: people_former_colleague
+    category: people
+    input: {from: "Dana Ortiz <dana@example.org>", subject: "Long time!", category: primary, unsubscribe: false, snippet: "Hey PJ, saw your post about the data project. Would love to catch up sometime, I moved to Denver last spring."}
+    expect: {label: keep/people}
+  - id: people_neighbor_note
+    category: people
+    input: {from: "Ruth Kim <ruthk@example.net>", subject: "fence", category: primary, unsubscribe: false, snippet: "The contractor can start on the shared fence the week of the 12th. I'll split it 50/50 like we said."}
+    expect: {label: keep/people}
+
+  # --- discard/promotion ----------------------------------------------------------------
+  - id: promo_weekend_sale
+    category: promotion
+    input: {from: "Trailhead Outfitters <deals@trailhead.example.com>", subject: "40% off ends tonight", category: promotions, unsubscribe: true, snippet: "Our biggest sale of the season ends at midnight. Shop jackets, boots and packs."}
+    expect: {label: discard/promotion}
+  - id: promo_coupon
+    category: promotion
+    input: {from: "Pizza Palace <offers@pizzapalace.example.com>", subject: "A free large pizza is waiting", category: promotions, unsubscribe: true, snippet: "Use code FREEPIE with any order over $20 this week. Offer valid at participating locations."}
+    expect: {label: discard/promotion}
+  - id: promo_points_offer
+    category: promotion
+    input: {from: "Riverstore Rewards <rewards@riverstore.example.com>", subject: "Triple points this weekend", category: promotions, unsubscribe: true, snippet: "Earn 3x points on home and kitchen. Members only, Friday through Sunday."}
+    expect: {label: discard/promotion}
+
+  # --- discard/newsletter ---------------------------------------------------------------
+  - id: newsletter_tech_digest
+    category: newsletter
+    input: {from: "Data Weekly <hello@dataweekly.example.net>", subject: "Issue 212: streaming joins, dbt tips", category: updates, unsubscribe: true, snippet: "This week: three ways to join streams, a dbt macro roundup, and job of the week."}
+    expect: {label: discard/newsletter}
+  - id: newsletter_district_monthly
+    category: newsletter
+    input: {from: "District Communications <news@district.example.org>", subject: "October District Digest", category: updates, unsubscribe: true, snippet: "Board meeting highlights, the new library wing, and a spotlight on our cross-country teams."}
+    expect: {label: discard/newsletter}
+  - id: newsletter_town_news
+    category: newsletter
+    input: {from: "Our Town Today <editor@ourtowntoday.example.com>", subject: "Morning roundup: road work, farmers market", category: updates, unsubscribe: true, snippet: "Good morning! Main St lane closures continue, and the farmers market moves indoors next week."}
+    expect: {label: discard/newsletter}
+
+  # --- discard/job-alert ----------------------------------------------------------------
+  - id: jobalert_saved_search
+    category: job-alert
+    input: {from: "JobBoard <alerts@jobboard.example.com>", subject: "15 new jobs for data architect", category: updates, unsubscribe: true, snippet: "New jobs matching your saved search: Senior Data Architect at Acme, Analytics Lead at Beta Co, and 13 more."}
+    expect: {label: discard/job-alert}
+  - id: jobalert_recruiter_blast
+    category: job-alert
+    input: {from: "Talent Team <jobs@staffingco.example.net>", subject: "Hot contract roles this week", category: promotions, unsubscribe: true, snippet: "Hi there, we have 20+ open contract roles in data and cloud. Reply with your updated resume to be considered."}
+    expect: {label: discard/job-alert}
+  - id: jobalert_network_suggestions
+    category: job-alert
+    input: {from: "ProNet Jobs <jobs-noreply@pronet.example.com>", subject: "Companies are hiring for roles like yours", category: social, unsubscribe: true, snippet: "Based on your profile: Staff Engineer, Data Platform Manager, Solutions Architect. See all jobs."}
+    expect: {label: discard/job-alert}
+
+  # --- discard/notification -------------------------------------------------------------
+  - id: notification_run_kudos
+    category: notification
+    input: {from: "RunTrack <no-reply@runtrack.example.com>", subject: "Sam gave you kudos", category: social, unsubscribe: true, snippet: "Sam and 3 others gave you kudos on Morning Run. Keep it up!"}
+    expect: {label: discard/notification}
+  - id: notification_new_followers
+    category: notification
+    input: {from: "PhotoGram <notify@photogram.example.com>", subject: "You have 4 new followers", category: social, unsubscribe: true, snippet: "See who's following you and follow them back."}
+    expect: {label: discard/notification}
+  - id: notification_app_nag
+    category: notification
+    input: {from: "LangoLearn <hello@langolearn.example.com>", subject: "Your streak is about to end!", category: updates, unsubscribe: true, snippet: "Just 5 minutes keeps your 41-day streak alive. Open the app now."}
+    expect: {label: discard/notification}
+
+  # --- discard/marketing ----------------------------------------------------------------
+  - id: marketing_pricing_change
+    category: marketing
+    input: {from: "CloudDrive Team <news@clouddrive.example.net>", subject: "Changes to our plans and pricing", category: updates, unsubscribe: true, snippet: "Starting January, our Plus plan includes more storage and moves to $11.99/month for new customers. Learn more."}
+    expect: {label: discard/marketing}
+  - id: marketing_tos_update
+    category: marketing
+    input: {from: "SocialSite <legal-noreply@socialsite.example.com>", subject: "We're updating our Terms of Service", category: updates, unsubscribe: true, snippet: "We're making changes to our Terms and Privacy Policy effective Nov 30. No action is needed."}
+    expect: {label: discard/marketing}
+  - id: marketing_webinar
+    category: marketing
+    input: {from: "Vendr Analytics <events@vendr.example.com>", subject: "Webinar: modern lakehouse in 30 minutes", category: promotions, unsubscribe: true, snippet: "Join our product team Thursday for a live demo. Register now, seats are limited."}
+    expect: {label: discard/marketing}
+  - id: marketing_survey
+    category: marketing
+    input: {from: "HostCo <feedback@hostco.example.net>", subject: "How are we doing? 2-minute survey", category: updates, unsubscribe: true, snippet: "Tell us about your experience and be entered to win a $100 gift card."}
+    expect: {label: discard/marketing}
+
+  # --- hard: keep mail written like marketing, discard mail using keep words -------------
+  - id: hard_bank_promo_with_balance
+    category: hard
+    input: {from: "Northbank <offers@northbank.example.com>", subject: "Earn 4.5% on your savings", category: promotions, unsubscribe: true, snippet: "Your savings balance of $8,240.18 could earn more. Your October statement is ready to view."}
+    expect: {label: keep/finance}
+  - id: hard_order_now_ad
+    category: hard
+    input: {from: "GadgetHub <deals@gadgethub.example.com>", subject: "Order now: phones ship free", category: promotions, unsubscribe: true, snippet: "Order now and get free 2-day shipping on every phone. Limited time."}
+    expect: {label: discard/promotion}
+  - id: hard_security_tips_newsletter
+    category: hard
+    input: {from: "SafeNet Blog <newsletter@safenet.example.net>", subject: "5 security tips for the holidays", category: updates, unsubscribe: true, snippet: "This month: spotting gift-card scams, why you need 2FA, and our favorite password managers."}
+    expect: {label: discard/newsletter}
+  - id: hard_school_closure_vs_newsletter
+    category: hard
+    input: {from: "District Communications <news@district.example.org>", subject: "Weather closure: all schools closed Tuesday", category: updates, unsubscribe: true, snippet: "All district schools and offices are closed Tuesday due to ice. Activities are cancelled."}
+    expect: {label: keep/school}
+  - id: hard_receipt_with_upsell
+    category: hard
+    input: {from: "Riverstore <orders@riverstore.example.com>", subject: "Your order receipt + deals picked for you", category: promotions, unsubscribe: true, snippet: "Order #114-3391 total $42.18 charged to Visa 2210. Customers also bought: save 20% on accessories."}
+    expect: {label: keep/receipts}
+  - id: hard_person_via_network
+    category: hard
+    input: {from: "Dana Ortiz via ProNet <messages-noreply@pronet.example.com>", subject: "Dana sent you a message", category: social, unsubscribe: true, snippet: "Dana: Hey PJ, are you still at the same company? I have a question about your migration project."}
+    expect: {label: keep/people}
+  - id: hard_fake_security_alert
+    category: hard
+    input: {from: "SecureTech Deals <promo@securetech.example.com>", subject: "Security alert: your devices need protection", category: promotions, unsubscribe: true, snippet: "Hackers are getting smarter. Get 60% off our antivirus suite today only."}
+    expect: {label: discard/promotion}

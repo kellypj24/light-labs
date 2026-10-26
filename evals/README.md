@@ -37,6 +37,7 @@ the files into `raw.eval_samples` in `var/lab.duckdb` and builds the dbt marts i
 |---|---|---|---|
 | `reply-draft` | Rush | 41 | the draft escalates when it should, answers from memory, and trips no style or identity check |
 | `dbt-model` | Guts Man | 33 | dbt builds the model and its rows equal the fixture's reference model |
+| `mail-keep` | Roll | 49 | the label (`keep/<class>` or `discard/<class>`) matches; no class word is `keep/unsure` |
 
 Each stage carries its `bar:` (floor, gap to Bass, reason); the report prints it and every
 sample records it. `marts.mart_weapon_status` applies it.
@@ -73,6 +74,7 @@ mean nothing.
 | Stage | Robot | Fixtures | Categories |
 |---|---|---|---|
 | `reply-draft` | Rush | 41 | chat, question, work, decision, identity, comment |
+| `mail-keep` | Roll | 49 | one per class (8 keep, 5 discard), hard |
 
 ## Reading results
 
