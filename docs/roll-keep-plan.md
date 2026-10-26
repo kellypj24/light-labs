@@ -1,6 +1,6 @@
 # Plan: Roll learns what to keep (`mail-keep` stage)
 
-Status: planned, not started. Written 2026-10-19.
+Status: step 1 done 2026-10-26 (21,029 Roll/Promotions restored from Trash). Written 2026-10-19.
 
 Roll's cleanup rules today are Gmail searches by category and age (`roll/inbox.py`). They
 moved 50k emails out of the inbox and into `Roll/*` labels, but deciding what can be
@@ -67,11 +67,11 @@ One label per message. The output is `keep/<class>` or `discard/<class>`.
 
 Each step is its own PR.
 
-1. **Rescue the trashed Promotions.** About 20k `Roll/Promotions` messages went to Trash on
-   2026-10-19 and are purged around 2026-11-18. Add `untrash` to `google.py` for Roll
-   only (restores; still no delete, trash or send), and `lab roll untrash --label
-   Roll/Promotions`. Untrash removes only `TRASH`, so mail returns to the archive, not the
-   inbox. Update `tests/test_google.py`'s no-destructive-calls check to allow `untrash`.
+1. **Rescue the trashed Promotions.** Done 2026-10-26. `lab roll untrash --label <label>`
+   removes `TRASH` through Roll's existing `relabel` (batchModify), so mail returns to the
+   archive, not the inbox, and `google.py` gained no trash call; `relabel` now refuses to
+   add `TRASH` or `SPAM`. Ran on `Roll/Promotions`: 21,029 restored, ids in
+   `var/roll/applied/untrash-*.json`.
 2. **Stage and fixtures.** `mail-keep.yaml`, `run_one` wiring for Roll, mock contestant
    in CI. Update `evals/README.md`'s stage table and Roll's `dln.json` entry (its `job`
    still describes only commit messages and branch triage).

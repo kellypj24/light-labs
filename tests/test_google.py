@@ -37,6 +37,12 @@ class AuthUrlTest(unittest.TestCase):
         for word in ("send", "delete", "trash"):
             self.assertFalse(any(word in name.lower() for name in dir(google.Gmail)), word)
 
+    def test_relabel_never_adds_trash_or_spam(self):
+        roll = google.Gmail("roll", "me@x", get=lambda s: "{}")
+        for label in ("TRASH", "SPAM"):
+            with self.assertRaises(PermissionError):
+                roll.relabel(["m1"], add=[label])
+
     def test_only_roll_may_relabel(self):
         with self.assertRaises(PermissionError):
             google.Gmail("rush", "me@x", get=lambda s: "{}").relabel(["m1"], remove=["INBOX"])
