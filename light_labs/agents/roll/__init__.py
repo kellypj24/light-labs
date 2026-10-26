@@ -28,6 +28,16 @@ HOME = config.VAR / "roll"
 CHORES_BRAIN = os.environ.get("ROLL_CHORES_BRAIN", "ollama:llama3.1:8b")
 
 
+# Mail keep (keep.py): the brain that earned the mail-keep weapon, and the cloud teacher PJ
+# allowed for shadow labelling (2026-10-26). ROLL_KEEP_TEACHER= (empty) turns it off.
+def weapon_brain(stage):
+    return next((w["brain"] for w in ENTRY["weapons"] if w["stage"] == stage), None)
+
+
+KEEP_BRAIN = os.environ.get("ROLL_KEEP_BRAIN") or weapon_brain("mail-keep") or ""
+KEEP_TEACHER = os.environ.get("ROLL_KEEP_TEACHER", "claude:sonnet")
+
+
 def bot():
     """Roll's Telegram bot on its mailbox."""
     from light_labs.agents.roll.inbox import RollBot

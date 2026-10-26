@@ -525,11 +525,32 @@ def cmd_roll(args):
         print(f"{args.rule}: archived {bot.apply(args.rule):,}")
         if args.label_archived:
             print(f"{args.rule}: labelled {bot.label_archived(args.rule):,} already archived")
+    elif args.cmd in ("keep", "keep-fixtures"):
+        roll_keep(args, bot, roll)
     elif args.cmd == "untrash":
         print(f"{args.label}: {bot.restore(args.label):,} out of Trash, back in the archive")
     elif args.cmd == "undo":
         n = bot.undo(args.rule)
         print(f"{n} back in the inbox" if n is not None else "nothing to undo")
+
+
+def roll_keep(args, bot, roll):
+    from light_labs.agents.roll import keep
+    from light_labs.core.brain import brain_for
+
+    if args.cmd == "keep-fixtures":
+        made = keep.fixture_candidates(roll.HOME, brain_for("claude:sonnet"), args.limit)
+        print(f"{len(made)} candidates -> {roll.HOME / 'keep' / 'fixture-candidates.jsonl'}")
+        return
+    if not roll.KEEP_BRAIN:
+        sys.exit("no mail-keep brain: Roll has no mail-keep weapon and ROLL_KEEP_BRAIN is unset")
+    teacher = brain_for(roll.KEEP_TEACHER) if roll.KEEP_TEACHER else None
+    records = keep.shadow(
+        bot.gmail, brain_for(roll.KEEP_BRAIN), teacher, args.label, args.sample, roll.HOME
+    )
+    text = keep.summary(records, args.label)
+    bot.text(None, text)
+    print(text)
 
 
 def roll_chores(args):
@@ -703,6 +724,14 @@ def main(argv=None):
     ap.add_argument("rule")
     ap.add_argument("--label-archived", action="store_true", help="also label its archived mail")
     rocmd.add_parser("undo", help="put a rule's last archive back").add_argument("rule")
+    keep_p = rocmd.add_parser(
+        "keep", help="shadow-label a random sample of a label's mail (applies nothing)"
+    )
+    keep_p.add_argument("--label", required=True, help="e.g. Roll/Updates")
+    keep_p.add_argument("--sample", type=int, default=300)
+    rocmd.add_parser(
+        "keep-fixtures", help="teacher/local disagreements -> synthetic fixture candidates"
+    ).add_argument("--limit", type=int, default=20)
     rocmd.add_parser(
         "untrash", help="take a label's mail out of Trash, back to the archive"
     ).add_argument("--label", required=True, help="e.g. Roll/Promotions")

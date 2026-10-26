@@ -8,7 +8,11 @@ An answer with no class word is `keep/unsure`: when the model can't say, the mai
 Deleting is PJ's, in Gmail; Roll only labels.
 """
 
+import json
+import random
 import re
+from collections import Counter
+from datetime import UTC, datetime
 
 from light_labs.agents.rush.mail import prompt
 
@@ -66,3 +70,92 @@ def classify(brain, msg):
     raw = brain.think(CLASSIFY, f"{prompt(msg)}\nClass:", temperature=0)
     label = parse_label(raw)
     return {"label": label or UNSURE, "raw": raw, "by": "model" if label else "model-unparsed"}
+
+
+# --- shadow labelling (docs/roll-keep-plan.md step 4): label nothing, measure agreement
+
+
+def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000):
+    """Classify a random sample of `label`'s archived mail with the local brain and the
+    teacher. Nothing is labelled in Gmail. Records land in <root>/keep/ (var/, git-ignored);
+    disagreements are kept for `fixture_candidates`. Returns the records."""
+    from light_labs.agents.rush.mail import from_gmail
+
+    ids = gmail.ids(f"label:{label} -in:trash -in:spam", cap=cap)
+    picked = rng.sample(ids, min(sample, len(ids)))
+    out = []
+    for mid in picked:
+        m = gmail.message(mid, headers=("From", "Subject", "Date", "List-Unsubscribe"))
+        item = {**from_gmail(m, gmail.account), "source_label": label}
+        local = classify(brain, item)
+        rec = {**item, "local": local["label"], "local_by": local["by"]}
+        if teacher is not None:
+            try:
+                rec["teacher"] = classify(teacher, item)["label"]
+            except Exception as e:  # noqa: BLE001 - a teacher outage leaves the local answer
+                rec["teacher_error"] = str(e)[:200]
+        rec["agree"] = rec.get("teacher") in (None, rec["local"])
+        out.append(rec)
+    (root / "keep").mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    with (root / "keep" / f"shadow-{stamp}.jsonl").open("w") as f:
+        f.writelines(json.dumps(r) + "\n" for r in out)
+    with (root / "keep" / "disagreements.jsonl").open("a") as f:
+        f.writelines(json.dumps(r) + "\n" for r in out if "teacher" in r and not r["agree"])
+    return out
+
+
+def lost_keeps(records):
+    """The costly misses: local said discard where the teacher said keep."""
+    return [r for r in records
+            if r["local"].startswith("discard/") and r.get("teacher", "").startswith("keep/")]  # fmt: skip
+
+
+def summary(records, label, shown=10):
+    """One Telegram text: counts by local class, agreement, and every lost keep."""
+    counts = Counter(r["local"] for r in records)
+    taught = [r for r in records if "teacher" in r]
+    lines = [f"Roll: shadow labels for {len(records)} random {label} emails (nothing applied)."]
+    if taught:
+        agree = sum(r["agree"] for r in taught)
+        lines.append(
+            f"Agrees with the teacher on {agree}/{len(taught)} ({agree / len(taught):.0%})."
+        )
+    lines += [f"{n:>4}  {c}" for c, n in counts.most_common()]
+    lost = lost_keeps(records)
+    lines.append(f"Discard where the teacher keeps: {len(lost)}.")
+    for r in lost[:shown]:
+        who = r["from"].split("<")[0].strip().strip('"') or r["from"]
+        lines.append(f"- {who}: {r['subject'][:60]} ({r['local']} vs {r['teacher']})")
+    if len(lost) > shown:
+        lines.append(f"- and {len(lost) - shown} more")
+    return "\n".join(lines)
+
+
+def fixture_candidates(root, rewriter, limit=20):
+    """Rewrite disagreements not yet used into synthetic fixtures, labelled by the teacher.
+    Candidates land in <root>/keep/fixture-candidates.jsonl for review before any goes into
+    evals/stages/mail-keep.yaml. Lost keeps go first. Returns the new candidates."""
+    from light_labs.agents.rush.mail import REWRITE
+
+    path = root / "keep" / "disagreements.jsonl"
+    seen = [json.loads(x) for x in path.read_text().splitlines()] if path.exists() else []
+    done_path = root / "keep" / "fixtured.json"
+    done = set(json.loads(done_path.read_text())) if done_path.exists() else set()
+    todo = [r for r in seen if r["id"] not in done]
+    todo.sort(key=lambda r: not lost_keeps([r]))  # lost keeps first
+    out = []
+    for item in todo[:limit]:
+        raw = rewriter.think(REWRITE, f"Label: {item['teacher']}\n{prompt(item)}", temperature=0)
+        try:
+            fx = json.loads(raw[raw.index("{") : raw.rindex("}") + 1])
+        except ValueError:
+            continue
+        fx["id"] = re.sub(r"\W+", "_", fx.get("id", "")).strip("_").lower()
+        fx.update(label=item["teacher"], student_label=item["local"])
+        out.append(fx)
+        done.add(item["id"])
+    with (root / "keep" / "fixture-candidates.jsonl").open("a") as f:
+        f.writelines(json.dumps(fx) + "\n" for fx in out)
+    done_path.write_text(json.dumps(sorted(done)))
+    return out
