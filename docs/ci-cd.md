@@ -22,12 +22,13 @@ instead of fixing, so CI can't pass on an auto-fix.
 |---|---|
 | Hooks | `pre-commit run --all-files` over the full history |
 | Tests | unit tests on Python 3.12 and 3.13, `uv sync` with `UV_LOCKED=1` so a stale `uv.lock` fails |
-| Eval harness | `gofmt`, `go vet`, `go test`, and a smoke run of the `reply-draft` stage against the `mock` contestant (fails only if a sample could not run) |
+| Changes | which gated jobs a PR needs: the files it changes against `.github/eval-paths.txt` |
+| Eval harness | `gofmt`, `go vet`, `go test`, and a smoke run of the `reply-draft` stage against the `mock` contestant (fails only if a sample could not run). On PRs, only when a listed path changed; `tests/test_ci_paths.py` fails if an eval stage imports a module the list misses |
 | Analytics (dbt) | sqlfluff, then ingest the synthetic fixtures and `dbt build` every model, data test and unit test |
 | Orchestration (Dagster) | `dbt parse`, `dagster definitions validate`, `tests/test_orchestration.py` (invariants, sensor logic, the analytics job over the fixtures) |
 | CI Success | fan-in: the single required check; fails if any job failed or was cancelled |
 
-Triggers: PRs into `main`, every push to `main` (a post-merge backstop), manual dispatch.
+Triggers: PRs into `main`, every push to `main` (a post-merge backstop, runs every job), manual dispatch.
 
 Hardening applied to every workflow:
 - Actions pinned to full commit SHAs, version in a trailing comment. A re-pointed tag can't

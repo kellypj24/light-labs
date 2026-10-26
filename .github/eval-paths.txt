@@ -1,0 +1,17 @@
+# Paths that can change the Eval harness job's result. CI runs that job on a PR only when
+# the PR touches one of these prefixes (every push to main runs it regardless).
+# tests/test_ci_paths.py fails when an eval stage imports a module outside this list.
+.github/eval-paths.txt
+.github/workflows/ci.yml
+.claude/skills/
+analytics/
+dln.json
+evals/
+light_labs/__init__.py
+light_labs/agents/__init__.py
+light_labs/agents/rush/
+light_labs/config.py
+light_labs/core/
+light_labs/evals/
+pyproject.toml
+uv.lock
