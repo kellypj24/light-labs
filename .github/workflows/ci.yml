@@ -20,6 +20,35 @@ env:
   UV_LOCKED: "1" # every uv command fails if uv.lock is out of date
 
 jobs:
+  # Which gated jobs this PR needs. Pushes to main and manual runs get everything.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      evals: ${{ steps.diff.outputs.evals }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the PR merge commit and its base parent
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "evals=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          patterns=$(grep -v -e '^#' -e '^$' .github/eval-paths.txt | sed 's/[.]/\\./g; s/^/^/')
+          if git diff --name-only HEAD^1 HEAD | grep -q -E -e "$patterns"; then
+            echo "evals=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "evals=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # The repo's pre-commit hooks: hygiene, ruff, zizmor and gitleaks. Same set
   # and versions as a local commit, so a green local run is a green CI run.
   hooks:
@@ -66,9 +95,12 @@ jobs:
 
   # Eval harness wiring: Go vet/test/format, then a full smoke run against the mock
   # contestant. Real models never run in CI (see docs/ci-cd.md); the smoke run fails
-  # only if a sample could not run, never on the mock's scores.
+  # only if a sample could not run, never on the mock's scores. Skipped on PRs that touch
+  # nothing in .github/eval-paths.txt.
   evals:
     name: Eval harness
+    needs: changes
+    if: needs.changes.outputs.evals == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -180,7 +212,7 @@ jobs:
     if: always()
     timeout-minutes: 5
     permissions: {}
-    needs: [hooks, test, evals, analytics, orchestration]
+    needs: [changes, hooks, test, evals, analytics, orchestration]
     steps:
       - name: Fail if any required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
