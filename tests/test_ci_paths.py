@@ -12,6 +12,7 @@ STAGES = (
     "light_labs.evals.run_one",
     "light_labs.agents.rush.heartbeat",
     "light_labs.agents.rush.mail",
+    "light_labs.agents.roll.keep",
     "light_labs.evals.dbt_model",
     "light_labs.evals.commit_message",
 )

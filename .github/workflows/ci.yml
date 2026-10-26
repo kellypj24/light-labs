@@ -136,6 +136,9 @@ jobs:
       # must pass every check.
       - name: Oracle run (commit-message)
         run: go run . -stage commit-message -contestants mock -samples 1 -min-pass 1 -out "$RUNNER_TEMP/evals"
+      # mail-keep wiring: every fixture loads and runs; the mock's scores don't count.
+      - name: Smoke run (mail-keep)
+        run: go run . -stage mail-keep -contestants mock -samples 1 -out "$RUNNER_TEMP/evals"
 
   # dbt project: lint, then ingest the synthetic fixtures into a throwaway DuckDB
   # file and build every model, data test and unit test over them. Same steps as

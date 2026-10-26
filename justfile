@@ -34,6 +34,8 @@ evals-check:
     go -C evals run . -stage dbt-model -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
     # commit-message's mock answers with each reference: every reference must pass every check
     go -C evals run . -stage commit-message -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
+    # mail-keep wiring: every fixture loads and runs (the mock answers no class: keep/unsure)
+    go -C evals run . -stage mail-keep -contestants mock -samples 1 -out "$(mktemp -d)" > /dev/null
 
 # Boss fight with real models. Runs locally only; one at a time on a laptop.
 # Results land in var/evals/*.jsonl and are loaded into var/lab.duckdb.

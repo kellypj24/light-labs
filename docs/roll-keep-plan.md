@@ -1,6 +1,7 @@
 # Plan: Roll learns what to keep (`mail-keep` stage)
 
-Status: step 1 done 2026-10-26 (21,029 Roll/Promotions restored from Trash). Written 2026-10-19.
+Status: step 1 done 2026-10-26 (21,029 Roll/Promotions restored from Trash); step 2 done 2026-10-26
+(`mail-keep` stage, 49 fixtures, `light_labs/agents/roll/keep.py`); next, step 3 (fight). Written 2026-10-19.
 
 Roll's cleanup rules today are Gmail searches by category and age (`roll/inbox.py`). They
 moved 50k emails out of the inbox and into `Roll/*` labels, but deciding what can be
@@ -87,10 +88,21 @@ Each step is its own PR.
 6. **Deletion stays PJ's.** Roll offers a search, for example `label:Roll/Discard/job-alert
    older_than:1y -label:Roll/Keep`, and PJ deletes in Gmail. Roll gets no trash call.
 
-## Decisions for PJ
+## Decisions (PJ, 2026-10-26)
 
-- Teacher: allow `claude:sonnet` as a teacher on real archived mail during step 4, as Rush
-  has for triage, or keep step 4 local-only and rely on PJ's sample marks.
-- Whether `people` mail ever becomes discardable (old automated "via" messages from real
-  names, such as LinkedIn).
-- Age per discard class before Roll proposes deletion (default: 1 year for all).
+- Teacher: `claude:sonnet` may teach on real archived mail in step 4, as Rush's triage does.
+- `people` mail can become discardable, behind heavy guards. Proposed for step 5, each one
+  required: the sender is a relay or automated address (`via`, `noreply`, a network's
+  domain), not a person's own mailbox; PJ never replied in the thread; not starred or
+  important; past the `people` age below; and PJ approves each sender batch, never a
+  blanket rule. Anything else from a person stays `keep/people`.
+- Age before Roll proposes deletion, by discard class (30 days is the floor):
+
+  | Class | Age |
+  |---|---|
+  | `promotion`, `notification` | 30 days |
+  | `job-alert` | 60 days |
+  | `newsletter`, `marketing` | 90 days |
+  | `people` (guarded, above) | 1 year |
+
+  Tune per class after shadow labelling shows how the classes look in the archive.
