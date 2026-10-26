@@ -96,6 +96,16 @@ class LabelArchivedTest(RollInboxTest):
         self.assertNotIn(" in:inbox", self.gmail.queries[-1])
         self.assertEqual(self.gmail.relabels[-1], (["old1"], ["L:Roll/Promotions"], []))
 
+
+class UntrashTest(RollInboxTest):
+    def test_takes_a_labels_mail_out_of_trash_to_the_archive(self):
+        self.gmail.ids = lambda q, cap=0: self.gmail.queries.append(q) or ["t1", "t2"]
+        self.assertEqual(self.bot.restore("Roll/Promotions"), 2)
+        self.assertEqual(self.gmail.queries[-1], "in:trash label:Roll/Promotions")
+        self.assertEqual(self.gmail.relabels[-1], (["t1", "t2"], [], ["TRASH"]))
+        saved = list((Path(self.tmp.name) / "applied").glob("untrash-roll-promotions-*.json"))
+        self.assertEqual(json.loads(saved[0].read_text()), ["t1", "t2"])
+
     def test_a_failing_update_is_reported_not_fatal(self):
         def boom(update, remote=None):
             raise ValueError("bad json")

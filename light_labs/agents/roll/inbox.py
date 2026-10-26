@@ -8,7 +8,8 @@ recorded, so `lab roll undo <rule>` (or /undo in the chat) puts them back.
 
 No model: rules are Gmail searches. Never touched by any rule: starred mail, and mail
 newer than the rule's age. Nothing is deleted, trashed or sent (google.py has no call
-for it).
+for it). `lab roll untrash --label <label>` takes a label's mail back out of Trash (to the
+archive, not the inbox) before Gmail purges it.
 """
 
 import contextlib
@@ -154,6 +155,17 @@ class RollBot(Telegram):
         ids = self.gmail.ids(query, cap=CAP)
         self.gmail.relabel(ids, add=[self.gmail.label_id(LABELS[rule_id])])
         self.journal(f"labelled {len(ids)} archived {rule_id} as {LABELS[rule_id]}")
+        return len(ids)
+
+    def restore(self, label):
+        """Take `label`'s mail out of Trash. Removing TRASH alone returns it to the archive;
+        the ids are recorded like an applied rule."""
+        ids = self.gmail.ids(f"in:trash label:{label}", cap=CAP)
+        self.gmail.relabel(ids, remove=["TRASH"])
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        name = label.replace("/", "-").lower()
+        (self.root / "applied" / f"untrash-{name}-{stamp}.json").write_text(json.dumps(ids))
+        self.journal(f"untrashed {len(ids)} {label}")
         return len(ids)
 
     def report_failure(self, e):

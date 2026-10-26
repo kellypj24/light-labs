@@ -525,6 +525,8 @@ def cmd_roll(args):
         print(f"{args.rule}: archived {bot.apply(args.rule):,}")
         if args.label_archived:
             print(f"{args.rule}: labelled {bot.label_archived(args.rule):,} already archived")
+    elif args.cmd == "untrash":
+        print(f"{args.label}: {bot.restore(args.label):,} out of Trash, back in the archive")
     elif args.cmd == "undo":
         n = bot.undo(args.rule)
         print(f"{n} back in the inbox" if n is not None else "nothing to undo")
@@ -701,6 +703,9 @@ def main(argv=None):
     ap.add_argument("rule")
     ap.add_argument("--label-archived", action="store_true", help="also label its archived mail")
     rocmd.add_parser("undo", help="put a rule's last archive back").add_argument("rule")
+    rocmd.add_parser(
+        "untrash", help="take a label's mail out of Trash, back to the archive"
+    ).add_argument("--label", required=True, help="e.g. Roll/Promotions")
     chores_p = rocmd.add_parser(
         "chores", help="Dependabot PRs: Roll answers, Claude decides (dry run by default)"
     )

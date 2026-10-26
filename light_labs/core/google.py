@@ -177,7 +177,7 @@ MODIFIERS = {"roll"}
 
 class Gmail:
     """Gmail calls for one robot in one mailbox. Reads for all; label changes for MODIFIERS;
-    no delete, trash or send, by design."""
+    no delete, trash or send, by design. Taking mail out of Trash is allowed (a restore)."""
 
     def __init__(self, robot, account, get=_keychain_get, opener=urllib.request.urlopen):
         self.robot, self.account, self.get, self.opener = robot, account, get, opener
@@ -252,9 +252,12 @@ class Gmail:
         return out[:cap]
 
     def relabel(self, ids, add=(), remove=()):
-        """Move labels on many messages, 1000 per call. Archive is remove=["INBOX"]."""
+        """Move labels on many messages, 1000 per call. Archive is remove=["INBOX"]; restore
+        from Trash is remove=["TRASH"]. Adding TRASH or SPAM is refused."""
         if self.robot not in MODIFIERS:
             raise PermissionError(f"{self.robot} may not change mail")
+        if {"TRASH", "SPAM"} & set(add):
+            raise PermissionError("robots never trash or spam mail")
         for i in range(0, len(ids), 1000):
             self.call(
                 "messages/batchModify",
