@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...}"""
+"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...}"""
 
 import argparse
 import json
@@ -574,6 +574,13 @@ def cmd_git(args):
             gitops.ship(repo, message, title=args.title, body=body, check=check)
         elif args.cmd == "land":
             files = gitops.land(repo, args.pr, wait=not args.no_wait)
+            if _is_lab(repo):
+                from light_labs import deploy
+
+                try:
+                    deploy.redeploy_main(repo.main_branch())
+                except deploy.DeployError as e:
+                    print(f"merged, but the redeploy failed: {e}")
             if any(f.startswith("light_labs/orchestration/") for f in files):
                 print("orchestration changed: `just dagster-restart` to load it")
         elif args.cmd == "tidy":
@@ -588,6 +595,26 @@ def cmd_git(args):
         sys.exit(f"lab git {args.cmd}: {e}")
 
 
+def _is_lab(repo):
+    """Is `repo` a checkout of this lab (any worktree of it)?"""
+    from light_labs import gitops
+
+    def common(r):
+        return r.git("rev-parse", "--path-format=absolute", "--git-common-dir", check=False)
+
+    ours = common(gitops.Repo(config.REPO))
+    return bool(ours) and common(repo) == ours
+
+
+def cmd_deploy(args):
+    from light_labs import deploy
+
+    try:
+        deploy.deploy(deploy.TARGETS[args.target], args.ref)
+    except deploy.DeployError as e:
+        sys.exit(f"lab deploy {args.target}: {e}")
+
+
 def cmd_mcp(args):
     from light_labs.core import mcp_server
 
@@ -599,6 +626,9 @@ def main(argv=None):
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
     sub.add_parser("mcp", help="serve the lab over MCP on stdio (read-only; for Hermes)")
+    deploy_p = sub.add_parser("deploy", help="run a service from a fixed commit of origin")
+    deploy_p.add_argument("target", choices=["hermes"])
+    deploy_p.add_argument("--ref", default="main", help="branch on origin (default: main)")
     sub.add_parser("skills", help="list skills, their audience and which robots carry them")
     evals_p = sub.add_parser("evals", help="eval results in DuckDB (var/lab.duckdb)")
     ecmd = evals_p.add_subparsers(dest="cmd", required=True)
@@ -734,7 +764,7 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp"):
+    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy"):
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude"):

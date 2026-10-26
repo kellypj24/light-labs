@@ -41,10 +41,18 @@ auth:
 mcp_servers:
   lab:
     command: uv
-    args: ["run", "--locked", "--directory", "<light-labs checkout>", "lab", "mcp"]
+    args: ["run", "--locked", "--directory", "~/.hermes/lab/current", "lab", "mcp"]
     env:
       LAB_VAR: "<light-labs checkout>/var"
 ```
+
+Hermes runs a deployed commit, not a checkout: `lab deploy hermes` exports `origin/main`
+into `~/.hermes/lab/releases/<sha>` (no `.git`; `.env` and Rush's `memory.md` linked from
+the checkout), runs `uv sync --locked`, and swaps `~/.hermes/lab/current` to it. Whatever
+branch the checkout has open never reaches Hermes. `lab git land` redeploys after each
+merge while the deploy tracks main. To try a branch: `lab deploy hermes --ref <branch>`;
+it stays there through merges until `lab deploy hermes` puts it back on main.
+`~/.hermes/lab/current/DEPLOYED.json` names the ref and commit; the last 3 releases are kept.
 
 `TELEGRAM_ALLOWED_USERS=<PJ's Telegram id>` limits the bot to PJ. Hermes's bot is its own
 (not Rush's or Roll's): Telegram hands a bot's updates to one poller.
