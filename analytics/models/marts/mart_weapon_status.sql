@@ -1,35 +1,49 @@
 {#
-    One row per stage: has the local generalist earned the stage's weapon?
-    Compares Mega Man's latest full run with Bass's latest full run. Earned when
-    Mega Man's fixture pass rate clears the stage's floor and trails Bass by no
-    more than its gap. The bar is the one recorded on Mega Man's run (the stage
-    YAML's `bar:` at the time), else the `weapon_*` vars. No Bass run, no weapon:
-    the ceiling must be measured, not assumed.
+    One row per stage: has a local brain earned the stage's weapon?
+    Takes each local brain's latest full run (Mega Man or a Proto challenger), keeps
+    the best by fixture pass rate (Mega Man on a tie), and compares it with Bass's
+    latest full run. Earned when that rate clears the stage's floor and trails Bass
+    by no more than its gap. Routing is per stage, so a Proto brain can win one stage
+    for its robot. The bar is the one recorded on the local run (the stage YAML's
+    `bar:` at the time), else the `weapon_*` vars. No Bass run, no weapon: the
+    ceiling must be measured, not assumed.
 #}
 
-WITH ranked AS (
+WITH full_runs AS (
+
+    SELECT * FROM {{ ref('fct_eval_runs') }}
+    WHERE is_full_run AND role IN ('mega-man', 'proto', 'bass')
+
+),
+
+latest_local AS (
 
     SELECT
         *,
         ROW_NUMBER() OVER (
-            PARTITION BY stage, role ORDER BY started_at DESC
+            PARTITION BY stage, brain ORDER BY started_at DESC
         ) AS recency
-    FROM {{ ref('fct_eval_runs') }}
-    WHERE is_full_run AND role IN ('mega-man', 'bass')
+    FROM full_runs
+    WHERE role IN ('mega-man', 'proto')
 
 ),
 
 local_runs AS (
 
-    SELECT * FROM ranked
-    WHERE role = 'mega-man' AND recency = 1
+    SELECT * FROM latest_local
+    WHERE recency = 1
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY stage
+        ORDER BY fixture_pass_rate DESC, role = 'mega-man' DESC, started_at DESC
+    ) = 1
 
 ),
 
 cloud_runs AS (
 
-    SELECT * FROM ranked
-    WHERE role = 'bass' AND recency = 1
+    SELECT * FROM full_runs
+    WHERE role = 'bass'
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY stage ORDER BY started_at DESC) = 1
 
 ),
 
@@ -38,6 +52,7 @@ compared AS (
     SELECT
         local_runs.stage,
         local_runs.run_id AS local_run_id,
+        local_runs.role AS local_role,
         local_runs.brain AS local_brain,
         local_runs.git_commit AS local_git_commit,
         local_runs.started_at AS local_started_at,

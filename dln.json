@@ -54,14 +54,21 @@
       "dln": "DLN-102",
       "name": "Roll",
       "role": "support",
-      "job": "Housekeeper. Drafts commit messages (later PR bodies) from a diff for Auto or PJ to approve, and triages stale branches `lab git tidy` leaves for review. Looks after Dependabot PRs in PJ's other repos: answers whether each is safe to merge while Claude decides and merges (`lab roll chores`). Sorts PJ's mail archive into keep and discard classes so deletion is \"old and not kept\" (docs/roll-keep-plan.md); labels only, PJ deletes. In training: commit-message, dependabot-merge and mail-keep stages.",
-      "model": "tbd: commit-message fight",
+      "job": "Housekeeper. Drafts commit messages (later PR bodies) from a diff for Auto or PJ to approve, and triages stale branches `lab git tidy` leaves for review. Looks after Dependabot PRs in PJ's other repos: answers whether each is safe to merge while Claude decides and merges (`lab roll chores`). Sorts PJ's mail archive into keep and discard classes so deletion is \"old and not kept\" (docs/roll-keep-plan.md); labels only, PJ deletes. In training: commit-message and dependabot-merge stages. Weapon: mail-keep.",
+      "model": "ollama:qwen2.5:14b",
       "status": "training",
       "commissioned": "2026-10-13",
       "skills": [
         "commit-message-style"
       ],
-      "weapons": []
+      "weapons": [
+        {
+          "stage": "mail-keep",
+          "brain": "ollama:qwen2.5:14b",
+          "run_id": "mail-keep-20261026T180251Z",
+          "earned": "2026-10-26"
+        }
+      ]
     }
   ]
 }
