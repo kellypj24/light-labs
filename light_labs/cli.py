@@ -612,7 +612,9 @@ def cmd_deploy(args):
     from light_labs import deploy
 
     try:
-        deploy.deploy(deploy.TARGETS[args.target], args.ref)
+        deploy.deploy(
+            deploy.TARGETS[args.target], args.ref, restart=deploy.RESTART.get(args.target)
+        )
     except deploy.DeployError as e:
         sys.exit(f"lab deploy {args.target}: {e}")
 
