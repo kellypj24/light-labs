@@ -6,6 +6,10 @@ draft is sent when every guard passes and no limit is hit; otherwise it waits in
 queue as before. `lab rush flag <id>` marks an auto-sent draft that should not have gone
 out and turns auto-send off for its kind until PJ turns it back on.
 
+Auto's own posts (`lab board post`) go through the same policy with author="auto": no
+action-claim or link checks (Auto reports work it did and links PRs), no per-thread limit,
+and a daily cap of their own. PJ loosened these on 2026-10-28 (#72).
+
 Settings: `auto_send` on Rush's dln.json entry; RUSH_AUTO_SEND=0 turns it all off.
 """
 
@@ -38,8 +42,9 @@ _ACTION = re.compile(
 _URL = re.compile(r"https?://\S+")
 
 
-def guard(body, incoming):
-    """Reasons this draft must not be auto-sent; empty when it may be."""
+def guard(body, incoming, claims=True):
+    """Reasons this draft must not be auto-sent; empty when it may be. `claims=False`
+    skips the action-claim and link checks (Auto's posts)."""
     reasons = []
     text = body.strip()
     if not text:
@@ -49,6 +54,8 @@ def guard(body, incoming):
     for pattern in MUST_NOT_MATCH:
         if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
             reasons.append(f"matches /{pattern}/")
+    if not claims:
+        return reasons
     if _ACTION.search(text):
         reasons.append(f"claims an action: {_ACTION.search(text).group(0)!r}")
     for url in _URL.findall(text):
@@ -80,7 +87,7 @@ class Policy:
             key=lambda i: i.get("resolved", ""),
         )
 
-    def decide(self, kind, target, body, incoming, escalate):
+    def decide(self, kind, target, body, incoming, escalate, author="rush"):
         """(send?, reasons it was held). Reasons are recorded on queued drafts."""
         if not self.enabled:
             return False, ["auto-send off"]
@@ -90,11 +97,20 @@ class Policy:
             return False, [f"auto-send not enabled for {kind}"]
         if kind in self.store.load().get("auto_send_off", []):
             return False, [f"auto-send for {kind} turned off after a flag"]
-        reasons = guard(body, incoming)
+        by_auto = author == "auto"
+        reasons = guard(body, incoming, claims=not by_auto)
         sent = self._sent()
-        auto_today = [i for i in sent if i.get("auto") and i.get("resolved", "")[:10] == self.today]
+        auto_today = [
+            i
+            for i in sent
+            if i.get("auto")
+            and i.get("resolved", "")[:10] == self.today
+            and (i.get("author") == "auto") == by_auto
+        ]
         if len(auto_today) >= self.daily_cap:
             reasons.append(f"daily cap of {self.daily_cap} reached")
+        if by_auto:
+            return not reasons, reasons
         key = thread_key(kind, target)
         streak = 0
         for item in reversed([i for i in sent if thread_key(i["kind"], i["target"]) == key]):

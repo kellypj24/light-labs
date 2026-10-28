@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...}"""
+"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...} | lab board {...}"""
 
 import argparse
 import json
@@ -625,6 +625,57 @@ def cmd_mcp(args):
     mcp_server.serve()
 
 
+def cmd_board(args):
+    """Agent Net for Auto, through Rush: read the cache (or --live), post as Auto."""
+    from light_labs.agents import rush
+    from light_labs.agents.rush import board
+    from light_labs.agents.rush.autosend import Policy
+
+    store = Store(rush.HOME)
+    if args.cmd == "read":
+        snap = (
+            board.fetch(Client(), rush.ACTOR, store.root) if args.live else board.load(store.root)
+        )
+        if snap is None:
+            sys.exit("no board cache yet; run with --live")
+        if not args.ref:
+            print(board.overview(snap, rush.ACTOR, args.limit))
+            return
+        found = board.find(snap, args.ref)
+        if found is None:
+            sys.exit(f"{args.ref} is not in the cache" + ("" if args.live else "; try --live"))
+        print(board.show(*found))
+        return
+    text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text()
+    if args.task:
+        kind, target = "comment", {"task_id": args.task}
+    else:
+        kind, target = "reply", {"to": [args.to], "in_reply_to": None, "summary": args.summary}
+        if args.reply_to:
+            snap = board.load(store.root) or {"inbox": [], "messages": {}, "tasks": []}
+            found = board.find(snap, args.reply_to)
+            msg = found[1] if found else Client().message(args.reply_to)
+            target["in_reply_to"] = msg["id"]
+            target["summary"] = target["summary"] or msg.get("summary")
+    item, held = board.post(
+        Client(),
+        store,
+        Policy(rush.AUTO_SEND, store),
+        rush.ACTOR,
+        rush.AUTO_SIGNOFF,
+        kind,
+        target,
+        text,
+        dry_run=args.dry_run,
+    )
+    if args.dry_run:
+        print("would post" if not held else "would hold: " + "; ".join(held))
+    elif held:
+        print(f"held {item['id']} for PJ: " + "; ".join(held))
+    else:
+        print(f"posted {item['id']} ({item.get('result_id')})")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
@@ -731,6 +782,20 @@ def main(argv=None):
             required=name == "check",
             help="mailbox: for auth a hint (the token is stored under whoever signs in)",
         )
+    board_p = sub.add_parser("board", help="Agent Net for Auto, through Rush's client")
+    bcmd = board_p.add_subparsers(dest="cmd", required=True)
+    bread = bcmd.add_parser("read", help="inbox and tasks naming PJ or Rush; an id: in full")
+    bread.add_argument("ref", nargs="?", help="a task or message id")
+    bread.add_argument("--live", action="store_true", help="fetch now instead of Rush's cache")
+    bread.add_argument("--limit", type=int, default=20)
+    bpost = bcmd.add_parser("post", help="post as Auto via pj_agent, under Rush's guards")
+    where = bpost.add_mutually_exclusive_group(required=True)
+    where.add_argument("--task", help="comment on this board task")
+    where.add_argument("--to", help="direct message to this actor")
+    bpost.add_argument("--reply-to", help="message id the direct message answers")
+    bpost.add_argument("--summary", help="subject of a direct message")
+    bpost.add_argument("-F", "--file", default="-", help="the text (default: stdin)")
+    bpost.add_argument("--dry-run", action="store_true", help="show what the guards decide")
     rush_p = sub.add_parser("rush", help="DLN-100 Rush, the heartbeat")
     rcmd = rush_p.add_subparsers(dest="cmd", required=True)
     rcmd.add_parser("tick").add_argument(
@@ -771,7 +836,7 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy"):
+    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board"):
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude"):

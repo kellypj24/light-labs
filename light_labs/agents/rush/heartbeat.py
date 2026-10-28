@@ -293,10 +293,14 @@ class Heartbeat:
         self.auto = auto
 
     def tick(self, backfill=False):
+        from light_labs.agents.rush import board  # board imports this module
+
         state = self.store.load()
         # First run: mark the existing backlog as seen unless asked to backfill.
         seed = not state["initialized"] and not backfill
         drafted = []
+        # What this tick read, for `lab board read` (board.py)
+        self.seen = {"inbox": None, "tasks": None, "messages": {}}
         try:
             drafted += self._inbox(state, seed)
             drafted += self._tasks(state, seed)
@@ -308,12 +312,14 @@ class Heartbeat:
             raise
         state["initialized"] = True
         self.store.save(state)
+        board.save(self.store.root, self.seen["inbox"], self.seen["tasks"], self.seen["messages"])
         self.store.journal(f"tick: {len(drafted)} draft(s)" + (" (seeded backlog)" if seed else ""))
         return drafted
 
     def _inbox(self, state, seed):
         drafted = []
-        for item in self.client.inbox(self.actor).get("items", []):
+        self.seen["inbox"] = self.client.inbox(self.actor).get("items", [])
+        for item in self.seen["inbox"]:
             mid = short_id(item["id"])
             sender = short_id(item["attributedTo"])
             if mid in state["seen_messages"]:
@@ -321,7 +327,7 @@ class Heartbeat:
             state["seen_messages"].append(mid)
             if seed or sender == self.actor or item.get("broadcast"):
                 continue
-            msg = self.client.message(mid)
+            msg = self.seen["messages"][mid] = self.client.message(mid)
             content = (msg.get("content") or "")[:MAX_CONTEXT_CHARS]
             prompt = reply_prompt(self.name, sender, msg.get("summary"), content)
             drafted.append(
@@ -374,7 +380,7 @@ class Heartbeat:
         skipped: _tasks already answers every comment there. The first scan only records
         where the board is, unless asked to backfill."""
         since = state.get("board_since")
-        tasks = self.client.list_tasks()
+        tasks = self.seen["tasks"] = self.client.list_tasks()
         latest = max((t.get("updatedAt") or "" for t in tasks), default=since or "")
         state["board_since"] = max(latest, since or "")
         if since is None and not backfill:

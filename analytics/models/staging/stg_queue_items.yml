@@ -39,6 +39,14 @@ models:
         description: Lab commit that drafted it
       - name: is_auto
         description: Sent without PJ's approval by the auto-send tier
+      - name: author
+        description: "'auto' for Auto's own posts through the robot's client (`lab board post`), else 'robot'"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["robot", "auto"]
+      - name: is_by_auto
+        description: Auto's own post, not the robot's draft; left out of the queue marts
       - name: is_flagged
         description: An auto-sent draft PJ marked as one that should not have gone out
       - name: flag_reason

@@ -1,7 +1,7 @@
 {#
     One row per robot, draft kind and day the drafts were queued: how many were sent,
     rejected or still pending, how many went out exactly as drafted, and how long
-    decisions took.
+    decisions took. Auto's own posts are not the robot's drafts and are left out.
 #}
 
 SELECT
@@ -22,4 +22,5 @@ SELECT
         AS approval_rate,
     MEDIAN(minutes_to_decision) AS median_minutes_to_decision
 FROM {{ ref('stg_queue_items') }}
+WHERE NOT COALESCE(is_by_auto, FALSE)
 GROUP BY robot, kind, CAST(created_at AS DATE)
