@@ -1,7 +1,8 @@
 # Plan: Roll learns what to keep (`mail-keep` stage)
 
 Status: step 1 done 2026-10-26 (21,029 Roll/Promotions restored from Trash); step 2 done 2026-10-26
-(`mail-keep` stage, 49 fixtures, `light_labs/agents/roll/keep.py`); next, step 3 (fight). Written 2026-10-19.
+(`mail-keep` stage, 49 fixtures, `light_labs/agents/roll/keep.py`); step 3 done (qwen2.5:14b earned the
+weapon, run mail-keep-20261026T180251Z); step 4 in progress. Written 2026-10-19.
 
 Roll's cleanup rules today are Gmail searches by category and age (`roll/inbox.py`). They
 moved 50k emails out of the inbox and into `Roll/*` labels, but deciding what can be
@@ -78,10 +79,13 @@ Each step is its own PR.
    still describes only commit messages and branch triage).
 3. **Fight.** `just eval mail-keep mega-man,proto,bass 3 -cool-above 40`, one model at a
    time. Ask PJ before starting; estimate from mail-triage (about 4 minutes per local model).
-4. **Shadow labelling.** `lab roll keep --label Roll/Updates --dry-run`: classify archived
-   mail locally and write counts plus 20 random samples per class to Telegram, with no
-   labels applied. PJ marks wrong samples; `lab roll keep-fixtures` rewrites them as
-   synthetic fixture candidates (same loop as `lab rush mail-fixtures`).
+4. **Shadow labelling.** `lab roll keep --label Roll/Updates [--sample 300]`: a random
+   sample of the label's archived mail, classified by the weapon brain (`qwen2.5:14b`) and
+   by the teacher (`claude:sonnet`, PJ's decision; `ROLL_KEEP_TEACHER=` turns it off).
+   Nothing is labelled in Gmail. Records go to `var/roll/keep/`; Telegram gets class counts,
+   agreement, and every lost keep (local discard, teacher keep). PJ doesn't hand-label:
+   `lab roll keep-fixtures` rewrites disagreements, lost keeps first, as synthetic fixture
+   candidates (`var/roll/keep/fixture-candidates.jsonl`) for the stage.
 5. **Apply labels.** With the weapon earned, or PJ's approval per label, Roll applies
    `Roll/Keep/*` and `Roll/Discard/*` across the `Roll/*` archive. Undo is recorded like
    cleanup rules.
