@@ -189,7 +189,7 @@ def status(repo, pr=None, fetch=True, out=sys.stdout):
                 if found["state"] == "MERGED" and not changed:
                     parts.append("`lab git tidy` removes it")
             elif w["branch"] is None and counts and counts[1] == 0 and not changed:
-                parts.append(f"nothing beyond origin/{main}")
+                parts.append("`lab git tidy` removes it")
             out.write(f"  {_home(w['path'])} [{name}] {' · '.join(parts)}\n")
 
     open_prs = [p for p in prs if p["state"] == "OPEN"]
@@ -415,24 +415,31 @@ def _age_days(iso, now):
 def plan_tidy(repo, prs, now=None, stale_days=30):
     """What tidy would do. Deletes only work that is merged, or pushed in a PR closed more
     than `stale_days` ago (GitHub keeps refs/pull/<n>/head, so it stays recoverable).
-    Branches with no PR are only listed: they may hold work nobody has seen."""
+    Branches with no PR are only listed: they may hold work nobody has seen. A detached
+    worktree (`land` leaves one at origin/<main>) goes when its HEAD is on main."""
     now = now or datetime.now(UTC)
     main = repo.main_branch()
     current = repo.branch()
     by_branch = _pr_by_branch(prs)
     actions = []
 
-    worktrees, locked = {}, {}
+    worktrees, locked, detached = {}, {}, {}
     for block in repo.git("worktree", "list", "--porcelain").split("\n\n"):
         fields = dict((line.split(" ", 1) + [""])[:2] for line in block.splitlines())
+        if "locked" in fields:
+            locked[fields["worktree"]] = fields["locked"] or "no reason given"
         if "branch" in fields:
             worktrees[fields["branch"].removeprefix("refs/heads/")] = fields["worktree"]
-            if "locked" in fields:
-                locked[fields["worktree"]] = fields["locked"] or "no reason given"
+        elif "detached" in fields:
+            detached[fields["worktree"]] = fields["HEAD"]
     primary = str(repo.path.resolve())
 
-    def contained(sha):
-        return repo.git("rev-list", "--count", f"{main}..{sha}", check=False) == "0"
+    def ahead(sha, ref=main):
+        got = repo.git("rev-list", "--count", f"{ref}..{sha}", check=False)
+        return int(got) if got.isdigit() else float("inf")
+
+    def contained(sha, ref=main):
+        return ahead(sha, ref) == 0
 
     def verdict(branch, sha):
         pr = by_branch.get(branch)
@@ -481,6 +488,25 @@ def plan_tidy(repo, prs, now=None, stale_days=30):
             unique = repo.git("rev-list", "--count", f"{main}..{branch}", check=False)
             reason += f", {unique or '?'} commit(s) not on {main}"
         actions.append(Action("local", branch, reason, delete))
+
+    for path, head in detached.items():
+        if str(Path(path).resolve()) == primary:
+            continue
+        dirty = repo.sh("git", "-C", path, "status", "--porcelain", check=False)
+        # origin/<main> too: local main lags after `land` in another worktree
+        on_main = contained(head) or contained(head, f"origin/{main}")
+        where = f"detached at {head[:7]}"
+        if on_main and not dirty and path not in locked:
+            actions.append(Action("worktree", path, f"{where}: already in {main}", True))
+            continue
+        why = (
+            "uncommitted changes"
+            if dirty
+            else f"locked ({locked[path]})"
+            if path in locked
+            else f"{min(ahead(head, ref) for ref in (main, f'origin/{main}'))} commit(s) not on {main}"
+        )
+        actions.append(Action("worktree", path, f"{where}: {why}", False))
 
     for ref in repo.git(
         "for-each-ref",

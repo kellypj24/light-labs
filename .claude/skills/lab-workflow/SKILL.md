@@ -25,7 +25,8 @@ audience: [auto]
    worktree with its PR and whether `tidy` would remove it, and open PRs with failing
    check names. `lab git status --pr <n>`: one PR's state, mergeability, review, every
    check that isn't passing with its link, and the merge commit. `lab git tidy` lists
-   merged or abandoned branches and worktrees. `tidy --apply` deletes, so run it only
+   merged or abandoned branches and worktrees, and detached worktrees already on `main`
+   (what `land` leaves behind). `tidy --apply` deletes, so run it only
    when PJ asks; `review` rows are never deleted.
 5. `lab git` works in any of PJ's repos (`lab git -C ~/<repo> ...`).
 6. Labels come from `.github/labels.toml`: `ship` labels its PR; `lab git label` backfills

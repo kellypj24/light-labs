@@ -139,6 +139,21 @@ class TidyTest(RepoCase):
         self.assertIn("locked (agent pid 1)", worktree[1])
         self.assertNotIn(("local", "feature/lk"), got)
 
+    def test_detached_worktree_goes_when_its_head_is_on_main(self):
+        self.commit("landed")
+        done, wip, dirty = (self.path.parent / n for n in ("done", "wip", "dirty"))
+        for wt in (done, wip, dirty):
+            sh(self.path, "git", "worktree", "add", "-q", "--detach", str(wt), "main")
+        sh(wip, "git", "commit", "-q", "--allow-empty", "-m", "unlanded")
+        (dirty / "scratch").write_text("unsaved")
+        got = {Path(t).name: v for (kind, t), v in self.plan([]).items() if kind == "worktree"}
+        self.assertTrue(got["done"][0])
+        self.assertIn("already in main", got["done"][1])
+        self.assertEqual(got["wip"][0], False)
+        self.assertIn("1 commit(s) not on main", got["wip"][1])
+        self.assertEqual(got["dirty"][0], False)
+        self.assertIn("uncommitted changes", got["dirty"][1])
+
     def test_one_failed_deletion_does_not_stop_the_rest(self):
         merged = self.branch("feature/a", merge=True)
         actions = [
