@@ -1,7 +1,7 @@
 # Boss fight: Roll deciding what in PJ's mail archive is worth keeping.
 #
 # Task class: given one archived email's sender, subject, Gmail category, unsubscribe
-# header and snippet, return keep/<class> or discard/<class> (docs/roll-keep-plan.md).
+# header and snippet, return keep/<class> or discard/<class> (docs/plans/roll-keep.md).
 # The costly mistake is a keep labelled discard: that mail is later offered for deletion.
 # Everything here is synthetic: example.org/.com/.net senders, invented people. Seeded from
 # the 2026-10-19 cleanup misses, rewritten.

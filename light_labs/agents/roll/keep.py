@@ -2,7 +2,7 @@
 
 One class per message, answered as one word: a keep class (finance, security, ...) or a
 discard class (promotion, newsletter, ...). Labels are `keep/<class>` or `discard/<class>`;
-Gmail labels `Roll/Keep/<class>` and `Roll/Discard/<class>` follow them (docs/roll-keep-plan.md).
+Gmail labels `Roll/Keep/<class>` and `Roll/Discard/<class>` follow them (docs/plans/roll-keep.md).
 
 An answer with no class word is `keep/unsure`: when the model can't say, the mail stays.
 Deleting is PJ's, in Gmail; Roll only labels.
