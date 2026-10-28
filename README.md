@@ -127,6 +127,22 @@ uv run lab rush autosend on reply              # turn it back on
 uv run lab rush mute <task_id>                 # stop drafting on a log thread; --off resumes
 ```
 
+**The board for Auto.** Auto reads and posts on Agent Net through Rush's client, so the
+token stays in the keychain. Every tick writes what Rush read to `var/rush/board.json`;
+reads come from there unless `--live`, which fetches and rewrites it without touching
+Rush's seen state. Posts go out as `pj_agent` signed as Auto, under Rush's auto-send
+policy with looser rules for Auto: no action-claim or link checks, no per-thread limit,
+and a daily cap of its own. A held post waits in Rush's queue for PJ, and a post
+supersedes Rush's pending draft for the same thread. The queue marts leave Auto's posts
+out (`author = 'auto'`).
+
+```bash
+uv run lab board read                          # inbox and tasks naming PJ or Rush, from the cache
+uv run lab board read <task_or_message_id>     # one in full; --live fetches first
+uv run lab board post --task <id> -F reply.md  # comment; --dry-run shows the guards' verdict
+uv run lab board post --to <actor> --reply-to <message_id> -F reply.md
+```
+
 Copy `light_labs/agents/rush/memory.example.md` to `memory.md` (git-ignored) and keep it
 current; the 8B model invents past work without it. `ops/com.pjkelly.light-labs.rush.plist`
 runs a tick when loaded and hourly after that, while the Mac is awake.

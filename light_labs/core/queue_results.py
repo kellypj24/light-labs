@@ -39,6 +39,7 @@ ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS auto BOOLEAN;
 ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS flagged BOOLEAN;
 ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS flag_reason VARCHAR;
 ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS held JSON;
+ALTER TABLE raw.queue_items ADD COLUMN IF NOT EXISTS author VARCHAR;
 """
 
 COLUMNS = [
@@ -63,6 +64,7 @@ COLUMNS = [
     "flagged",
     "flag_reason",
     "held",
+    "author",
 ]
 
 
@@ -91,6 +93,7 @@ def _row(robot, status, path):
         bool(item.get("flagged")),
         item.get("flag_reason"),
         json.dumps(item["held"]) if item.get("held") else None,
+        item.get("author"),  # "auto" for Auto's own posts (`lab board post`)
     )
 
 

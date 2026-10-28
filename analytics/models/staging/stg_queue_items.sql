@@ -4,7 +4,8 @@
     reply is noted. Both are rejected on disk, but no decision of PJ's, so they count as
     neither decided nor rejected. A sent draft is edited when the text sent differs from
     what the robot wrote; NULL when that is unknown (queued before `drafted` was
-    recorded) or the draft was not sent.
+    recorded) or the draft was not sent. Auto's own posts through the robot's client
+    (`lab board post`) have author 'auto'; the robot's drafts have 'robot'.
 #}
 
 WITH source AS (
@@ -37,6 +38,8 @@ renamed AS (
         held AS held_reasons,
         COALESCE(auto, FALSE) AS is_auto,
         COALESCE(flagged, FALSE) AS is_flagged,
+        COALESCE(author, 'robot') AS author,
+        COALESCE(author = 'auto', FALSE) AS is_by_auto,
         robot || '|' || item_id AS queue_item_key,
         target ->> '$.task_id' AS task_id,
         escalation IS NOT NULL AS is_escalated,
