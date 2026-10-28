@@ -13,21 +13,19 @@ _Updated 2026-10-28._
   cleanup, and the `mail-keep` weapon on `qwen2.5:14b`.
 - Claude Code usage lands in `raw.claude_records` daily and feeds the `mart_claude_*`
   marts; credentials are redacted on ingest (#70).
-- Hermes runs from `lab deploy` releases (`~/.hermes/lab/current`); `morning-brief` is
-  paused.
+- Hermes runs from `lab deploy` releases (`~/.hermes/lab/current`); `morning-brief` runs
+  daily at 08:00 (`hermes cron list`).
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
 ## Next
 
-1. #72 `lab board read|post`: Auto reads and posts to the board through Rush instead of curl.
-2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
-3. #68 Roll keep-plan step 4: shadow-label archived mail with a Sonnet teacher
+1. #68 Roll keep-plan step 4: shadow-label archived mail with a Sonnet teacher
    (`docs/plans/roll-keep.md`).
+2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 
 ## Open decisions
 
-- Resume `morning-brief`.
 - Dependabot PRs #58, #63, #64.
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
   flat, ~4 MB) and prune `var/evals/cache/` (17 MB, rebuildable) past 30 days? Proposed,
