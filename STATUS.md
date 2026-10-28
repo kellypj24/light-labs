@@ -27,7 +27,7 @@ _Updated 2026-10-28._
 
 ## Open decisions
 
-- Dependabot PRs #58, #63, #64.
+- Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
   flat, ~4 MB) and prune `var/evals/cache/` (17 MB, rebuildable) past 30 days? Proposed,
   not agreed.
