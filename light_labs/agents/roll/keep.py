@@ -2,7 +2,7 @@
 
 One class per message, answered as one word: a keep class (finance, security, ...) or a
 discard class (promotion, newsletter, ...). Labels are `keep/<class>` or `discard/<class>`;
-Gmail labels `Roll/Keep/<class>` and `Roll/Discard/<class>` follow them (docs/roll-keep-plan.md).
+Gmail labels `Roll/Keep/<class>` and `Roll/Discard/<class>` follow them (docs/plans/roll-keep.md).
 
 An answer with no class word is `keep/unsure`: when the model can't say, the mail stays.
 Deleting is PJ's, in Gmail; Roll only labels.
@@ -72,7 +72,7 @@ def classify(brain, msg):
     return {"label": label or UNSURE, "raw": raw, "by": "model" if label else "model-unparsed"}
 
 
-# --- shadow labelling (docs/roll-keep-plan.md step 4): label nothing, measure agreement
+# --- shadow labelling (docs/plans/roll-keep.md step 4): label nothing, measure agreement
 
 
 def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000):
