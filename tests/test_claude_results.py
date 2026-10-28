@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from light_labs.core import claude_results
 
@@ -52,6 +53,43 @@ class ClaudeResultsTest(unittest.TestCase):
         claude_results.ingest([live], db=self.db)
         (live / "-w-app/s1.jsonl").unlink()
         self.assertEqual(claude_results.ingest([live], db=self.db), (0, 1))
+
+    def test_redact_hides_each_kind_and_keeps_json_valid(self):
+        bot, hexed = "1234567890:AA" + "b" * 33, "a1" * 24
+        cmd = f"security add-generic-password -U -s svc -a me -w '{bot}' && echo {hexed}"
+        line = json.dumps({"type": "user", "message": {"content": cmd}})
+        out = claude_results.redact(line)
+        self.assertNotIn(bot, out)
+        self.assertNotIn(hexed, out)
+        self.assertIn("-w [REDACTED:keychain]", out)
+        self.assertIn("[REDACTED:token]", out)
+        json.loads(out)
+        self.assertEqual(
+            claude_results.redact('{"sha": "' + "c" * 64 + '"}'), '{"sha": "' + "c" * 64 + '"}'
+        )
+
+    def test_ingest_redacts_new_lines_stored_rows_and_archive(self):
+        secret = "sk-ant-" + "k" * 30
+        live = self.root / "live"
+        record = {"type": "user", "uuid": "u1", "message": {"content": f"key {secret}"}}
+        write(live / "-w-app/s1.jsonl", [record])
+        with mock.patch.object(claude_results, "redact", lambda line: line):
+            claude_results.ingest([live], db=self.db)  # a row stored before redaction existed
+        self.assertIn(
+            secret, self.rows("SELECT CAST(record AS VARCHAR) FROM raw.claude_records")[0][0]
+        )
+        archive = self.root / "var" / "claude" / "projects"
+        write(archive / "-w-app/s0.jsonl", [record])
+        with (
+            mock.patch.object(claude_results.config, "VAR", self.root / "var"),
+            mock.patch.object(claude_results, "project_dirs", lambda: [live]),
+        ):
+            self.assertEqual(claude_results.ingest(db=self.db), (0, 1))
+        (text,) = self.rows("SELECT CAST(record AS VARCHAR) FROM raw.claude_records")[0]
+        self.assertNotIn(secret, text)
+        self.assertIn("[REDACTED:anthropic]", text)
+        self.assertNotIn(secret, (archive / "-w-app/s0.jsonl").read_text())
+        self.assertIn(secret, (live / "-w-app/s1.jsonl").read_text())  # Claude Code's own file
 
     def test_ingest_with_nothing_there(self):
         self.assertEqual(claude_results.ingest([self.root / "none"], db=self.db), (0, 0))

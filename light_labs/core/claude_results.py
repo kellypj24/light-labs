@@ -7,12 +7,16 @@ seen, keyed by a hash of the line, and never deletes, so a daily run keeps every
 for good and new dbt models can be built over all of it later.
 
 The records hold full conversations (prompts, replies, tool output). They stay in var/lab.duckdb, which git ignores, and go
-nowhere else.
+nowhere else. Credentials pasted into a session are redacted before a line is stored, and
+each ingest re-redacts stored rows and the archive, so a pattern added later cleans the past
+too. `record_key` stays the hash of the original line, so a live transcript still holding
+the secret is not loaded twice.
 """
 
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 from light_labs import config
@@ -29,6 +33,32 @@ CREATE TABLE IF NOT EXISTS raw.claude_records (
     loaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
+
+
+# (kind, pattern), applied in order: keychain first, since it catches any password after -w.
+# Written for both Python re and DuckDB's RE2, which prefilters stored rows.
+# Replacements hold no quote or backslash, so a redacted line is still valid JSON.
+SECRETS = [
+    (
+        "keychain",
+        r"(add-generic-password[^\"\n]{0,200}?\s-w\s+)(?:'[^'\[][^']*'|[^\s'\"\\\[][^\s'\"\\]*)",
+    ),
+    ("telegram", r"\b[0-9]{8,10}:AA[A-Za-z0-9_-]{30,}"),
+    ("anthropic", r"sk-ant-[A-Za-z0-9_-]{20,}"),
+    ("github", r"\bgh[pousr]_[A-Za-z0-9]{30,}|\bgithub_pat_[A-Za-z0-9_]{40,}"),
+    ("aws", r"\bAKIA[0-9A-Z]{16}\b"),
+    ("google", r"GOCSPX-[A-Za-z0-9_-]{20,}"),
+    ("token", r"\b[0-9a-f]{48}\b"),
+]
+ANY_SECRET = "|".join(f"(?:{p})" for _, p in SECRETS)
+
+
+def redact(line):
+    for kind, pattern in SECRETS:
+        # keychain keeps the command (group 1) and drops the password after -w
+        repl = rf"\1[REDACTED:{kind}]" if kind == "keychain" else f"[REDACTED:{kind}]"
+        line = re.sub(pattern, repl, line)
+    return line
 
 
 def claude_dir():
@@ -65,11 +95,37 @@ def _records(dirs):
             transcript = str(path.relative_to(root / project))
             for n, line, _ in _lines(path):
                 key = hashlib.sha256(line.encode()).hexdigest()
-                yield key, project, transcript, n, line
+                yield key, project, transcript, n, redact(line)
+
+
+def redact_archive(root):
+    """Rewrite archived transcripts that still hold a secret; the live ones are Claude Code's."""
+    changed = 0
+    for path in sorted(Path(root).rglob("*.jsonl")) if Path(root).is_dir() else []:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        clean = redact(text)
+        if clean != text:
+            path.write_text(clean, encoding="utf-8")
+            changed += 1
+    return changed
+
+
+def _redact_stored(con):
+    found = con.execute(
+        "SELECT record_key, CAST(record AS VARCHAR) FROM raw.claude_records "
+        "WHERE regexp_matches(CAST(record AS VARCHAR), ?)",
+        [ANY_SECRET],
+    ).fetchall()
+    updates = [(redact(text), key) for key, text in found if redact(text) != text]
+    if updates:
+        con.executemany("UPDATE raw.claude_records SET record = ? WHERE record_key = ?", updates)
+    return len(updates)
 
 
 def ingest(dirs=None, db=None):
     """Append transcript records not loaded before. Returns (new rows, total rows)."""
+    if dirs is None:
+        redact_archive(config.VAR / "claude" / "projects")
     rows, seen = [], set()
     for row in _records(project_dirs() if dirs is None else [Path(d) for d in dirs]):
         if row[0] not in seen:  # the same file in ~/.claude and the archive
@@ -91,6 +147,7 @@ def ingest(dirs=None, db=None):
             "WHERE NOT EXISTS (SELECT 1 FROM raw.claude_records r "
             "WHERE r.record_key = i.record_key)"
         ).fetchone()[0]
+        _redact_stored(con)
         con.execute("COMMIT")
         total = con.execute("SELECT count(*) FROM raw.claude_records").fetchone()[0]
     return new, total

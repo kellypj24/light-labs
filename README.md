@@ -186,6 +186,9 @@ local model, or deterministic work for a script, tool or harness. `lab claude
 ingest` appends every new line of Claude Code's transcripts (`~/.claude/projects`, plus an
 archive in `var/claude/projects`) to `raw.claude_records` and never deletes, so sessions
 outlive Claude Code's 30-day cleanup. The `claude_daily` sensor runs it once a day.
+Credentials pasted into a session (keychain `-w` values, bot tokens, API keys) are stored as
+`[REDACTED:<kind>]`, and each ingest re-redacts stored rows and the archive (`SECRETS` in
+`light_labs/core/claude_results.py`).
 
 | Mart | One row per | Answers |
 |---|---|---|
