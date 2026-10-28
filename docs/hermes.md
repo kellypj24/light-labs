@@ -53,6 +53,9 @@ branch the checkout has open never reaches Hermes. `lab git land` redeploys afte
 merge while the deploy tracks main. To try a branch: `lab deploy hermes --ref <branch>`;
 it stays there through merges until `lab deploy hermes` puts it back on main.
 `~/.hermes/lab/current/DEPLOYED.json` names the ref and commit; the last 3 releases are kept.
+A deploy that changes the commit runs `hermes gateway restart`: the gateway reads
+`config.yaml` and starts the lab MCP server only at startup, so without a restart it keeps
+the old release (and, after pruning, a deleted directory).
 
 `TELEGRAM_ALLOWED_USERS=<PJ's Telegram id>` limits the bot to PJ. Hermes's bot is its own
 (not Rush's or Roll's): Telegram hands a bot's updates to one poller.

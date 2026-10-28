@@ -37,8 +37,10 @@ class DeployCase(unittest.TestCase):
         sh(self.src, "git", "push", "-q", "origin", f"HEAD:{branch}")
         return sh(self.src, "git", "rev-parse", "HEAD")
 
-    def deploy(self, ref="main"):
-        return deploy.deploy(self.target, ref, source=self.src, sync=False, out=io.StringIO())
+    def deploy(self, ref="main", restart=None):
+        return deploy.deploy(
+            self.target, ref, source=self.src, sync=False, restart=restart, out=io.StringIO()
+        )
 
     def test_exports_the_commit_without_git_and_links_local_files(self):
         stamp = self.deploy()
@@ -95,7 +97,27 @@ class DeployCase(unittest.TestCase):
     def test_redeploy_main_follows_main(self):
         self.deploy()
         self.commit("app.py", "v2")
-        with mock.patch.dict(deploy.TARGETS, {"hermes": self.target}, clear=True):
+        marker = self.target / "restarted"
+        with (
+            mock.patch.dict(deploy.TARGETS, {"hermes": self.target}, clear=True),
+            mock.patch.dict(deploy.RESTART, {"hermes": ("touch", str(marker))}, clear=True),
+        ):
             done = deploy.redeploy_main("main", out=io.StringIO(), source=self.src, sync=False)
         self.assertEqual(done, ["hermes"])
+        self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
+        self.assertTrue(marker.exists())
+
+    def test_restarts_only_when_the_commit_changes(self):
+        marker = self.target / "restarted"
+        self.deploy(restart=("touch", str(marker)))
+        self.assertTrue(marker.exists())
+        marker.unlink()
+        self.deploy(restart=("touch", str(marker)))
+        self.assertFalse(marker.exists())
+
+    def test_a_failed_restart_keeps_the_new_release(self):
+        self.deploy()
+        self.commit("app.py", "v2")
+        with self.assertRaisesRegex(deploy.DeployError, "but `false` failed"):
+            self.deploy(restart=("false",))
         self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
