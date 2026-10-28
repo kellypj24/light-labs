@@ -20,7 +20,8 @@ _Updated 2026-10-28._
 
 ## Next
 
-1. #68 Roll keep-plan step 4: shadow-label archived mail with a Sonnet teacher
+1. Roll keep-plan step 4 (`lab roll keep`, #68) is merged: shadow-label more `Roll/*`
+   labels, then turn disagreements into fixtures with `lab roll keep-fixtures`
    (`docs/plans/roll-keep.md`).
 2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 

@@ -72,7 +72,7 @@ def classify(brain, msg):
     return {"label": label or UNSURE, "raw": raw, "by": "model" if label else "model-unparsed"}
 
 
-# --- shadow labelling (docs/roll-keep-plan.md step 4): label nothing, measure agreement
+# --- shadow labelling (docs/plans/roll-keep.md step 4): label nothing, measure agreement
 
 
 def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000):
