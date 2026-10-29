@@ -6,7 +6,8 @@ container VM, a Dagster run. While it runs, `Guard.check` between units of work 
 while the machine is hot (serious thermal state, CPU throttled, battery over 40°C, warn
 memory pressure) and stops the job after MAX_WAIT; a watchdog thread stops it on critical
 thermal state or memory pressure, or swap growth. A stop unloads the local models.
-Dagster's sensors skip while the lock is held.
+Dagster's sensors skip while the lock is held. Each finished job appends a line to
+HISTORY, next to the lock; `light_labs.core.monitor` reads both for `/lab`.
 
 `lab heavy run <job> -- <cmd>` wraps a command; Python jobs use `with job(...) as guard`.
 Off in CI (`CI` set): GitHub's runners have none of these readings.
@@ -27,6 +28,7 @@ from light_labs import config
 
 # Machine-wide, not per checkout: worktrees each have their own var/.
 LOCK = Path(os.environ.get("LAB_HEAVY_LOCK", Path.home() / ".cache" / "light-labs" / "heavy.lock"))
+HISTORY_NAME = "history.jsonl"
 
 BATTERY_MAX_C = 40.0
 SWAP_GROWTH_MB = 2048
@@ -146,10 +148,11 @@ def holder(lock=None):
     return None
 
 
-def acquire(name, lock=None):
+def acquire(name, lock=None, **extra):
+    """Take the lock for `name`. `extra` goes into the record (var, swap_start, detail)."""
     lock = lock or LOCK
     lock.parent.mkdir(parents=True, exist_ok=True)
-    rec = {"job": name, "pid": os.getpid(), "started_at": datetime.now(UTC).isoformat()}
+    rec = {"job": name, "pid": os.getpid(), "started_at": datetime.now(UTC).isoformat(), **extra}
     for _ in range(2):
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
@@ -170,6 +173,22 @@ def release(lock=None):
         lock.unlink(missing_ok=True)
 
 
+def history_path(lock=None):
+    return (lock or LOCK).with_name(HISTORY_NAME)
+
+
+def record_end(rec, outcome, paused_s, lock=None):
+    """Append the finished job to HISTORY."""
+    end = {
+        **rec,
+        "ended_at": datetime.now(UTC).isoformat(),
+        "outcome": outcome,
+        "paused_s": paused_s,
+    }
+    with history_path(lock).open("a") as f:
+        f.write(json.dumps(end) + "\n")
+
+
 def unload_models():
     """`ollama stop` every loaded model; returns their names."""
     names = [ln.split()[0] for ln in _run("ollama", "ps").splitlines()[1:] if ln.strip()]
@@ -185,6 +204,7 @@ class Guard:
         self.read, self.sleep, self.max_wait, self.step = read, sleep, max_wait, step
         self.stop_reason = ""
         self.paused_s = 0.0
+        self.outcome = ""  # set by the job to override "done" in HISTORY
 
     def check(self):
         """Call between units of work: pauses while hot, raises Overheated to stop."""
@@ -213,10 +233,11 @@ def _watch(guard, done, on_stop, swap_start, every):
 
 
 @contextmanager
-def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY):
+def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY, detail=None):
     """Hold the heavy-job lock for `name` with a watchdog. `force` (a reason) skips the
     preflight, never the lock. `on_stop(reason)` runs from the watchdog thread when a
-    critical reading stops the job; the job sees it on its next `guard.check()`."""
+    critical reading stops the job; the job sees it on its next `guard.check()`. `detail`
+    (e.g. the label and sample size) goes into the lock record for the monitor."""
     guard = Guard(read=read)
     if os.environ.get("CI"):
         yield guard
@@ -226,7 +247,8 @@ def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY
         if not force:
             raise Busy(f"{why}; wait, or pass --force <reason>")
         print(f"heavy: starting {name} anyway ({why}): {force}", flush=True)
-    acquire(name, lock)
+    rec = acquire(name, lock, var=str(config.VAR), swap_start=r["swap_mb"], detail=detail or {})
+    outcome = "failed"
     done = threading.Event()
     watcher = threading.Thread(
         target=_watch, args=(guard, done, on_stop or (lambda why: None), r["swap_mb"], every),
@@ -235,12 +257,18 @@ def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY
     watcher.start()
     try:
         yield guard
+        outcome = guard.outcome or "done"
     except Overheated:
+        outcome = f"stopped: {guard.stop_reason}"
         unload_models()
+        raise
+    except KeyboardInterrupt:
+        outcome = "interrupted"
         raise
     finally:
         done.set()
         release(lock)
+        record_end(rec, outcome, guard.paused_s, lock)
 
 
 def run(name, cmd, force=""):
@@ -257,14 +285,17 @@ def run(name, cmd, force=""):
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGTERM)
 
-    with job(name, force=force, on_stop=stop) as guard:
+    with job(name, force=force, on_stop=stop, detail={"cmd": " ".join(cmd)[:200]}) as guard:
         proc = subprocess.Popen(cmd, start_new_session=True)
         try:
             code = proc.wait()
         except KeyboardInterrupt:
             os.killpg(proc.pid, signal.SIGINT)
             code = proc.wait()
+        if code:
+            guard.outcome = f"exit {code}"
         if guard.stop_reason:
+            guard.outcome = f"stopped: {guard.stop_reason}"
             unload_models()
             _cancel_fight(name, guard.stop_reason)
             print(f"heavy: {name} stopped ({guard.stop_reason}); models unloaded", flush=True)

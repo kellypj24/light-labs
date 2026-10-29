@@ -5,7 +5,9 @@ us who is asking in the Tailscale-User-Login header. Requests without an allowed
 refused, so the page is PJ's alone even on a shared tailnet. Forms carry a per-process
 token against cross-site posts.
 
-Stdlib only: http.server, html.escape. Pages render on the server; no JavaScript.
+Stdlib only: http.server, html.escape. Pages render on the server. `/lab` loads `/lab.js`,
+which fetches `/lab.json` every LAB_POLL_MS and swaps in the server-rendered body. Every
+response carries CSP: scripts only from this origin, no inline script, no framing.
 """
 
 import html
@@ -14,7 +16,9 @@ import re
 import secrets
 import subprocess
 import threading
+import time
 from argparse import Namespace
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -28,6 +32,7 @@ INTEREST = re.compile(r"\b(rush|pj_agent|pj-agent|DLN-100|PJ)\b", re.IGNORECASE)
 BOARD_TASKS = 25
 JOURNAL_LINES = 15
 CLIP = 600
+LAB_POLL_MS = 3000
 
 
 def tailnet_login():
@@ -107,6 +112,14 @@ details > summary::-webkit-details-marker { display:none; }
 details > summary .name::before { content:"▸ "; color:var(--muted); }
 details[open] > summary .name::before { content:"▾ "; }
 details .week .name { padding-left:12px; }
+.bar { height:10px; border-radius:3px; background:var(--line); overflow:hidden; margin:6px 0; }
+.bar span { display:block; height:100%; background:var(--accent); }
+.bar span.warn { background:var(--warn); }
+.kv { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:2px 12px;
+  font-size:14px; }
+.kv dt { color:var(--muted); }
+.kv dd { margin:0; }
+.bad { color:var(--warn); }
 """
 
 
@@ -116,8 +129,113 @@ def page(title, body, flash=None):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title><style>{STYLE}</style></head><body>
 <header><b>Rush</b><a href="/">Queue</a><a href="/mail">Mail</a><a href="/board">Board</a>
-<a href="/inbox">Inbox</a><a href="/usage">Usage</a>
+<a href="/inbox">Inbox</a><a href="/usage">Usage</a><a href="/lab">Lab</a>
 </header><main>{note}{body}</main></body></html>"""
+
+
+def _bar(done, total, warn=False):
+    pct = 0 if not total else max(0, min(100, round(100 * (done or 0) / total)))
+    return f'<div class="bar"><span class="{"warn" if warn else ""}" style="width:{pct}%"></span></div>'
+
+
+def lab_body(snap):
+    """The `/lab` body for one `monitor.snapshot()`."""
+    from light_labs.core.monitor import _since, duration
+
+    m, j, lim = snap["machine"], snap["job"], snap["limits"]
+    out = ["<h2>Heavy job</h2>"]
+    if j:
+        detail = ", ".join(f"{k}={v}" for k, v in j["detail"].items())
+        extra = f" · {esc(detail, 120)}" if detail else ""
+        card = [
+            f'<b>{esc(j["job"])}</b> <span class="meta">{duration(j["elapsed_s"])}{extra}</span>'
+        ]
+        if p := j["progress"]:
+            total = p.get("total")
+            count = f"{p['done']}/{total}" if total else f"{p['done']}"
+            card.append(f'<div class="meta">{esc(str(p["what"]))}: {count}</div>')
+            if total:
+                card.append(_bar(p["done"], total))
+        grow = j["swap_growth_mb"]
+        if grow is not None:
+            near = grow > lim["swap_growth_mb"] * 0.75
+            card.append(
+                f'<div class="meta">swap +{grow:.0f} MB of {lim["swap_growth_mb"]} '
+                f"(stop)</div>{_bar(grow, lim['swap_growth_mb'], warn=near)}"
+            )
+        out.append(f'<div class="card">{"".join(card)}</div>')
+    else:
+        out.append('<div class="card meta">No heavy job running.</div>')
+    if snap["critical"]:
+        out.append(f'<div class="card bad">Kill switch: {esc(snap["critical"])}</div>')
+    elif snap["hot"]:
+        out.append(f'<div class="card bad">Pausing: {esc(snap["hot"])}</div>')
+
+    def val(v, bad=False):
+        return f'<dd class="{"bad" if bad else ""}">{esc(str(v))}</dd>'
+
+    load_bad = m["load_1"] is not None and m["cores"] and m["load_1"] > m["cores"]
+    rows = [
+        ("thermal", val(m["thermal"], m["thermal"] in ("serious", "critical"))),
+        ("load", val(f"{m['load_1']} / {m['cores']} cores", load_bad)),
+        ("memory", val(m["pressure"], m["pressure"] not in (None, "normal"))),
+        ("swap", val(f"{m['swap_mb']} MB")),
+        ("CPU limit", val(f"{m['speed_limit']}%", (m["speed_limit"] or 100) < 100)),
+        (
+            "start a job",
+            val("yes" if snap["start_ok"] else f"no, {snap['why_not']}", not snap["start_ok"]),
+        ),
+    ]
+    if m["battery_c"] is not None:
+        rows.insert(1, ("battery", val(f"{m['battery_c']}°C", m["battery_c"] > lim["battery_c"])))
+    out.append(
+        '<h2>Machine</h2><div class="card"><dl class="kv">'
+        + "".join(f"<dt>{k}</dt>{v}" for k, v in rows)
+        + "</dl></div>"
+    )
+    if snap["busy"]:
+        out.append('<div class="card meta">' + "<br>".join(esc(b) for b in snap["busy"]) + "</div>")
+    out.append("<h2>Dagster</h2>")
+    if snap["dagster"]:
+        lines = []
+        for d in snap["dagster"]:
+            took = duration((d["end"] or time.time()) - d["start"]) if d["start"] else ""
+            cls = "bad" if d["status"] in ("FAILURE", "CANCELED") else ""
+            lines.append(
+                f'<div><b>{esc(d["job"])}</b> <span class="{cls}">{esc(d["status"])}'
+                f'</span> <span class="meta">{took}</span></div>'
+            )
+        out.append(f'<div class="card">{"".join(lines)}</div>')
+    else:
+        out.append('<div class="card meta">No run storage.</div>')
+    out.append("<h2>Recent heavy jobs</h2>")
+    if snap["history"]:
+        lines = []
+        for h in snap["history"]:
+            took = duration(_since(h["started_at"], datetime.fromisoformat(h["ended_at"])))
+            cls = "" if h["outcome"] == "done" else "bad"
+            lines.append(
+                f'<div><b>{esc(h["job"])}</b> <span class="{cls}">{esc(h["outcome"], 120)}'
+                f'</span> <span class="meta">{esc(h["ended_at"][:16])} · {took}</span></div>'
+            )
+        out.append(f'<div class="card">{"".join(lines)}</div>')
+    else:
+        out.append('<div class="card meta">None yet.</div>')
+    out.append(f'<p class="meta">Updated {esc(snap["at"][11:19])} UTC</p>')
+    return "".join(out)
+
+
+LAB_JS = """setInterval(async () => {
+  try {
+    const r = await fetch("/lab.json", {cache: "no-store", credentials: "same-origin"});
+    if (r.ok) document.getElementById("lab").innerHTML = (await r.json()).html;
+  } catch (e) {}
+}, POLL_MS);
+""".replace("POLL_MS", str(LAB_POLL_MS))
+CSP = (
+    "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; "
+    "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+)
 
 
 class Remote:
@@ -193,6 +311,16 @@ class Remote:
         except usage.Unavailable as e:
             body = f'<p class="meta">{esc(str(e))}</p>'
         return page("Rush · usage", "<h2>Claude Code usage</h2>" + body)
+
+    def lab_snapshot(self):
+        from light_labs.core import monitor
+
+        snap = monitor.snapshot()
+        return {**snap, "html": lab_body(snap)}
+
+    def lab_page(self):
+        body = f'<div id="lab">{self.lab_snapshot()["html"]}</div><script src="/lab.js"></script>'
+        return page("Rush · lab", body)
 
     def queue_page(self):
         items = self.store.pending()
@@ -324,12 +452,15 @@ def handler(remote):
             self._send(403, page("Not allowed", "<p>Tailnet login required.</p>"))
             return False
 
-        def _send(self, code, body, location=None):
+        def _send(self, code, body, location=None, ctype="text/html; charset=utf-8"):
             data = body.encode()
             self.send_response(code)
             if location:
                 self.send_header("Location", location)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -351,6 +482,13 @@ def handler(remote):
                     body = remote.inbox_page()
                 elif parts == ["usage"]:
                     body = remote.usage_page()
+                elif parts == ["lab"]:
+                    body = remote.lab_page()
+                elif parts == ["lab.json"]:
+                    data = json.dumps(remote.lab_snapshot())
+                    return self._send(200, data, ctype="application/json")
+                elif parts == ["lab.js"]:
+                    return self._send(200, LAB_JS, ctype="text/javascript; charset=utf-8")
                 elif len(parts) == 2 and parts[0] == "task":
                     body = remote.task_page(parts[1])
                 elif len(parts) == 2 and parts[0] == "msg":

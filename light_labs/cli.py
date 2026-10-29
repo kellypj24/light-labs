@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from light_labs import config
@@ -80,6 +81,15 @@ def cmd_heavy(args):
         why = heavy.too_busy(r, procs) or heavy.hot(r)
         print(f"start a heavy job: {'no, ' + why if why else 'yes'}")
         return
+    if args.cmd == "watch":
+        from light_labs.core import monitor
+
+        try:
+            while True:
+                print("\033[H\033[2J" + monitor.text(monitor.snapshot()), flush=True)
+                time.sleep(args.every)
+        except KeyboardInterrupt:
+            return
     cmd = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not cmd:
         sys.exit("lab heavy run <job> -- <command>")
@@ -571,7 +581,8 @@ def roll_keep(args, bot, roll):
 
     teacher = brain_for(roll.KEEP_TEACHER) if roll.KEEP_TEACHER else None
     try:
-        with heavy.job("roll-keep", force=args.force) as guard:
+        detail = {"label": args.label, "sample": args.sample}
+        with heavy.job("roll-keep", force=args.force, detail=detail) as guard:
             records = keep.shadow(
                 bot.gmail, brain_for(roll.KEEP_BRAIN), teacher, args.label, args.sample,
                 roll.HOME, pace=guard.check,
@@ -757,6 +768,8 @@ def main(argv=None):
     heavy_p = sub.add_parser("heavy", help="one heavy job at a time, with kill switches")
     hcmd = heavy_p.add_subparsers(dest="cmd", required=True)
     hcmd.add_parser("status", help="who holds the lock; is the machine fit for a heavy job")
+    hwatch_p = hcmd.add_parser("watch", help="live view: job progress, machine, Dagster, history")
+    hwatch_p.add_argument("--every", type=float, default=3.0, help="seconds between refreshes")
     hrun_p = hcmd.add_parser("run", help="run a command as a heavy job: lab heavy run fight -- ...")
     hrun_p.add_argument("job", help="name in the lock: fight, check, ...")
     hrun_p.add_argument("--force", default="", metavar="REASON", help="start on a busy machine")

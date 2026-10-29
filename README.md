@@ -185,6 +185,7 @@ reason, progress) and heat readings every 30 seconds.
 ```bash
 just watch                                      # live view; stays open and follows each next fight
 lab heavy status                                # is the machine fit for a fight?
+lab heavy watch                                 # live: job progress, machine, Dagster, history
 just eval dbt-model mega-man 3                  # pauses while hot (-cool-above 40 by default),
                                                 # stops if still hot after -cool-max-wait
 uv run lab evals cancel <run_id> --reason "machine hot"   # after Ctrl-C: say why
