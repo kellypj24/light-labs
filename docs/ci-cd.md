@@ -45,7 +45,7 @@ Hardening applied to every workflow:
 | Workflow | Runs |
 |---|---|
 | Claude Code Review | on PR open and each push: the `code-review` plugin posts inline comments. Skips Dependabot (no secrets there) and drafts; one run per PR, a new push cancels the last |
-| Claude Code | an `@claude` mention in a PR comment or review, from someone with write access |
+| Claude Code | an `@claude` mention in a PR comment or review, from someone with write access. Asked for a change, it can commit to the PR branch through the app's token (accepted 2026-10-28); it cannot merge, and `main` takes changes only by PR with CI Success |
 
 Advisory: neither is a required check or part of CI Success. Auth is the
 `CLAUDE_CODE_OAUTH_TOKEN` secret (PJ's subscription); the Claude GitHub App's token posts
