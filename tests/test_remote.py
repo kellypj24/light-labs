@@ -8,8 +8,15 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
-from light_labs.agents.rush.remote import Remote, board_view, handler
+from light_labs.agents.rush.remote import (
+    Remote,
+    board_view,
+    handler,
+    request_host,
+    tailnet_hosts,
+)
 from light_labs.core.store import Store
 
 PJ = "pj@example.com"
@@ -106,6 +113,29 @@ class RemoteTest(unittest.TestCase):
         )
         self.assertIn("box.tail1.ts.net", remote.hosts)
         self.assertIn("127.0.0.1", remote.hosts)
+
+    def test_accepts_this_machines_names(self):
+        self.remote.hosts |= {"box.tail1.ts.net", "box"}
+        for host in ("box.tail1.ts.net", "BOX.tail1.ts.net.", "box", "box:443", "localhost:8787"):
+            req = urllib.request.Request(self.base + "/", headers={"Host": host})
+            req.add_header("Tailscale-User-Login", PJ)
+            with urllib.request.urlopen(req) as r:
+                self.assertEqual(r.status, 200, host)
+
+    def test_request_host(self):
+        cases = {"[::1]": "::1", "[::1]:8787": "::1", "Box.ts.net.:443": "box.ts.net",
+                 "": "", None: "", "[::1": ""}  # fmt: skip
+        for raw, want in cases.items():
+            self.assertEqual(request_host(raw), want, raw)
+
+    def test_tailnet_hosts_empty_without_tailscale(self):
+        with mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(tailnet_hosts(), set())
+        done = SimpleNamespace(stdout='{"Self": {"DNSName": ""}}')
+        with mock.patch("subprocess.run", return_value=done):
+            self.assertEqual(tailnet_hosts(), set())
+        remote = Remote(self.store, self.remote.rush, client=self.edge, hosts={""})
+        self.assertNotIn("", remote.hosts)
 
     def test_post_needs_the_page_token(self):
         item = self.store.enqueue("comment", {"task_id": "t1"}, "hi", "ctx")

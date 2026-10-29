@@ -43,12 +43,27 @@ def tailnet_login():
 
 
 def tailnet_hosts():
-    """This machine's MagicDNS names, full and short: the Hosts `tailscale serve` forwards."""
-    out = subprocess.run(
-        ["tailscale", "status", "--json"], capture_output=True, text=True, check=True
-    ).stdout
-    full = json.loads(out)["Self"]["DNSName"].rstrip(".").lower()
-    return {full, full.split(".")[0]}
+    """This machine's MagicDNS names, full and short: the Hosts `tailscale serve` forwards.
+    Empty when Tailscale is down or has no name; the page then answers loopback only."""
+    try:
+        out = subprocess.run(
+            ["tailscale", "status", "--json"], capture_output=True, text=True, check=True
+        ).stdout
+        full = (json.loads(out).get("Self") or {}).get("DNSName") or ""
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return set()
+    full = full.rstrip(".").lower()
+    return {full, full.split(".")[0]} if full else set()
+
+
+def request_host(value):
+    """The Host header without its port or a trailing dot, lowercased; "" if absent."""
+    value = (value or "").strip().lower()
+    if value.startswith("["):  # [::1] or [::1]:8787
+        return value[1 : value.find("]")] if "]" in value else ""
+    if re.fullmatch(r".+:\d+", value):
+        value = value.rsplit(":", 1)[0]
+    return value.rstrip(".")
 
 
 def esc(text, clip=None):
@@ -139,7 +154,7 @@ class Remote:
         self.store, self.rush = store, rush
         self.client = client or Client()
         self.allowed = set(allowed)
-        self.hosts = LOOPBACK | {h.lower() for h in hosts}
+        self.hosts = LOOPBACK | {h.lower() for h in hosts if h}
         self.token = secrets.token_urlsafe(16)
         self.tick = tick  # callable running one heartbeat
         self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
@@ -331,8 +346,9 @@ def handler(remote):
             print(f"{now()} {self.command} {self.path} {args[1] if len(args) > 1 else ''}")
 
         def _allowed(self):
-            host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
-            if host not in remote.hosts:
+            host = request_host(self.headers.get("Host"))
+            if not host or host not in remote.hosts:
+                print(f"{now()} refused Host {self.headers.get('Host', '')[:80]!r}")
                 self._send(403, page("Not allowed", "<p>Unknown host.</p>"))
                 return False
             login = self.headers.get("Tailscale-User-Login", "")
