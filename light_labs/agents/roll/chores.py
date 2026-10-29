@@ -41,8 +41,13 @@ _TITLE = re.compile(
 _BOILERPLATE = re.compile(r"\n\[!\[Dependabot compatibility score|\nDependabot will resolve")
 BODY_CHARS = 3000
 # Notes that say this go one tier up: haiku merged a patch whose notes flagged a breaking
-# change it then argued away (dagster-dbt 0.29.26).
-_RISK = re.compile(r"breaking|deprecat|removed|no longer|drop(s|ped)? support", re.IGNORECASE)
+# change it then argued away (dagster-dbt 0.29.26), and merged a patch whose notes listed
+# behaviour changes while its own reason said a human should check (dbt-core 1.12.6).
+_RISK = re.compile(
+    r"breaking|deprecat|removed|no longer|drop(s|ped)? support"
+    r"|(?<!no )(?<!no user-facing )behaviou?r change|\bnow (?:match|default|require|raise|fail)",
+    re.IGNORECASE,
+)
 UP = {"patch": "minor", "minor": "major", "major": "major"}
 FIELDS = "number,title,headRefName,headRefOid,files,statusCheckRollup,mergeable,body,createdAt"
 

@@ -181,6 +181,15 @@ class ChoresTest(unittest.TestCase):
         self.chores(FakeRepo([pr(9, "Bump b from 1.0 to 1.1", checks=RED)])).run()
         self.assertEqual(chores.fixtures(self.store, lambda *a: ""), [])
 
+    def test_behaviour_changes_go_one_tier_up(self):
+        def tier(notes):
+            p = pr(1, "Bump dbt-core from 1.12.5 to 1.12.6")
+            p["body"] = notes
+            return chores.facts(p)["tier"]
+
+        self.assertEqual(tier("Wildcard selectors now match nested models"), "minor")
+        self.assertEqual(tier("Rename internals; no user-facing behavior change"), "patch")
+
     def test_verdict_without_a_line_is_a_hold(self):
         self.assertEqual(chores.verdict("looks fine to me")[0], "HOLD")
         self.assertEqual(chores.verdict("**MERGE**\nwhy: ok\nroll: right")[:3], ("MERGE", "", "ok"))
