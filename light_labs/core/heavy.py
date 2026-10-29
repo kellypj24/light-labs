@@ -41,7 +41,14 @@ THERMAL = {0: "nominal", 1: "fair", 2: "serious", 3: "critical"}
 THERMAL_JS = 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.thermalState'
 # kern.memorystatus_vm_pressure_level
 PRESSURE = {1: "normal", 2: "warn", 4: "critical"}
-BUSY = re.compile(r"com\.apple\.Virtualization\.VirtualMachine|qemu-system|dagster api execute_run|dbt build")  # fmt: skip
+# What in `ps` makes the machine busy, and what to call it where command lines can't go.
+BUSY_KINDS = (
+    ("com.apple.Virtualization.VirtualMachine", "container VM"),
+    ("qemu-system", "container VM"),
+    ("dagster api execute_run", "Dagster run"),
+    ("dbt build", "dbt build"),
+)
+BUSY = re.compile("|".join(re.escape(needle) for needle, _ in BUSY_KINDS))
 
 
 class Busy(RuntimeError):
@@ -85,6 +92,10 @@ def busy_processes(ps=None):
     """Container VMs and Dagster runs: `ps` lines matching BUSY."""
     ps = _run("ps", "-Ao", "pid,command") if ps is None else ps
     return [line.strip()[:120] for line in ps.splitlines() if BUSY.search(line)]
+
+
+def busy_kind(line):
+    return next(kind for needle, kind in BUSY_KINDS if needle in line)
 
 
 def too_busy(r, procs):
@@ -166,6 +177,17 @@ def acquire(name, lock=None, **extra):
     raise Busy(f"could not take {lock}")
 
 
+def note(lock=None, **detail):
+    """Merge `detail` into the lock record this process holds (e.g. the real total)."""
+    lock = lock or LOCK
+    rec = holder(lock)
+    if rec and rec["pid"] == os.getpid():
+        rec["detail"] = {**(rec.get("detail") or {}), **detail}
+        tmp = lock.with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec))
+        tmp.replace(lock)
+
+
 def release(lock=None):
     lock = lock or LOCK
     rec = holder(lock)
@@ -178,15 +200,19 @@ def history_path(lock=None):
 
 
 def record_end(rec, outcome, paused_s, lock=None):
-    """Append the finished job to HISTORY."""
+    """Append the finished job to HISTORY. Never raises: losing a history line must not
+    hide the job's own outcome."""
     end = {
         **rec,
         "ended_at": datetime.now(UTC).isoformat(),
         "outcome": outcome,
         "paused_s": paused_s,
     }
-    with history_path(lock).open("a") as f:
-        f.write(json.dumps(end) + "\n")
+    try:
+        with history_path(lock).open("a") as f:
+            f.write(json.dumps(end) + "\n")
+    except OSError as e:
+        print(f"heavy: history not written: {e}", flush=True)
 
 
 def unload_models():
@@ -267,8 +293,8 @@ def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY
         raise
     finally:
         done.set()
-        release(lock)
         record_end(rec, outcome, guard.paused_s, lock)
+        release(lock)
 
 
 def run(name, cmd, force=""):
@@ -292,7 +318,8 @@ def run(name, cmd, force=""):
         except KeyboardInterrupt:
             os.killpg(proc.pid, signal.SIGINT)
             code = proc.wait()
-        if code:
+            guard.outcome = "interrupted"
+        if code and not guard.outcome:
             guard.outcome = f"exit {code}"
         if guard.stop_reason:
             guard.outcome = f"stopped: {guard.stop_reason}"

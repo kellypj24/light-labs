@@ -585,7 +585,7 @@ def roll_keep(args, bot, roll):
         with heavy.job("roll-keep", force=args.force, detail=detail) as guard:
             records = keep.shadow(
                 bot.gmail, brain_for(roll.KEEP_BRAIN), teacher, args.label, args.sample,
-                roll.HOME, pace=guard.check,
+                roll.HOME, pace=guard.check, on_picked=lambda n: heavy.note(total=n),
             )  # fmt: skip
     except heavy.Busy as e:
         sys.exit(f"roll keep: not starting: {e}")

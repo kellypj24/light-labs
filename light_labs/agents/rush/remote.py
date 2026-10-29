@@ -17,6 +17,7 @@ import secrets
 import subprocess
 import threading
 import time
+import traceback
 from argparse import Namespace
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -226,6 +227,7 @@ def lab_body(snap):
 
 
 LAB_JS = """setInterval(async () => {
+  if (document.hidden) return;
   try {
     const r = await fetch("/lab.json", {cache: "no-store", credentials: "same-origin"});
     if (r.ok) document.getElementById("lab").innerHTML = (await r.json()).html;
@@ -249,6 +251,8 @@ class Remote:
         self.tick = tick  # callable running one heartbeat
         self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
         self.ticking = threading.Lock()
+        self.lab_lock = threading.Lock()
+        self.lab_cache = (float("-inf"), None)
 
     # --- actions
     def approve(self, item_id, text):
@@ -313,10 +317,16 @@ class Remote:
         return page("Rush · usage", "<h2>Claude Code usage</h2>" + body)
 
     def lab_snapshot(self):
+        """One snapshot per LAB_POLL_MS however many tabs poll: each costs ~8 processes."""
         from light_labs.core import monitor
 
-        snap = monitor.snapshot()
-        return {**snap, "html": lab_body(snap)}
+        with self.lab_lock:
+            at, snap = self.lab_cache
+            if time.monotonic() - at >= LAB_POLL_MS / 1000:
+                snap = monitor.snapshot()
+                snap = {**snap, "html": lab_body(snap)}
+                self.lab_cache = (time.monotonic(), snap)
+            return snap
 
     def lab_page(self):
         body = f'<div id="lab">{self.lab_snapshot()["html"]}</div><script src="/lab.js"></script>'
@@ -482,11 +492,16 @@ def handler(remote):
                     body = remote.inbox_page()
                 elif parts == ["usage"]:
                     body = remote.usage_page()
-                elif parts == ["lab"]:
-                    body = remote.lab_page()
-                elif parts == ["lab.json"]:
-                    data = json.dumps(remote.lab_snapshot())
-                    return self._send(200, data, ctype="application/json")
+                elif parts == ["lab"] or parts == ["lab.json"]:
+                    try:
+                        if parts == ["lab"]:
+                            body = remote.lab_page()
+                        else:
+                            data = json.dumps(remote.lab_snapshot())
+                            return self._send(200, data, ctype="application/json")
+                    except Exception:  # noqa: BLE001 - details stay in the log, not the page
+                        traceback.print_exc()
+                        return self._send(500, page("Lab view failed", "<p>See remote.log.</p>"))
                 elif parts == ["lab.js"]:
                     return self._send(200, LAB_JS, ctype="text/javascript; charset=utf-8")
                 elif len(parts) == 2 and parts[0] == "task":

@@ -182,7 +182,8 @@ class RemoteTest(unittest.TestCase):
         with urllib.request.urlopen(req) as r:
             csp = r.headers["Content-Security-Policy"]
         self.assertIn("script-src 'self'", csp)
-        self.assertNotIn("unsafe-inline' 'self", csp)
+        script_src = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
+        self.assertNotIn("unsafe-inline", script_src)
         self.assertIn("frame-ancestors 'none'", csp)
 
     def test_board_shows_tasks_naming_pj_or_rush_newest_first(self):

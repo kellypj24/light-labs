@@ -54,6 +54,33 @@ class SnapshotTest(unittest.TestCase):
         for leak in ("tax return", "irs@", "token", str(self.var), str(os.getpid())):
             self.assertNotIn(leak, out)
 
+    def test_busy_reason_without_a_lock_names_only_the_kind(self):
+        snap = self.snap(procs=["4242 /usr/bin/qemu-system-aarch64 -drive token=abc"])
+        self.assertEqual(snap["why_not"], "busy: container VM")
+        self.assertNotIn("token", json.dumps(snap))
+
+    def test_shadow_total_is_the_real_sample(self):
+        self.hold("roll-keep", label="Roll/Tiny", sample=200)
+        heavy.note(self.lock, total=60)
+        self.assertEqual(self.snap()["job"]["progress"]["total"], 60)
+
+    def test_history_skips_malformed_lines(self):
+        good = {
+            "job": "check",
+            "started_at": "2026-10-28T20:00:00+00:00",
+            "ended_at": "2026-10-28T20:03:00+00:00",
+            "outcome": "done",
+            "cmd": "x",
+        }
+        heavy.history_path(self.lock).write_text(
+            "\n".join(["5", "{}", '{"job": "x", "ended_at": null}', "{trunc", json.dumps(good)])
+            + "\n"
+        )
+        (h,) = self.snap()["history"]
+        self.assertEqual(h["outcome"], "done")
+        self.assertNotIn("cmd", h)
+        monitor.text(self.snap())
+
     def test_fight_progress_from_its_run_record(self):
         self.hold("fight")
         (self.var / "evals").mkdir()

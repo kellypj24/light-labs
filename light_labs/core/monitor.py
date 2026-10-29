@@ -21,21 +21,15 @@ HISTORY_SHOWN = 5
 DAGSTER_SHOWN = 5
 DAGSTER_ACTIVE = ("QUEUED", "NOT_STARTED", "STARTING", "STARTED", "CANCELING")
 DETAIL_KEYS = ("label", "sample")
+HISTORY_TAIL_BYTES = 64 * 1024
 HISTORY_KEYS = ("job", "started_at", "ended_at", "outcome")
-KINDS = (
-    ("Virtualization", "container VM"),
-    ("qemu", "container VM"),
-    ("dagster", "Dagster run"),
-    ("dbt build", "dbt build"),
-)
 
 
 def kinds(procs):
     """What sort of thing each busy process is, without its command line."""
     out = []
     for line in procs:
-        kind = next((k for needle, k in KINDS if needle in line), "other")
-        if kind not in out:
+        if (kind := heavy.busy_kind(line)) not in out:
             out.append(kind)
     return out
 
@@ -69,7 +63,7 @@ def progress(rec):
         return {
             "what": detail.get("label", "shadow labels"),
             "done": done,
-            "total": detail.get("sample"),
+            "total": detail.get("total") or detail.get("sample"),
         }
     if rec["job"] == "fight":
         f = _newest((var / "evals").glob("*.run.json"), started)
@@ -108,23 +102,28 @@ def dagster_runs(db=None, limit=DAGSTER_SHOWN):
 def history(lock=None, limit=HISTORY_SHOWN):
     """The last `limit` finished heavy jobs, newest first."""
     try:
-        lines = heavy.history_path(lock).read_text().splitlines()
+        with heavy.history_path(lock).open("rb") as f:
+            f.seek(max(0, f.seek(0, 2) - HISTORY_TAIL_BYTES))
+            lines = f.read().decode(errors="replace").splitlines()
     except FileNotFoundError:
         return []
     out = []
-    for line in reversed(lines[-limit * 2 :]):
+    for line in reversed(lines):
         try:
             rec = json.loads(line)
         except ValueError:
             continue
-        out.append({k: rec.get(k) for k in HISTORY_KEYS})
-    return out[:limit]
+        if isinstance(rec, dict) and all(isinstance(rec.get(k), str) for k in HISTORY_KEYS):
+            out.append({k: rec[k] for k in HISTORY_KEYS})
+        if len(out) == limit:
+            break
+    return out
 
 
 def snapshot(lock=None, read=heavy.reading, procs=None, db=None):
     now = datetime.now(UTC)
     r = read()
-    procs = heavy.busy_processes() if procs is None else procs
+    busy = kinds(heavy.busy_processes() if procs is None else procs)  # never the command line
     held = heavy.holder(lock)
     job = None
     if held:
@@ -141,9 +140,7 @@ def snapshot(lock=None, read=heavy.reading, procs=None, db=None):
             ),
         }
     why_not = (
-        (f"{held['job']} holds the lock" if held else "")
-        or heavy.too_busy(r, procs)
-        or heavy.hot(r)
+        (f"{held['job']} holds the lock" if held else "") or heavy.too_busy(r, busy) or heavy.hot(r)
     )
     return {
         "at": now.isoformat(),
@@ -154,7 +151,7 @@ def snapshot(lock=None, read=heavy.reading, procs=None, db=None):
         "critical": heavy.critical(r, (held or {}).get("swap_start")),
         "start_ok": not why_not,
         "why_not": why_not,
-        "busy": kinds(procs),
+        "busy": busy,
         "dagster": dagster_runs(db),
         "history": history(lock),
     }
