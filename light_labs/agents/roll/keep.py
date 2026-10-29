@@ -147,8 +147,11 @@ def summary(records, label, shown=10):
 
 def fixture_candidates(root, rewriter, limit=20):
     """Rewrite disagreements not yet used into synthetic fixtures, labelled by the teacher.
-    Candidates land in <root>/keep/fixture-candidates.jsonl for review before any goes into
-    evals/stages/mail-keep.yaml. Lost keeps go first. Returns the new candidates."""
+    The rewriter sees only the sanitized view (`sanitize.view`); personal mail is skipped
+    and stays local. Candidates land in <root>/keep/fixture-candidates.jsonl for review
+    before any goes into evals/stages/mail-keep.yaml. Lost keeps go first. Returns the new
+    candidates and how many personal emails were skipped."""
+    from light_labs.agents.roll import sanitize
     from light_labs.agents.rush.mail import REWRITE
 
     path = root / "keep" / "disagreements.jsonl"
@@ -157,9 +160,15 @@ def fixture_candidates(root, rewriter, limit=20):
     done = set(json.loads(done_path.read_text())) if done_path.exists() else set()
     todo = [r for r in seen if r["id"] not in done]
     todo.sort(key=lambda r: not lost_keeps([r]))  # lost keeps first
-    out = []
-    for item in todo[:limit]:
-        raw = rewriter.think(REWRITE, f"Label: {item['teacher']}\n{prompt(item)}", temperature=0)
+    out, personal = [], 0
+    for item in todo:
+        if len(out) == limit:
+            break
+        if sanitize.is_personal(item):
+            personal += 1
+            continue
+        text = sanitize.prompt(sanitize.view(item))
+        raw = rewriter.think(REWRITE, f"Label: {item['teacher']}\n{text}", temperature=0)
         try:
             fx = json.loads(raw[raw.index("{") : raw.rindex("}") + 1])
         except ValueError:
@@ -171,4 +180,4 @@ def fixture_candidates(root, rewriter, limit=20):
     with (root / "keep" / "fixture-candidates.jsonl").open("a") as f:
         f.writelines(json.dumps(fx) + "\n" for fx in out)
     done_path.write_text(json.dumps(sorted(done)))
-    return out
+    return out, personal

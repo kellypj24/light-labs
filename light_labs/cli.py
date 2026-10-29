@@ -572,8 +572,9 @@ def roll_keep(args, bot, roll):
     from light_labs.core.brain import brain_for
 
     if args.cmd == "keep-fixtures":
-        made = keep.fixture_candidates(roll.HOME, brain_for("claude:sonnet"), args.limit)
-        print(f"{len(made)} candidates -> {roll.HOME / 'keep' / 'fixture-candidates.jsonl'}")
+        made, personal = keep.fixture_candidates(roll.HOME, brain_for("claude:sonnet"), args.limit)
+        print(f"{len(made)} candidates -> {roll.HOME / 'keep' / 'fixture-candidates.jsonl'}; "
+              f"{personal} personal emails skipped (stay local)")  # fmt: skip
         return
     if not roll.KEEP_BRAIN:
         sys.exit("no mail-keep brain: Roll has no mail-keep weapon and ROLL_KEEP_BRAIN is unset")

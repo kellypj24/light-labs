@@ -2,7 +2,9 @@
 
 Status: step 1 done 2026-10-26 (21,029 Roll/Promotions restored from Trash); step 2 done 2026-10-26
 (`mail-keep` stage, 49 fixtures, `light_labs/agents/roll/keep.py`); step 3 done (qwen2.5:14b earned the
-weapon, run mail-keep-20261026T180251Z); step 4 in progress (Updates and Promotions shadow-labelled); step 4b planned. Written 2026-10-19.
+weapon, run mail-keep-20261026T180251Z); step 4 done (every `Roll/*` label shadow-labelled); step 4b in progress (sanitized view and
+sanitized `keep-fixtures` in `light_labs/agents/roll/sanitize.py`; matchers, escalation and
+the name pass of the scrubber to come). Written 2026-10-19.
 
 Roll's cleanup rules today are Gmail searches by category and age (`roll/inbox.py`). They
 moved 50k emails out of the inbox and into `Roll/*` labels, but deciding what can be

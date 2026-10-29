@@ -166,7 +166,8 @@ class ShadowTest(unittest.TestCase):
 
     def test_fixture_candidates_once_each_labelled_by_the_teacher(self):
         rewriter = FakeBrain('{"id": "keep/receipts order note", "from": "a", "subject": "b"}')
-        made = keep.fixture_candidates(self.root, rewriter)
+        made, personal = keep.fixture_candidates(self.root, rewriter)
         self.assertEqual([(f["id"], f["label"], f["student_label"]) for f in made],
                          [("keep_receipts_order_note", "keep/receipts", "discard/promotion")])  # fmt: skip
-        self.assertEqual(keep.fixture_candidates(self.root, rewriter), [])
+        self.assertEqual(personal, 0)
+        self.assertEqual(keep.fixture_candidates(self.root, rewriter), ([], 0))
