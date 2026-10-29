@@ -169,7 +169,7 @@ def _bar(done, total, warn=False):
 
 def lab_body(snap):
     """The `/lab` body for one `monitor.snapshot()`."""
-    from light_labs.core.monitor import _since, duration
+    from light_labs.core.monitor import _since, duration, model_line
 
     m, j, lim = snap["machine"], snap["job"], snap["limits"]
     out = ["<h2>Heavy job</h2>"]
@@ -209,6 +209,7 @@ def lab_body(snap):
         ("load", val(f"{m['load_1']} / {m['cores']} cores", load_bad)),
         ("memory", val(m["pressure"], m["pressure"] not in (None, "normal"))),
         ("swap", val(f"{m['swap_mb']} MB")),
+        ("ollama", val("; ".join(model_line(x) for x in snap["models"]) or "no model loaded")),
         ("CPU limit", val(f"{m['speed_limit']}%", (m["speed_limit"] or 100) < 100)),
         (
             "start a job",
