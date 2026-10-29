@@ -67,8 +67,9 @@ def request_host(value):
     value = (value or "").strip().lower()
     if value.startswith("["):  # [::1] or [::1]:8787
         return value[1 : value.find("]")] if "]" in value else ""
-    if re.fullmatch(r".+:\d+", value):
-        value = value.rsplit(":", 1)[0]
+    head, sep, port = value.rpartition(":")
+    if sep and head and port.isdigit():
+        value = head
     return value.rstrip(".")
 
 
