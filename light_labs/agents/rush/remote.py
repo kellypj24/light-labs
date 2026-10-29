@@ -2,8 +2,10 @@
 
 Served on 127.0.0.1 and published to the tailnet only with `tailscale serve`, which tells
 us who is asking in the Tailscale-User-Login header. Requests without an allowed login are
-refused, so the page is PJ's alone even on a shared tailnet. Forms carry a per-process
-token against cross-site posts.
+refused, so the page is PJ's alone even on a shared tailnet. A Host other than this
+machine's tailnet name or loopback is refused too: without that, a web page open in PJ's
+browser could rebind its own name to 127.0.0.1 and send the login header itself. Forms
+carry a per-process token against cross-site posts.
 
 Stdlib only: http.server, html.escape. Pages render on the server. `/lab` loads `/lab.js`,
 which fetches `/lab.json` every LAB_POLL_MS and swaps in the server-rendered body. Every
@@ -34,6 +36,7 @@ BOARD_TASKS = 25
 JOURNAL_LINES = 15
 CLIP = 600
 LAB_POLL_MS = 3000
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def tailnet_login():
@@ -43,6 +46,31 @@ def tailnet_login():
     ).stdout
     d = json.loads(out)
     return d["User"][str(d["Self"]["UserID"])]["LoginName"]
+
+
+def tailnet_hosts():
+    """This machine's MagicDNS names, full and short: the Hosts `tailscale serve` forwards.
+    Empty when Tailscale is down or has no name; the page then answers loopback only."""
+    try:
+        out = subprocess.run(
+            ["tailscale", "status", "--json"], capture_output=True, text=True, check=True
+        ).stdout
+        full = (json.loads(out).get("Self") or {}).get("DNSName") or ""
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return set()
+    full = full.rstrip(".").lower()
+    return {full, full.split(".")[0]} if full else set()
+
+
+def request_host(value):
+    """The Host header without its port or a trailing dot, lowercased; "" if absent."""
+    value = (value or "").strip().lower()
+    if value.startswith("["):  # [::1] or [::1]:8787
+        return value[1 : value.find("]")] if "]" in value else ""
+    head, sep, port = value.rpartition(":")
+    if sep and head and port.isdigit():
+        value = head
+    return value.rstrip(".")
 
 
 def esc(text, clip=None):
@@ -243,10 +271,11 @@ CSP = (
 class Remote:
     """State shared by request handlers: the store, edge client, and the tick lock."""
 
-    def __init__(self, store, rush, client=None, allowed=(), tick=None):
+    def __init__(self, store, rush, client=None, allowed=(), tick=None, hosts=()):
         self.store, self.rush = store, rush
         self.client = client or Client()
         self.allowed = set(allowed)
+        self.hosts = LOOPBACK | {h.lower() for h in hosts if h}
         self.token = secrets.token_urlsafe(16)
         self.tick = tick  # callable running one heartbeat
         self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
@@ -456,6 +485,11 @@ def handler(remote):
             print(f"{now()} {self.command} {self.path} {args[1] if len(args) > 1 else ''}")
 
         def _allowed(self):
+            host = request_host(self.headers.get("Host"))
+            if not host or host not in remote.hosts:
+                print(f"{now()} refused Host {self.headers.get('Host', '')[:80]!r}")
+                self._send(403, page("Not allowed", "<p>Unknown host.</p>"))
+                return False
             login = self.headers.get("Tailscale-User-Login", "")
             if login in remote.allowed:
                 return True
@@ -553,7 +587,9 @@ def handler(remote):
 
 
 def serve(store, rush, host="127.0.0.1", port=8787, allowed=None, tick=None):
-    remote = Remote(store, rush, allowed=allowed or [tailnet_login()], tick=tick)
+    remote = Remote(
+        store, rush, allowed=allowed or [tailnet_login()], tick=tick, hosts=tailnet_hosts()
+    )
     server = ThreadingHTTPServer((host, port), handler(remote))
     if rush.TELEGRAM_CHAT:  # PJ's replies on Telegram, handled while the Mac is awake
         from light_labs.agents.rush.telegram import Telegram
