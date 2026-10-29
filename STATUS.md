@@ -17,7 +17,8 @@ _Updated 2026-10-28._
   daily at 08:00 (`hermes cron list`).
 - Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
   `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
-  memory; Dagster's sensors skip while it is held. `lab heavy status` before starting one.
+  memory; Dagster's sensors skip while it is held. `lab heavy status` before starting one;
+  `lab heavy watch` or Rush's `/lab` page follow one live.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 

@@ -8,6 +8,7 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from light_labs.agents.rush.remote import Remote, board_view, handler
 from light_labs.core.store import Store
@@ -145,6 +146,45 @@ class RemoteTest(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("Claude Code usage", body)
         self.assertIn("just analytics", body)
+
+    def test_lab_needs_login_and_sends_csp(self):
+        snap = {
+            "at": "2026-10-28T21:00:00+00:00",
+            "job": None,
+            "machine": {
+                "thermal": "nominal",
+                "battery_c": None,
+                "speed_limit": 100,
+                "load_1": 1.0,
+                "cores": 10,
+                "pressure": "normal",
+                "swap_mb": 10.0,
+            },
+            "limits": {"swap_growth_mb": 2048, "battery_c": 40.0},
+            "hot": "",
+            "critical": "",
+            "start_ok": True,
+            "why_not": "",
+            "busy": [],
+            "dagster": [],
+            "history": [],
+        }
+        with mock.patch("light_labs.core.monitor.snapshot", return_value=snap):
+            for path in ("/lab", "/lab.json", "/lab.js"):
+                self.assertEqual(self.call(path, login=None)[0], 403, path)
+            code, body = self.call("/lab")
+            self.assertEqual(code, 200)
+            self.assertIn('<script src="/lab.js">', body)
+            self.assertIn("No heavy job running", body)
+            self.assertIn("No heavy job running", json.loads(self.call("/lab.json")[1])["html"])
+        req = urllib.request.Request(self.base + "/lab.js")
+        req.add_header("Tailscale-User-Login", PJ)
+        with urllib.request.urlopen(req) as r:
+            csp = r.headers["Content-Security-Policy"]
+        self.assertIn("script-src 'self'", csp)
+        script_src = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
+        self.assertNotIn("unsafe-inline", script_src)
+        self.assertIn("frame-ancestors 'none'", csp)
 
     def test_board_shows_tasks_naming_pj_or_rush_newest_first(self):
         self.assertEqual([t["id"] for t in board_view(self.edge.board, "pj_agent")], ["t3", "t1"])
