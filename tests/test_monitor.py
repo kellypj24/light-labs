@@ -17,9 +17,10 @@ COOL = {
     "pressure": "normal",
     "swap_mb": 1500.0,
 }
-SECRET = "Subject: your tax return"
+MAIL_SUBJECT = "Subject: your tax return"
 
 
+@mock.patch.dict(os.environ, {"CI": ""})
 class SnapshotTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -40,7 +41,7 @@ class SnapshotTest(unittest.TestCase):
 
     def test_shadow_progress_counts_records_without_reading_them(self):
         self.hold("roll-keep", label="Roll/Social", sample=200, cmd="lab x --token abc")
-        rec = json.dumps({"subject": SECRET, "from": "irs@example.com"})
+        rec = json.dumps({"subject": MAIL_SUBJECT, "from": "irs@example.com"})
         (self.var / "roll" / "keep" / "shadow-20990101T000000Z.jsonl").write_text((rec + "\n") * 3)
         snap = self.snap(procs=["4242 /usr/bin/qemu-system-aarch64 -drive token=abc"])
         job = snap["job"]

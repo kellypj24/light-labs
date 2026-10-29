@@ -142,6 +142,7 @@ class JobTest(unittest.TestCase):
             self.assertIsNone(heavy.holder(self.lock))
 
 
+@mock.patch.dict(os.environ, {"CI": ""})
 class HistoryTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
