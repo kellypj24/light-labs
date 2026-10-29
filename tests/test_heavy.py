@@ -170,3 +170,9 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual([e["outcome"] for e in ends], ["done", "stopped: swap grew 3000 MB"])
         self.assertEqual(ends[0]["swap_start"], COOL["swap_mb"])
         self.assertIn("ended_at", ends[0])
+
+
+class LoadedModelsTest(unittest.TestCase):
+    def test_ollama_down_is_no_models(self):
+        with mock.patch.object(heavy.config, "OLLAMA", "http://127.0.0.1:9"):
+            self.assertEqual(heavy.loaded_models(), [])

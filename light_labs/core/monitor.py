@@ -120,9 +120,22 @@ def history(lock=None, limit=HISTORY_SHOWN):
     return out
 
 
-def snapshot(lock=None, read=heavy.reading, procs=None, db=None):
+def models_view(models, now):
+    """Loaded models with seconds until each unloads (None if Ollama gave no time)."""
+    out = []
+    for m in models:
+        try:
+            until = max(0, int((datetime.fromisoformat(m["expires_at"]) - now).total_seconds()))
+        except (TypeError, ValueError):
+            until = None
+        out.append({"name": m["name"], "size_gb": m["size_gb"], "until_s": until})
+    return out
+
+
+def snapshot(lock=None, read=heavy.reading, procs=None, db=None, models=None):
     now = datetime.now(UTC)
     r = read()
+    models = models_view(heavy.loaded_models() if models is None else models, now)
     busy = kinds(heavy.busy_processes() if procs is None else procs)  # never the command line
     held = heavy.holder(lock)
     job = None
@@ -152,6 +165,7 @@ def snapshot(lock=None, read=heavy.reading, procs=None, db=None):
         "start_ok": not why_not,
         "why_not": why_not,
         "busy": busy,
+        "models": models,
         "dagster": dagster_runs(db),
         "history": history(lock),
     }
@@ -162,6 +176,11 @@ def duration(s):
         return "?"
     s = int(s)
     return f"{s // 3600}h{s % 3600 // 60:02d}m" if s >= 3600 else f"{s // 60}m{s % 60:02d}s"
+
+
+def model_line(m):
+    until = "" if m["until_s"] is None else f", unloads in {duration(m['until_s'])}"
+    return f"{m['name']} {m['size_gb']} GB{until}"
 
 
 def text(snap):
@@ -184,6 +203,8 @@ def text(snap):
         f"pressure={m['pressure']} swap={m['swap_mb']} MB"
         + (f" (+{swap:.0f} of {snap['limits']['swap_growth_mb']})" if swap is not None else "")
     )
+    if snap["models"]:
+        lines.append("ollama: " + ", ".join(model_line(x) for x in snap["models"]))
     if snap["critical"] or snap["hot"]:
         lines.append(f"kill switch: {snap['critical'] or 'pause: ' + snap['hot']}")
     lines.append(f"start a heavy job: {'yes' if snap['start_ok'] else 'no, ' + snap['why_not']}")

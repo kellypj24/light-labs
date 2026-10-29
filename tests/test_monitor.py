@@ -3,6 +3,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -34,10 +35,25 @@ class SnapshotTest(unittest.TestCase):
         heavy.acquire(job, self.lock, var=str(self.var), swap_start=1000.0, detail=detail)
         self.addCleanup(heavy.release, self.lock)
 
-    def snap(self, procs=()):
+    def snap(self, procs=(), models=()):
         return monitor.snapshot(
-            lock=self.lock, read=lambda: COOL, procs=list(procs), db=self.root / "none.db"
+            lock=self.lock,
+            read=lambda: COOL,
+            procs=list(procs),
+            db=self.root / "none.db",
+            models=list(models),
         )
+
+    def test_loaded_model_shows_size_and_time_to_unload(self):
+        soon = (datetime.now(UTC) + timedelta(minutes=4, seconds=30)).isoformat()
+        snap = self.snap(models=[{"name": "qwen2.5:14b", "size_gb": 9.5, "expires_at": soon}])
+        self.assertEqual(snap["models"][0]["name"], "qwen2.5:14b")
+        self.assertIn("ollama: qwen2.5:14b 9.5 GB, unloads in 4m", monitor.text(snap))
+
+    def test_model_without_expiry_has_no_unload_time(self):
+        snap = self.snap(models=[{"name": "gemma3:4b", "size_gb": 3.3, "expires_at": None}])
+        self.assertIsNone(snap["models"][0]["until_s"])
+        self.assertIn("ollama: gemma3:4b 3.3 GB\n", monitor.text(snap) + "\n")
 
     def test_shadow_progress_counts_records_without_reading_them(self):
         self.hold("roll-keep", label="Roll/Social", sample=200, cmd="lab x --token abc")

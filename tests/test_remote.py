@@ -214,6 +214,7 @@ class RemoteTest(unittest.TestCase):
             "start_ok": True,
             "why_not": "",
             "busy": [],
+            "models": [{"name": "qwen2.5:14b", "size_gb": 9.5, "until_s": 240}],
             "dagster": [],
             "history": [],
         }
@@ -224,6 +225,7 @@ class RemoteTest(unittest.TestCase):
             self.assertEqual(code, 200)
             self.assertIn('<script src="/lab.js">', body)
             self.assertIn("No heavy job running", body)
+            self.assertIn("qwen2.5:14b 9.5 GB, unloads in 4m00s", body)
             self.assertIn("No heavy job running", json.loads(self.call("/lab.json")[1])["html"])
         req = urllib.request.Request(self.base + "/lab.js")
         req.add_header("Tailscale-User-Login", PJ)

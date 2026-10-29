@@ -20,6 +20,7 @@ import signal
 import subprocess
 import threading
 import time
+import urllib.request
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -221,6 +222,25 @@ def unload_models():
     for n in names:
         _run("ollama", "stop", n)
     return names
+
+
+def loaded_models():
+    """Ollama's loaded models: name, size in GB and when it unloads, from `/api/ps`. A
+    loaded model is wired memory, so it is often the cause of memory pressure. [] if Ollama
+    is down."""
+    try:
+        with urllib.request.urlopen(f"{config.OLLAMA}/api/ps", timeout=2) as resp:
+            models = json.load(resp).get("models") or []
+    except (OSError, ValueError):
+        return []
+    return [
+        {
+            "name": m.get("name", "?"),
+            "size_gb": round((m.get("size") or 0) / 1e9, 1),
+            "expires_at": m.get("expires_at"),
+        }
+        for m in models
+    ]
 
 
 class Guard:
