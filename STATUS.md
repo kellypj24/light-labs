@@ -17,15 +17,18 @@ _Updated 2026-10-28._
   daily at 08:00 (`hermes cron list`).
 - Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
   `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
-  memory; Dagster's sensors skip while it is held. `lab heavy status` before starting one.
+  memory; Dagster's sensors skip while it is held. `lab heavy status` before starting one;
+  `lab heavy watch` or Rush's `/lab` page follow one live.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
 ## Next
 
-1. Roll keep-plan step 4: Updates and Promotions shadow-labelled; Social, Forums, Bulk
-   left (`lab roll keep` now writes per email, so `tail -f var/roll/keep/shadow-*.jsonl`
-   follows a run). Then step 4b, sanitized escalation (`docs/plans/roll-keep.md`).
+1. Roll keep-plan step 4: every `Roll/*` label shadow-labelled (200 each). Teacher
+   agreement: Social 78%, Forums 48%, Bulk 79%; discards the teacher would keep: Social 0,
+   Forums 1 (a personal reply in a group-list thread), Bulk 0. Next: turn the
+   disagreements into fixtures (`lab roll keep-fixtures`), Forums first, then step 4b,
+   sanitized escalation (`docs/plans/roll-keep.md`).
 2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 
 ## Open decisions

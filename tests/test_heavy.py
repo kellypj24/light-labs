@@ -140,3 +140,33 @@ class JobTest(unittest.TestCase):
             heavy.job("check", read=lambda: at(load_1=99.0), lock=self.lock),
         ):
             self.assertIsNone(heavy.holder(self.lock))
+
+
+@mock.patch.dict(os.environ, {"CI": ""})
+class HistoryTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.lock = Path(tmp.name) / "heavy.lock"
+        patcher = mock.patch.object(heavy, "busy_processes", return_value=[])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def ends(self):
+        lines = heavy.history_path(self.lock).read_text().splitlines()
+        return [json.loads(line) for line in lines]
+
+    def test_each_job_appends_its_outcome(self):
+        with heavy.job("roll-keep", read=lambda: COOL, lock=self.lock, detail={"sample": 5}):
+            self.assertEqual(heavy.holder(self.lock)["detail"], {"sample": 5})
+        with (
+            self.assertRaises(heavy.Overheated),
+            mock.patch.object(heavy, "unload_models"),
+            heavy.job("fight", read=lambda: COOL, lock=self.lock) as guard,
+        ):
+            guard.stop_reason = "swap grew 3000 MB"
+            guard.check()
+        ends = self.ends()
+        self.assertEqual([e["outcome"] for e in ends], ["done", "stopped: swap grew 3000 MB"])
+        self.assertEqual(ends[0]["swap_start"], COOL["swap_mb"])
+        self.assertIn("ended_at", ends[0])

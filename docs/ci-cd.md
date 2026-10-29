@@ -40,6 +40,18 @@ Hardening applied to every workflow:
   sync, at well under a minute.
 - `timeout-minutes` on every job; superseded PR runs are cancelled.
 
+## Claude review (`claude-code-review.yml`, `claude.yml`)
+
+| Workflow | Runs |
+|---|---|
+| Claude Code Review | on PR open and each push: the `code-review` plugin posts inline comments. Skips Dependabot (no secrets there) and drafts; one run per PR, a new push cancels the last |
+| Claude Code | an `@claude` mention in a PR comment or review, from someone with write access |
+
+Advisory: neither is a required check or part of CI Success. Auth is the
+`CLAUDE_CODE_OAUTH_TOKEN` secret (PJ's subscription); the Claude GitHub App's token posts
+the comments, via `id-token: write`. The review plugin comes from the
+`anthropics/claude-code` marketplace at its default branch, not pinned.
+
 ## Repository settings (`ops/github-settings.sh`)
 
 Idempotent; re-run after changing it.
