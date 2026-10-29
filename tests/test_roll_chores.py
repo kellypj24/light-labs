@@ -160,6 +160,27 @@ class ChoresTest(unittest.TestCase):
         actions = [a for _, a, _ in self.chores(repo, cap=1).run()]
         self.assertEqual(actions, ["merged", "later", "hold"])
 
+    def test_fixtures_label_by_pj_over_claude_one_per_pr(self):
+        held = "HOLD: ok?\nwhy: unsure\nroll: wrong"
+        repo = FakeRepo([pr(9, "Bump b from 1.0 to 1.1 in /t"), pr(10, "Bump c from 2.0 to 2.0.1")])
+        self.chores(repo, raw=held).run()
+        repo.prs = [pr(10, "Bump c from 2.0 to 2.0.1", head="new10")]  # rebased: decided again
+        repo.states[9] = {"state": "MERGED", "mergedBy": {"login": "pj"}}
+        self.chores(repo, raw=MERGE).run()
+        bodies = {9: "notes 9", 10: "notes 10\nDependabot will resolve any conflicts"}
+        made = chores.fixtures(self.store, lambda repo, n: bodies[n])
+        self.assertEqual(
+            [(f["id"], f["expect"]["label"], f["source"]) for f in made],
+            [("de_9", "merge", "pj"), ("de_10", "merge", "claude")],
+        )
+        self.assertEqual(made[1]["input"]["body"], "notes 10")
+        self.assertEqual(made[1]["input"]["head"], "new10")
+        self.assertEqual(chores.fixtures(self.store, bodies.get, known={"de_9", "de_10"}), [])
+
+    def test_code_holds_make_no_fixture(self):
+        self.chores(FakeRepo([pr(9, "Bump b from 1.0 to 1.1", checks=RED)])).run()
+        self.assertEqual(chores.fixtures(self.store, lambda *a: ""), [])
+
     def test_verdict_without_a_line_is_a_hold(self):
         self.assertEqual(chores.verdict("looks fine to me")[0], "HOLD")
         self.assertEqual(chores.verdict("**MERGE**\nwhy: ok\nroll: right")[:3], ("MERGE", "", "ok"))

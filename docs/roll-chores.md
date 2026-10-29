@@ -32,7 +32,17 @@ held: the costly mistake) and holds PJ merged anyway (Claude too cautious).
 
 ## The weapon
 
-Once the record has 30+ Claude-reviewed PRs, they become fixtures for a `dependabot-merge`
-stage (label `merge` / `hold`; PJ's outcome overrides Claude's verdict). A wrong answer
-merges without review, so the bar is above the lab default. Roll earns it per tier,
-patch first; an earned tier stops calling Claude.
+```bash
+lab roll chores-fixtures                              # append new Claude-reviewed PRs
+just eval dependabot-merge mega-man,proto-14b,bass 3  # the fight (ask PJ first)
+```
+
+`evals/stages/dependabot-merge.yaml` holds one fixture per Claude-reviewed PR, its latest
+review: the record's facts plus the PR's notes, refetched (Dependabot PRs in public repos
+are public, so no rewrite). Label `merge` / `hold` is Claude's verdict, or `merge` when PJ
+merged a hold himself; a close carries no label (Dependabot closes what it supersedes).
+PRs code held never reached Claude and make no fixture. The stage scores the same
+`chores.answer` call a run records.
+
+A wrong answer merges without review, so the bar is 0.95 and zero false yeses (PJ
+2026-10-29), earned per tier, patch first; an earned tier stops calling Claude.

@@ -543,7 +543,7 @@ def cmd_roll(args):
     from light_labs.agents import roll
     from light_labs.agents.roll import inbox
 
-    if args.cmd in ("chores", "scorecard"):
+    if args.cmd in ("chores", "scorecard", "chores-fixtures"):
         return roll_chores(args)
     if not roll.TELEGRAM_CHAT:
         sys.exit("ROLL_TELEGRAM_CHAT is not set")
@@ -598,6 +598,29 @@ def roll_keep(args, bot, roll):
     print(text)
 
 
+def roll_chores_fixtures(store, chores):
+    """Append the record's new Claude-reviewed PRs to the dependabot-merge stage."""
+    import re
+    from collections import Counter
+
+    from light_labs.gitops import Repo
+
+    gh = Repo(config.REPO)
+    path = config.REPO / "evals" / "stages" / "dependabot-merge.yaml"
+    text = path.read_text()
+    known = set(re.findall(r'"id": "([^"]+)"', text))
+
+    def body(repo, number):
+        return gh.gh_json("pr", "view", str(number), "-R", repo, "--json", "body")["body"]
+
+    made = chores.fixtures(store, body, known)
+    # One JSON object per line is valid YAML and keeps each PR's long notes on one line.
+    lines = "".join(f"  - {json.dumps(fx, ensure_ascii=False)}\n" for fx in made)
+    path.write_text(text.rstrip("\n") + "\n" + lines)
+    by = Counter(fx["expect"]["label"] for fx in made)
+    print(f"{len(made)} new fixtures ({dict(by)}), {len(known) + len(made)} in {path.name}")
+
+
 def roll_chores(args):
     from light_labs import gitops
     from light_labs.agents import roll
@@ -605,6 +628,8 @@ def roll_chores(args):
     from light_labs.core.store import Store
 
     store = Store(roll.HOME)
+    if args.cmd == "chores-fixtures":
+        return roll_chores_fixtures(store, chores)
     if args.cmd == "scorecard":
         rows = chores.scorecard(store)
         print(f"{'tier':6} {'n':>4} {'agree':>6} {'false yes':>10} {'PJ overruled':>13}")
@@ -853,6 +878,9 @@ def main(argv=None):
     )
     chores_p.add_argument("--no-roll", action="store_true", help="skip Roll's local answer")
     rocmd.add_parser("scorecard", help="Roll's chore answers against Claude's, by tier")
+    rocmd.add_parser(
+        "chores-fixtures", help="Claude-reviewed Dependabot PRs -> dependabot-merge fixtures"
+    )
     google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
     gocmd = google_p.add_subparsers(dest="cmd", required=True)
     for name, text in (
