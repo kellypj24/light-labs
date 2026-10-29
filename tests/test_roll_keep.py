@@ -137,6 +137,21 @@ class ShadowTest(unittest.TestCase):
         saved = next((root / "keep").glob("shadow-*.jsonl")).read_text().splitlines()
         self.assertEqual([json.loads(x)["id"] for x in saved], ["m1", "m2"])
 
+    def test_pace_runs_before_each_email_and_can_stop_the_run(self):
+        calls = []
+
+        def pace():
+            calls.append(1)
+            if len(calls) == 3:
+                raise RuntimeError("too hot")
+
+        root = self.root / "paced"
+        with self.assertRaisesRegex(RuntimeError, "too hot"):
+            keep.shadow(FakeGmail(["m1", "m2", "m3"]), ByText({}), None, "Roll/Updates", 10,
+                        root, rng=FirstN(), pace=pace)  # fmt: skip
+        saved = next((root / "keep").glob("shadow-*.jsonl")).read_text().splitlines()
+        self.assertEqual(len(saved), 2)
+
     def test_lost_keeps_and_disagreements(self):
         lost = keep.lost_keeps(self.records)
         self.assertEqual([r["id"] for r in lost], ["m3"])

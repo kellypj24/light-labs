@@ -15,6 +15,9 @@ _Updated 2026-10-28._
   marts; credentials are redacted on ingest (#70).
 - Hermes runs from `lab deploy` releases (`~/.hermes/lab/current`); `morning-brief` runs
   daily at 08:00 (`hermes cron list`).
+- Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
+  `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
+  memory; Dagster's sensors skip while it is held. `lab heavy status` before starting one.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
@@ -31,8 +34,6 @@ _Updated 2026-10-28._
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
   flat, ~4 MB) and prune `var/evals/cache/` (17 MB, rebuildable) past 30 days? Proposed,
   not agreed.
-- Dagster sensors skip during fights only; a `dbt build` ran alongside `lab roll keep` on
-  2026-10-28 and the laptop overheated. Extend the skip to any local-model job?
 
 ## Blocked on
 

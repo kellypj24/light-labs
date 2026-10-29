@@ -21,10 +21,13 @@ spend; the report shows it.
 
 Files per run, all written as the run goes: `<run_id>.jsonl` (one line per finished
 sample), `<run_id>.run.json` (status, reason, progress, cooling pauses) and
-`<run_id>.telemetry.jsonl` (battery temperature and charge, AC, CPU speed limit, load,
-Ollama CPU, every `-telemetry-every`). Ctrl-C cancels cleanly: finished samples stay, the
-record says `cancelled`, and the partial report prints. `-cool-above <°C>` waits before a
-sample while the machine is hot. `just watch` follows a run from another terminal.
+`<run_id>.telemetry.jsonl` (thermal state, battery temperature and charge, AC, CPU speed
+limit, load, Ollama CPU, every `-telemetry-every`). Ctrl-C cancels cleanly: finished samples stay, the
+record says `cancelled`, and the partial report prints. Before each sample the runner waits
+while the machine is hot (serious thermal state, CPU throttled, battery over `-cool-above`,
+40°C by default) and cancels the run if it is still hot after `-cool-max-wait` (10 min).
+`just eval` runs under `lab heavy run fight`, which holds `~/.cache/light-labs/heavy.lock`,
+refuses a busy machine and stops the fight on critical heat or memory. `just watch` follows a run from another terminal.
 
 Every sample is written to `var/evals/<run_id>.jsonl` (draft, escalation, checks, latency,
 cost, plus the commit, dirty flag and `-filter` that produced it). `just eval` then loads

@@ -2,8 +2,9 @@
 usage once a day.
 
 All are on by default and tick in the Dagster daemon (`just dagster-install`). They only
-launch the landing + dbt jobs, never a fight, and skip while a fight is on (one heavy job
-at a time on the laptop). Turning one off in the UI persists in var/dagster.
+launch the landing + dbt jobs, never a fight, and skip while a fight is on or any heavy job
+holds ~/.cache/light-labs/heavy.lock (one heavy job at a time on the laptop). Turning one
+off in the UI persists in var/dagster.
 """
 
 import hashlib
@@ -13,6 +14,7 @@ from pathlib import Path
 from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 from light_labs import config
+from light_labs.core.heavy import holder
 from light_labs.evals.fights import live_fight, run_records
 from light_labs.orchestration.jobs import claude_job, evals_job, queue_job
 
@@ -55,6 +57,8 @@ def fight_finished(context: SensorEvaluationContext):
     evals_dir = config.VAR / "evals"
     if run_id := live_fight(evals_dir):
         return SkipReason(f"fight {run_id} is running")
+    if held := holder():
+        return SkipReason(f"heavy job {held['job']} is running")
     if context.cursor is None:
         # First tick: start from now rather than replaying every old fight.
         context.update_cursor(datetime.now(UTC).isoformat())
@@ -75,6 +79,8 @@ def fight_finished(context: SensorEvaluationContext):
 def queue_changed(context: SensorEvaluationContext):
     if run_id := live_fight(config.VAR / "evals"):
         return SkipReason(f"fight {run_id} is running")
+    if held := holder():
+        return SkipReason(f"heavy job {held['job']} is running")
     fingerprint = queue_fingerprint(config.VAR)
     if fingerprint == context.cursor:
         return SkipReason("queues unchanged")
@@ -98,6 +104,8 @@ def claude_due(cursor, now=None):
 def claude_daily(context: SensorEvaluationContext):
     if run_id := live_fight(config.VAR / "evals"):
         return SkipReason(f"fight {run_id} is running")
+    if held := holder():
+        return SkipReason(f"heavy job {held['job']} is running")
     if context.cursor is None:
         # First tick: start from now; `just analytics` loads everything on demand.
         context.update_cursor(datetime.now(UTC).date().isoformat())

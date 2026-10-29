@@ -5,8 +5,12 @@ export DBT_PROFILES_DIR := justfile_directory() / "analytics"
 
 default: check
 
-# Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests
-check: hooks test evals-check analytics-check dagster-check
+# Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests, as a heavy job
+# (`lab heavy`: refuses a busy machine, holds ~/.cache/light-labs/heavy.lock; a no-op in CI)
+check:
+    uv run --locked lab heavy run check -- just _check
+
+_check: hooks test evals-check analytics-check dagster-check
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
@@ -41,7 +45,7 @@ evals-check:
 # Results land in var/evals/*.jsonl and are loaded into var/lab.duckdb.
 # just eval reply-draft mega-man,bass 3
 eval stage="reply-draft" contestants="mega-man" samples="3" *args="":
-    status=0; go -C evals run . -stage {{stage}} -contestants {{contestants}} -samples {{samples}} {{args}} || status=$?; just analytics > /dev/null; exit $status
+    status=0; uv run --locked lab heavy run fight -- go -C evals run . -stage {{stage}} -contestants {{contestants}} -samples {{samples}} {{args}} || status=$?; just analytics > /dev/null; exit $status
 
 # Follow fights live from a second terminal: the latest, then each next one (Ctrl-C quits).
 # With a run_id, that run only.

@@ -75,11 +75,13 @@ def classify(brain, msg):
 # --- shadow labelling (docs/plans/roll-keep.md step 4): label nothing, measure agreement
 
 
-def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000):
+def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000, pace=None):
     """Classify a random sample of `label`'s archived mail with the local brain and the
     teacher. Nothing is labelled in Gmail. Records land in <root>/keep/ (var/, git-ignored)
     one line per email as it is classified, so `tail -f` follows a run and a crash keeps
-    what finished; disagreements are kept for `fixture_candidates`. Returns the records."""
+    what finished; disagreements are kept for `fixture_candidates`. `pace()` runs before
+    each email (the heavy-job guard: it pauses while hot, raises to stop). Returns the
+    records."""
     from light_labs.agents.rush.mail import from_gmail
 
     ids = gmail.ids(f"label:{label} -in:trash -in:spam", cap=cap)
@@ -90,6 +92,8 @@ def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000):
     with (root / "keep" / f"shadow-{stamp}.jsonl").open("w") as f, \
             (root / "keep" / "disagreements.jsonl").open("a") as dis:  # fmt: skip
         for mid in picked:
+            if pace:
+                pace()
             m = gmail.message(mid, headers=("From", "Subject", "Date", "List-Unsubscribe"))
             item = {**from_gmail(m, gmail.account), "source_label": label}
             local = classify(brain, item)

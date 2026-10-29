@@ -184,8 +184,9 @@ reason, progress) and heat readings every 30 seconds.
 
 ```bash
 just watch                                      # live view; stays open and follows each next fight
-just eval dbt-model mega-man 3 -cool-above 40   # pause while the battery is over 40°C
-                                                # or macOS throttles the CPU
+lab heavy status                                # is the machine fit for a fight?
+just eval dbt-model mega-man 3                  # pauses while hot (-cool-above 40 by default),
+                                                # stops if still hot after -cool-max-wait
 uv run lab evals cancel <run_id> --reason "machine hot"   # after Ctrl-C: say why
 ```
 

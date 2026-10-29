@@ -66,6 +66,29 @@ def evals_cancel(args):
     print(f"{args.run_id}: {record['status']} ({args.reason})")
 
 
+def cmd_heavy(args):
+    """The heavy-job lock and the machine's readings, or run a command under them."""
+    from light_labs.core import heavy
+
+    if args.cmd == "status":
+        held = heavy.holder()
+        print(f"lock: {held['job']} (pid {held['pid']}, since {held['started_at']})"
+              if held else "lock: free")  # fmt: skip
+        r = heavy.reading()
+        print("machine: " + ", ".join(f"{k}={v}" for k, v in r.items()))
+        procs = heavy.busy_processes()
+        why = heavy.too_busy(r, procs) or heavy.hot(r)
+        print(f"start a heavy job: {'no, ' + why if why else 'yes'}")
+        return
+    cmd = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not cmd:
+        sys.exit("lab heavy run <job> -- <command>")
+    try:
+        sys.exit(heavy.run(args.job, cmd, force=args.force))
+    except heavy.Busy as e:
+        sys.exit(f"heavy: not starting {args.job}: {e}")
+
+
 def evals_runs(args):
     from light_labs.evals import results
 
@@ -544,10 +567,20 @@ def roll_keep(args, bot, roll):
         return
     if not roll.KEEP_BRAIN:
         sys.exit("no mail-keep brain: Roll has no mail-keep weapon and ROLL_KEEP_BRAIN is unset")
+    from light_labs.core import heavy
+
     teacher = brain_for(roll.KEEP_TEACHER) if roll.KEEP_TEACHER else None
-    records = keep.shadow(
-        bot.gmail, brain_for(roll.KEEP_BRAIN), teacher, args.label, args.sample, roll.HOME
-    )
+    try:
+        with heavy.job("roll-keep", force=args.force) as guard:
+            records = keep.shadow(
+                bot.gmail, brain_for(roll.KEEP_BRAIN), teacher, args.label, args.sample,
+                roll.HOME, pace=guard.check,
+            )  # fmt: skip
+    except heavy.Busy as e:
+        sys.exit(f"roll keep: not starting: {e}")
+    except heavy.Overheated as e:
+        sys.exit(f"roll keep: stopped ({e}); models unloaded; finished records are in "
+                 f"{roll.HOME / 'keep'}")  # fmt: skip
     text = keep.summary(records, args.label)
     bot.text(None, text)
     print(text)
@@ -721,6 +754,13 @@ def main(argv=None):
     runs_p.add_argument("--stage")
     runs_p.add_argument("--contestant")
     runs_p.add_argument("--limit", type=int, default=20)
+    heavy_p = sub.add_parser("heavy", help="one heavy job at a time, with kill switches")
+    hcmd = heavy_p.add_subparsers(dest="cmd", required=True)
+    hcmd.add_parser("status", help="who holds the lock; is the machine fit for a heavy job")
+    hrun_p = hcmd.add_parser("run", help="run a command as a heavy job: lab heavy run fight -- ...")
+    hrun_p.add_argument("job", help="name in the lock: fight, check, ...")
+    hrun_p.add_argument("--force", default="", metavar="REASON", help="start on a busy machine")
+    hrun_p.add_argument("command", nargs=argparse.REMAINDER)
     queue_p = sub.add_parser("queue", help="robots' approval queues in DuckDB")
     qcmd = queue_p.add_subparsers(dest="cmd", required=True)
     qcmd.add_parser("ingest", help="reload var/<robot>/queue into raw.queue_items").add_argument(
@@ -782,6 +822,7 @@ def main(argv=None):
     )
     keep_p.add_argument("--label", required=True, help="e.g. Roll/Updates")
     keep_p.add_argument("--sample", type=int, default=300)
+    keep_p.add_argument("--force", default="", metavar="REASON", help="start on a busy machine")
     rocmd.add_parser(
         "keep-fixtures", help="teacher/local disagreements -> synthetic fixture candidates"
     ).add_argument("--limit", type=int, default=20)
@@ -865,7 +906,8 @@ def main(argv=None):
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     args = p.parse_args(argv)
 
-    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board"):
+    if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board",
+                      "heavy"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude"):
