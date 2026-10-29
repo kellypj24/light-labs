@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from light_labs.agents.roll import keep, sanitize
 
@@ -85,3 +86,35 @@ class SanitizeTest(unittest.TestCase):
             self.assertNotIn(raw.lower(), sent.lower(), raw)
         self.assertIn("bank.example.com", sent)
         self.assertIn("<amount>", sent)
+
+
+class ShadowTeacherTest(unittest.TestCase):
+    def test_teacher_reads_the_sanitized_view_and_never_personal_mail(self):
+        fields = ("id", "from", "subject", "snippet", "category", "unsubscribe")
+        msgs = {d["id"]: {k: d[k] for k in fields} for d in (DISAGREEMENTS[0], DISAGREEMENTS[2])}
+
+        class Gmail:
+            account = "me@example.org"
+
+            def ids(self, query, cap):
+                return list(msgs)
+
+            def message(self, mid, headers):
+                return {"id": mid}
+
+        local, teacher = Recorder(), Recorder()
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch(
+                "light_labs.agents.rush.mail.from_gmail", side_effect=lambda m, a: msgs[m["id"]]
+            ),
+        ):
+            recs = keep.shadow(Gmail(), local, teacher, "Roll/Forums", 10, Path(tmp),
+                               rng=type("R", (), {"sample": staticmethod(lambda i, n: i[:n])}))  # fmt: skip
+        self.assertEqual(len(teacher.prompts), 1)
+        sent = teacher.prompts[0]
+        for raw in RAW:
+            self.assertNotIn(raw.lower(), sent.lower(), raw)
+        personal = next(r for r in recs if r["id"] == "m3")
+        self.assertEqual(personal["teacher_skipped"], "personal")
+        self.assertNotIn("teacher", personal)

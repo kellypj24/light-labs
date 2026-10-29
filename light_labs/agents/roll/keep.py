@@ -14,6 +14,7 @@ import re
 from collections import Counter
 from datetime import UTC, datetime
 
+from light_labs.agents.roll import sanitize
 from light_labs.agents.rush.mail import prompt
 
 KEEP = ("finance", "security", "receipts", "school", "health", "insurance", "legal-tax", "people")
@@ -65,9 +66,10 @@ def parse_label(raw):
     return f"{'keep' if m.group(1) in KEEP else 'discard'}/{m.group(1)}"
 
 
-def classify(brain, msg):
-    """Label one archived message. No class word in the answer keeps it (`keep/unsure`)."""
-    raw = brain.think(CLASSIFY, f"{prompt(msg)}\nClass:", temperature=0)
+def classify(brain, msg, text=None):
+    """Label one archived message. No class word in the answer keeps it (`keep/unsure`).
+    `text` replaces the full prompt (the teacher gets `sanitize.prompt`)."""
+    raw = brain.think(CLASSIFY, f"{text or prompt(msg)}\nClass:", temperature=0)
     label = parse_label(raw)
     return {"label": label or UNSURE, "raw": raw, "by": "model" if label else "model-unparsed"}
 
@@ -103,9 +105,12 @@ def shadow(
             item = {**from_gmail(m, gmail.account), "source_label": label}
             local = classify(brain, item)
             rec = {**item, "local": local["label"], "local_by": local["by"]}
-            if teacher is not None:
+            if teacher is not None and sanitize.is_personal(item):
+                rec["teacher_skipped"] = "personal"  # never leaves the laptop
+            elif teacher is not None:
                 try:
-                    rec["teacher"] = classify(teacher, item)["label"]
+                    text = sanitize.prompt(sanitize.view(item))
+                    rec["teacher"] = classify(teacher, item, text=text)["label"]
                 except Exception as e:  # noqa: BLE001 - a teacher outage leaves the local answer
                     rec["teacher_error"] = str(e)[:200]
             rec["agree"] = rec.get("teacher") in (None, rec["local"])
@@ -151,7 +156,6 @@ def fixture_candidates(root, rewriter, limit=20):
     and stays local. Candidates land in <root>/keep/fixture-candidates.jsonl for review
     before any goes into evals/stages/mail-keep.yaml. Lost keeps go first. Returns the new
     candidates and how many unused disagreements are personal (all of them, every run)."""
-    from light_labs.agents.roll import sanitize
     from light_labs.agents.rush.mail import REWRITE
 
     path = root / "keep" / "disagreements.jsonl"

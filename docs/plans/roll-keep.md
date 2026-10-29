@@ -110,8 +110,9 @@ Each step is its own PR.
    - Personal-mail senders (gmail.com and the like) never go to Anthropic: Roll keeps them
      as `keep/people`.
    - `lab roll keep-fixtures` rewrites from the sanitized view too.
-   - Before the teacher switches over: re-label the stored disagreements with Sonnet on
-     the sanitized view and compare with its full-view answers. Where it loses the full
+   - The teacher reads only the sanitized view and skips personal mail (PJ, 2026-10-28,
+     ahead of the comparison). Still to do: re-label the stored disagreements with Sonnet
+     on the sanitized view and compare with its full-view answers. Where it loses the full
      view's edge (`people` is the likely case), that slice stays local and kept.
 5. **Apply labels.** With the weapon earned, or PJ's approval per label, Roll applies
    `Roll/Keep/*` and `Roll/Discard/*` across the `Roll/*` archive. Undo is recorded like
