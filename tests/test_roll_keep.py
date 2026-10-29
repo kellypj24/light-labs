@@ -98,6 +98,13 @@ class ByText:
         return next((v for k, v in self.answers.items() if k in user), "unsure")
 
 
+class FirstN:
+    """A sample that keeps the ids in order."""
+
+    def sample(self, ids, n):
+        return ids[:n]
+
+
 class ShadowTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -114,6 +121,21 @@ class ShadowTest(unittest.TestCase):
         self.assertEqual(len(self.records), 3)
         saved = list((self.root / "keep").glob("shadow-*.jsonl"))
         self.assertEqual(len(saved[0].read_text().splitlines()), 3)
+
+    def test_a_crash_keeps_the_records_already_written(self):
+        class Broken(ByText):
+            def think(self, system, user, temperature=None):
+                if "order" in user:
+                    raise KeyboardInterrupt
+                return super().think(system, user, temperature)
+
+        root = self.root / "crash"
+        brain = Broken({"Statement": "finance", "Sale": "promotion"})
+        with self.assertRaises(KeyboardInterrupt):
+            keep.shadow(FakeGmail(["m1", "m2", "m3"]), brain, None, "Roll/Updates", 10, root,
+                        rng=FirstN())  # fmt: skip
+        saved = next((root / "keep").glob("shadow-*.jsonl")).read_text().splitlines()
+        self.assertEqual([json.loads(x)["id"] for x in saved], ["m1", "m2"])
 
     def test_lost_keeps_and_disagreements(self):
         lost = keep.lost_keeps(self.records)
