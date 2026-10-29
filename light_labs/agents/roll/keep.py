@@ -77,31 +77,35 @@ def classify(brain, msg):
 
 def shadow(gmail, brain, teacher, label, sample, root, rng=random, cap=200_000):
     """Classify a random sample of `label`'s archived mail with the local brain and the
-    teacher. Nothing is labelled in Gmail. Records land in <root>/keep/ (var/, git-ignored);
-    disagreements are kept for `fixture_candidates`. Returns the records."""
+    teacher. Nothing is labelled in Gmail. Records land in <root>/keep/ (var/, git-ignored)
+    one line per email as it is classified, so `tail -f` follows a run and a crash keeps
+    what finished; disagreements are kept for `fixture_candidates`. Returns the records."""
     from light_labs.agents.rush.mail import from_gmail
 
     ids = gmail.ids(f"label:{label} -in:trash -in:spam", cap=cap)
     picked = rng.sample(ids, min(sample, len(ids)))
-    out = []
-    for mid in picked:
-        m = gmail.message(mid, headers=("From", "Subject", "Date", "List-Unsubscribe"))
-        item = {**from_gmail(m, gmail.account), "source_label": label}
-        local = classify(brain, item)
-        rec = {**item, "local": local["label"], "local_by": local["by"]}
-        if teacher is not None:
-            try:
-                rec["teacher"] = classify(teacher, item)["label"]
-            except Exception as e:  # noqa: BLE001 - a teacher outage leaves the local answer
-                rec["teacher_error"] = str(e)[:200]
-        rec["agree"] = rec.get("teacher") in (None, rec["local"])
-        out.append(rec)
     (root / "keep").mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    with (root / "keep" / f"shadow-{stamp}.jsonl").open("w") as f:
-        f.writelines(json.dumps(r) + "\n" for r in out)
-    with (root / "keep" / "disagreements.jsonl").open("a") as f:
-        f.writelines(json.dumps(r) + "\n" for r in out if "teacher" in r and not r["agree"])
+    out = []
+    with (root / "keep" / f"shadow-{stamp}.jsonl").open("w") as f, \
+            (root / "keep" / "disagreements.jsonl").open("a") as dis:  # fmt: skip
+        for mid in picked:
+            m = gmail.message(mid, headers=("From", "Subject", "Date", "List-Unsubscribe"))
+            item = {**from_gmail(m, gmail.account), "source_label": label}
+            local = classify(brain, item)
+            rec = {**item, "local": local["label"], "local_by": local["by"]}
+            if teacher is not None:
+                try:
+                    rec["teacher"] = classify(teacher, item)["label"]
+                except Exception as e:  # noqa: BLE001 - a teacher outage leaves the local answer
+                    rec["teacher_error"] = str(e)[:200]
+            rec["agree"] = rec.get("teacher") in (None, rec["local"])
+            out.append(rec)
+            f.write(json.dumps(rec) + "\n")
+            f.flush()
+            if "teacher" in rec and not rec["agree"]:
+                dis.write(json.dumps(rec) + "\n")
+                dis.flush()
     return out
 
 

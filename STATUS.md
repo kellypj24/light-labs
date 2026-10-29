@@ -20,9 +20,9 @@ _Updated 2026-10-28._
 
 ## Next
 
-1. Roll keep-plan step 4 (`lab roll keep`, #68) is merged: shadow-label more `Roll/*`
-   labels, then turn disagreements into fixtures with `lab roll keep-fixtures`
-   (`docs/plans/roll-keep.md`).
+1. Roll keep-plan step 4: Updates and Promotions shadow-labelled; Social, Forums, Bulk
+   left (`lab roll keep` now writes per email, so `tail -f var/roll/keep/shadow-*.jsonl`
+   follows a run). Then step 4b, sanitized escalation (`docs/plans/roll-keep.md`).
 2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 
 ## Open decisions
@@ -31,6 +31,8 @@ _Updated 2026-10-28._
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
   flat, ~4 MB) and prune `var/evals/cache/` (17 MB, rebuildable) past 30 days? Proposed,
   not agreed.
+- Dagster sensors skip during fights only; a `dbt build` ran alongside `lab roll keep` on
+  2026-10-28 and the laptop overheated. Extend the skip to any local-model job?
 
 ## Blocked on
 
