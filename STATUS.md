@@ -24,11 +24,12 @@ _Updated 2026-10-28._
 
 ## Next
 
-1. Roll keep-plan step 4: every `Roll/*` label shadow-labelled (200 each). Teacher
-   agreement: Social 78%, Forums 48%, Bulk 79%; discards the teacher would keep: Social 0,
-   Forums 1 (a personal reply in a group-list thread), Bulk 0. Next: turn the
-   disagreements into fixtures (`lab roll keep-fixtures`), Forums first, then step 4b,
-   sanitized escalation (`docs/plans/roll-keep.md`).
+1. Roll keep-plan step 4: every `Roll/*` label shadow-labelled (200 each). Keep-vs-discard
+   agreement: Social 190/200, Forums 136/200 (63 local keeps the teacher discards: group
+   lists), Bulk 180/200; one lost keep (Forums). Step 4b started: `sanitize.py` (personal
+   senders stay local, rule-based scrubber); `keep-fixtures` rewrites from it; the teacher
+   is off by default. Next: run `keep-fixtures` (230 of 271 disagreements are
+   non-personal), then the matchers and escalation rules (`docs/plans/roll-keep.md`).
 2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 
 ## Open decisions
