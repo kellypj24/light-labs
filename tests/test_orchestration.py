@@ -19,6 +19,12 @@ HAS_DAGSTER = importlib.util.find_spec("dagster_dbt") is not None
 
 
 def setUpModule():
+    # `just check` holds the real heavy-job lock while these run; the sensors must not see it.
+    from light_labs.core import heavy
+
+    lock = mock.patch.object(heavy, "LOCK", Path(tempfile.mkdtemp()) / "heavy.lock")
+    lock.start()
+    unittest.addModuleCleanup(lock.stop)
     if HAS_DAGSTER and not (ANALYTICS / "target" / "manifest.json").exists():
         subprocess.run(
             ["dbt", "parse", "--quiet", "--profiles-dir", "."], cwd=ANALYTICS, check=True

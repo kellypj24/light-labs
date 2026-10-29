@@ -73,6 +73,7 @@ type Telemetry struct {
 	OnAC           *bool     `json:"on_ac,omitempty"`
 	CPUSpeedLimit  *int      `json:"cpu_speed_limit,omitempty"` // percent; below 100 means throttled
 	ThermalWarning string    `json:"thermal_warning,omitempty"`
+	ThermalState   *int      `json:"thermal_state,omitempty"` // NSProcessInfo: 0 nominal .. 3 critical
 	Load1          *float64  `json:"load_1,omitempty"`
 	OllamaCPU      *float64  `json:"ollama_cpu,omitempty"` // percent of one core, summed
 }
@@ -154,6 +155,10 @@ func readTelemetry() Telemetry {
 		}
 	}
 	t.OllamaCPU = parseOllamaCPU(run("ps", "-Ao", "pcpu,comm"))
+	js := `ObjC.import("Foundation"); $.NSProcessInfo.processInfo.thermalState`
+	if v, err := strconv.Atoi(strings.TrimSpace(run("osascript", "-l", "JavaScript", "-e", js))); err == nil {
+		t.ThermalState = &v
+	}
 	return t
 }
 
@@ -202,6 +207,9 @@ func hot(t Telemetry, coolAbove float64) string {
 	if coolAbove <= 0 {
 		return ""
 	}
+	if t.ThermalState != nil && *t.ThermalState >= 2 {
+		return fmt.Sprintf("thermal state %d (serious or worse)", *t.ThermalState)
+	}
 	if t.CPUSpeedLimit != nil && *t.CPUSpeedLimit < 100 {
 		return fmt.Sprintf("CPU throttled to %d%%", *t.CPUSpeedLimit)
 	}
@@ -212,18 +220,21 @@ func hot(t Telemetry, coolAbove float64) string {
 }
 
 // coolDown waits while the machine is hot, re-reading every `step`, up to maxWait.
-// Returns the seconds waited (0 if it didn't wait).
-func coolDown(ctx context.Context, m *Monitor, coolAbove float64, step, maxWait time.Duration) float64 {
+// Returns the seconds waited (0 if it didn't wait) and, if still hot at maxWait, why.
+func coolDown(ctx context.Context, m *Monitor, coolAbove float64, step, maxWait time.Duration) (float64, string) {
 	start := time.Now()
 	for {
 		why := hot(m.Latest(), coolAbove)
-		if why == "" || time.Since(start) >= maxWait {
-			return time.Since(start).Seconds()
+		if why == "" {
+			return time.Since(start).Seconds(), ""
+		}
+		if time.Since(start) >= maxWait {
+			return time.Since(start).Seconds(), why
 		}
 		fmt.Fprintf(os.Stderr, "  cooling: %s; waiting %s\n", why, step)
 		select {
 		case <-ctx.Done():
-			return time.Since(start).Seconds()
+			return time.Since(start).Seconds(), ""
 		case <-time.After(step):
 			m.sample(nil)
 		}

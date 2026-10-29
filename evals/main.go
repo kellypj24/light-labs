@@ -56,8 +56,8 @@ func main() {
 	minPass := flag.Float64("min-pass", 0, "exit 1 if any contestant's sample pass rate is below this (0-1)")
 	outDir := flag.String("out", "", "write samples as JSONL here (default <repo>/var/evals)")
 	timeout := flag.Duration("timeout", 5*time.Minute, "per-sample timeout")
-	coolAbove := flag.Float64("cool-above", 0, "pause before a sample while the battery is above this many °C or the CPU is throttled (0: off)")
-	coolMaxWait := flag.Duration("cool-max-wait", 10*time.Minute, "longest single cooling pause")
+	coolAbove := flag.Float64("cool-above", 40, "pause before a sample while the battery is above this many °C or the CPU is throttled (0: off)")
+	coolMaxWait := flag.Duration("cool-max-wait", 10*time.Minute, "longest single cooling pause; still hot after it stops the fight")
 	telemetryEvery := flag.Duration("telemetry-every", 30*time.Second, "how often to read heat and load")
 	flag.Parse()
 
@@ -148,12 +148,19 @@ func main() {
 	scores := newScoreboard(contestantNames)
 	started := time.Now()
 	done := 0
+	tooHot := ""
 	for i, j := range jobs {
 		if ctx.Err() != nil {
 			break
 		}
-		if waited := coolDown(ctx, monitor, *coolAbove, 30*time.Second, *coolMaxWait); waited >= 1 {
+		waited, still := coolDown(ctx, monitor, *coolAbove, 30*time.Second, *coolMaxWait)
+		if waited >= 1 {
 			rec.update(func(r *RunRecord) { r.CoolPauses++; r.CoolSeconds += waited })
+		}
+		if still != "" {
+			tooHot = fmt.Sprintf("too hot: %s after %s", still, *coolMaxWait)
+			fmt.Fprintln(os.Stderr, "  stopping:", tooHot)
+			break
 		}
 		if ctx.Err() != nil {
 			break
@@ -224,12 +231,15 @@ func main() {
 		}
 	}
 	ended := time.Now().UTC()
-	cancelled := ctx.Err() != nil
+	cancelled := ctx.Err() != nil || tooHot != ""
 	rec.update(func(r *RunRecord) {
 		r.EndedAt = &ended
 		r.Status = "completed"
 		if cancelled {
 			r.Status, r.Reason = "cancelled", "interrupted"
+			if tooHot != "" {
+				r.Reason = tooHot
+			}
 		}
 	})
 	if cancelled {

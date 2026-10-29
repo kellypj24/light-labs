@@ -29,10 +29,13 @@ Start with `lab-workflow` before any commit, push or PR.
   fields: `guts_man`, `select_harness_errors`, `run_id`).
 - Rush's auto-send posts to other people's board as pj_agent. Loosen its guards, caps or
   kinds only when PJ asks, and say what changes.
-- One heavy job at a time on PJ's laptop: never run `just check`, builds or a second fight
-  while a local-model fight runs. Ask before starting a fight; say how long it takes. Run
-  long local fights with `-cool-above 40`, and when one has to be stopped, record why
-  (`lab evals cancel <run_id> --reason`).
+- One heavy job at a time on PJ's laptop. `lab heavy status` before any fight, `lab roll
+  keep` or `just check`: it shows the lock holder, heat, load, memory, container VMs and
+  Dagster runs. Those jobs hold `~/.cache/light-labs/heavy.lock` and refuse a busy
+  machine; `--force <reason>` only when PJ says so. Kill switches pause them while hot and stop them on
+  critical heat or memory (`light_labs/core/heavy.py`). Ask before starting a fight; say
+  how long it takes. When one has to be stopped by hand, record why (`lab evals cancel
+  <run_id> --reason`).
 - Data reaches var/lab.duckdb only through Dagster (`light_labs/orchestration`; `just
   analytics` runs its job). It never starts fights, and its sensors skip while one runs.
   Follow `dagster-orchestration` before changing it.

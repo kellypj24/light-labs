@@ -62,9 +62,29 @@ func TestCoolDownWaitsUntilCool(t *testing.T) {
 		return Telemetry{BatteryTempC: &c}
 	}}
 	m.sample(nil)
-	waited := coolDown(context.Background(), m, 40, time.Millisecond, time.Second)
-	if i < 3 || waited <= 0 {
-		t.Fatalf("should re-read until below 40: reads=%d waited=%v", i, waited)
+	waited, still := coolDown(context.Background(), m, 40, time.Millisecond, time.Second)
+	if i < 3 || waited <= 0 || still != "" {
+		t.Fatalf("should re-read until below 40: reads=%d waited=%v still=%q", i, waited, still)
+	}
+}
+
+func TestHotOnSeriousThermalState(t *testing.T) {
+	fair, serious := 1, 2
+	if hot(Telemetry{ThermalState: &fair}, 40) != "" {
+		t.Fatal("fair should not pause")
+	}
+	if !strings.Contains(hot(Telemetry{ThermalState: &serious}, 40), "thermal state 2") {
+		t.Fatal("serious should pause")
+	}
+}
+
+func TestCoolDownGivesUpStillHot(t *testing.T) {
+	c := 45.0
+	m := &Monitor{read: func() Telemetry { return Telemetry{BatteryTempC: &c} }}
+	m.sample(nil)
+	_, still := coolDown(context.Background(), m, 40, time.Millisecond, 5*time.Millisecond)
+	if !strings.Contains(still, "45.0°C") {
+		t.Fatalf("still hot at max wait should say why, got %q", still)
 	}
 }
 
