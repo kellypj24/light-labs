@@ -2,8 +2,10 @@
 
 Served on 127.0.0.1 and published to the tailnet only with `tailscale serve`, which tells
 us who is asking in the Tailscale-User-Login header. Requests without an allowed login are
-refused, so the page is PJ's alone even on a shared tailnet. Forms carry a per-process
-token against cross-site posts.
+refused, so the page is PJ's alone even on a shared tailnet. A Host other than this
+machine's tailnet name or loopback is refused too: without that, a web page open in PJ's
+browser could rebind its own name to 127.0.0.1 and send the login header itself. Forms
+carry a per-process token against cross-site posts.
 
 Stdlib only: http.server, html.escape. Pages render on the server; no JavaScript.
 """
@@ -28,6 +30,7 @@ INTEREST = re.compile(r"\b(rush|pj_agent|pj-agent|DLN-100|PJ)\b", re.IGNORECASE)
 BOARD_TASKS = 25
 JOURNAL_LINES = 15
 CLIP = 600
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def tailnet_login():
@@ -37,6 +40,15 @@ def tailnet_login():
     ).stdout
     d = json.loads(out)
     return d["User"][str(d["Self"]["UserID"])]["LoginName"]
+
+
+def tailnet_hosts():
+    """This machine's MagicDNS names, full and short: the Hosts `tailscale serve` forwards."""
+    out = subprocess.run(
+        ["tailscale", "status", "--json"], capture_output=True, text=True, check=True
+    ).stdout
+    full = json.loads(out)["Self"]["DNSName"].rstrip(".").lower()
+    return {full, full.split(".")[0]}
 
 
 def esc(text, clip=None):
@@ -123,10 +135,11 @@ def page(title, body, flash=None):
 class Remote:
     """State shared by request handlers: the store, edge client, and the tick lock."""
 
-    def __init__(self, store, rush, client=None, allowed=(), tick=None):
+    def __init__(self, store, rush, client=None, allowed=(), tick=None, hosts=()):
         self.store, self.rush = store, rush
         self.client = client or Client()
         self.allowed = set(allowed)
+        self.hosts = LOOPBACK | {h.lower() for h in hosts}
         self.token = secrets.token_urlsafe(16)
         self.tick = tick  # callable running one heartbeat
         self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
@@ -318,6 +331,10 @@ def handler(remote):
             print(f"{now()} {self.command} {self.path} {args[1] if len(args) > 1 else ''}")
 
         def _allowed(self):
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+            if host not in remote.hosts:
+                self._send(403, page("Not allowed", "<p>Unknown host.</p>"))
+                return False
             login = self.headers.get("Tailscale-User-Login", "")
             if login in remote.allowed:
                 return True
@@ -400,7 +417,9 @@ def handler(remote):
 
 
 def serve(store, rush, host="127.0.0.1", port=8787, allowed=None, tick=None):
-    remote = Remote(store, rush, allowed=allowed or [tailnet_login()], tick=tick)
+    remote = Remote(
+        store, rush, allowed=allowed or [tailnet_login()], tick=tick, hosts=tailnet_hosts()
+    )
     server = ThreadingHTTPServer((host, port), handler(remote))
     if rush.TELEGRAM_CHAT:  # PJ's replies on Telegram, handled while the Mac is awake
         from light_labs.agents.rush.telegram import Telegram

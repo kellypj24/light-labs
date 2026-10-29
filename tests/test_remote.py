@@ -88,6 +88,25 @@ class RemoteTest(unittest.TestCase):
         self.assertEqual(self.call("/", login="someone@else.com")[0], 403)
         self.assertEqual(self.call("/")[0], 200)
 
+    def test_refuses_a_host_that_is_not_this_machine(self):
+        # DNS rebinding: an attacker's name pointed at 127.0.0.1, with the login header set
+        for host in ("evil.example", "evil.example:8787", "pjs-macbook-pro.evil.example"):
+            req = urllib.request.Request(self.base + "/", headers={"Host": host})
+            req.add_header("Tailscale-User-Login", PJ)
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(req)
+            self.assertEqual(e.exception.code, 403, host)
+            e.exception.close()
+        remote = Remote(
+            self.store,
+            self.remote.rush,
+            client=self.edge,
+            allowed=[PJ],
+            hosts={"Box.Tail1.ts.net", "box"},
+        )
+        self.assertIn("box.tail1.ts.net", remote.hosts)
+        self.assertIn("127.0.0.1", remote.hosts)
+
     def test_post_needs_the_page_token(self):
         item = self.store.enqueue("comment", {"task_id": "t1"}, "hi", "ctx")
         code, _ = self.call(f"/approve/{item['id']}", {"text": "hi", "token": "wrong"})
