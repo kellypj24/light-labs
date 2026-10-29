@@ -65,12 +65,22 @@ def mail_keep(brain, memory, inp):
     return {"raw": out["raw"], "draft": out["label"], "label": out["label"], "notes": out["by"]}
 
 
+def dependabot_merge(brain, memory, inp):
+    """Roll answering whether a Dependabot PR is safe to merge with no human review."""
+    from light_labs.agents.roll.chores import answer
+
+    out = answer(brain, inp)
+    label = "merge" if out["choice"] == "yes" else "hold"
+    return {"raw": out["choice"], "draft": label, "label": label, "notes": f"p_yes {out['p_yes']}"}
+
+
 STAGES = {
     "reply-draft": reply_draft,
     "dbt-model": dbt_model,
     "commit-message": commit_message,
     "mail-triage": mail_triage,
     "mail-keep": mail_keep,
+    "dependabot-merge": dependabot_merge,
 }
 
 

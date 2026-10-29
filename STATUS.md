@@ -3,14 +3,19 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-10-28._
+_Updated 2026-10-29._
 
 ## Now
 
 - Rush (DLN-100) live under launchd: hourly tick, board and mail triage, Telegram and the
   tailnet remote page. Escalations drafted by Auto, approved by PJ.
 - Roll (DLN-102) live: Dependabot chores across PJ's repos (`lab roll chores`), mail
-  cleanup, and the `mail-keep` weapon on `qwen2.5:14b`.
+  cleanup, and the `mail-keep` weapon on `qwen2.5:14b`. Her chores answers now come from
+  `qwen2.5:14b` too (`ROLL_CHORES_BRAIN` in `.env`).
+- data-engineering Dependabot backlog (28 open) is Roll's chores training set: PJ runs
+  `lab roll chores -C ~/data-engineering --apply --admin` daily until clear (one merge
+  per directory per run, 10 a day); each run grows the record, `lab roll chores-fixtures`
+  turns it into the `dependabot-merge` stage (24 fixtures from the record so far).
 - Claude Code usage lands in `raw.claude_records` daily and feeds the `mart_claude_*`
   marts; credentials are redacted on ingest (#70).
 - Hermes runs from `lab deploy` releases (`~/.hermes/lab/current`); `morning-brief` runs
@@ -30,7 +35,9 @@ _Updated 2026-10-28._
    senders stay local, rule-based scrubber); `keep-fixtures` rewrites from it; the teacher
    is off by default. Next: run `keep-fixtures` (230 of 271 disagreements are
    non-personal), then the matchers and escalation rules (`docs/plans/roll-keep.md`).
-2. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
+2. `dependabot-merge` fight (mega-man, proto-14b, bass) once the backlog is through and
+   the stage is re-generated; bar 0.95 and zero false yeses, per tier, patch first.
+3. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 
 ## Open decisions
 

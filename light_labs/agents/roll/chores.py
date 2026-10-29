@@ -132,6 +132,12 @@ def state(f):
     )
 
 
+def answer(brain, f):
+    """Roll's yes/no on a PR: what a run records and the dependabot-merge stage scores."""
+    a = ask(brain, state(f), QUESTION)
+    return {"choice": a.choice, "p_yes": round(a.p(), 3)}
+
+
 def blocked(f):
     """Why code holds this PR without asking big brother, or None."""
     if f["checks"] != "pass":
@@ -194,8 +200,7 @@ class Chores:
         roll = None
         if self.roll is not None:
             try:
-                answer = ask(self.roll, prompt, QUESTION)
-                roll = {"choice": answer.choice, "p_yes": round(answer.p(), 3)}
+                roll = answer(self.roll, f)
             except (OSError, RuntimeError) as e:
                 self.store.journal(f"Roll could not answer on #{f['number']}: {e}")
         why = blocked(f)
@@ -328,3 +333,47 @@ def scorecard(store):
             outcome = item.get("reason") or ""
             row["overruled"] += bb["verdict"] == "HOLD" and outcome.startswith("merged")
     return rows
+
+
+def outcome(item):
+    """(merge | hold, who) for a Claude-reviewed record: PJ merging it overrides big
+    brother's verdict. A close says nothing (Dependabot closes PRs it supersedes). None
+    when code held it and Claude never saw it."""
+    bb = item.get("big_brother") or {}
+    if not bb.get("model"):
+        return None
+    reason = item.get("reason") or ""
+    if reason.startswith("merged by") and reason != "merged by roll":
+        return "merge", "pj"
+    return ("merge" if bb["verdict"] == "MERGE" else "hold"), "claude"
+
+
+def fixtures(store, pr_body, known=()):
+    """Fixtures for evals/stages/dependabot-merge.yaml from the record, one per PR (its
+    latest review), skipping ids in `known`. Dependabot PRs in PJ's public repos are
+    public, so the PR itself is the fixture; `pr_body(repo, number)` fetches the notes the
+    record leaves out."""
+    latest = {}
+    for bucket in ("pending", "sent", "rejected"):
+        for path in (store.root / "queue" / bucket).glob("*.json"):
+            item = json.loads(path.read_text())
+            if item.get("kind") != KIND or not outcome(item):
+                continue
+            t = item["target"]
+            key = (t["repo"], t["pr"])
+            if key not in latest or item["created"] > latest[key]["created"]:
+                latest[key] = item
+    out = []
+    for (repo, number), item in sorted(latest.items()):
+        fid = re.sub(r"\W+", "_", f"{repo.split('/')[-1]}_{number}").lower()
+        if fid in known:
+            continue
+        label, source = outcome(item)
+        f = item["facts"]
+        body = _BOILERPLATE.split(pr_body(repo, number) or "", maxsplit=1)[0]
+        inp = {**f, "body": body.strip()[:BODY_CHARS]}
+        out.append({
+            "id": fid, "category": f["tier"], "source": source,
+            "input": inp, "expect": {"label": label},
+        })  # fmt: skip
+    return out
