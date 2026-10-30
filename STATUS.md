@@ -35,6 +35,8 @@ _Updated 2026-10-30._
   2026-11-13, read the verdicts and enforce the remaining rules. Step 2a (calibration
   maps per brain and question, `mart_calibration`) in review; first real map, Roll's
   `deps` on `llama3.1:8b`, stays identity (raw p already calibrated). 2b replays mail-keep.
+- Operational store: `docs/plans/operational-store.md` moves robots' state from JSON files
+  in `var/` to one SQLite file (WAL); DuckDB stays analytics-only. No phase started.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
