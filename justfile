@@ -74,11 +74,12 @@ analytics-check:
     LAB_VAR="$tmp" uv run --locked lab evals ingest analytics/fixtures/*.jsonl
     LAB_VAR="$tmp" uv run --locked lab queue ingest --root analytics/fixtures/queue
     LAB_VAR="$tmp" uv run --locked lab claude ingest --projects analytics/fixtures/claude/projects
+    LAB_VAR="$tmp" uv run --locked --group analytics lab calibration ingest --root analytics/fixtures/calibration
     cd analytics
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet
     cd ..
-    uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend tests.test_commit_message
+    uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend tests.test_commit_message tests.test_calibrate
     LAB_VAR="$tmp" uv run --locked lab evals runs
 
 # Dagster UI (http://127.0.0.1:3000). The sensors run in the daemon, not here.

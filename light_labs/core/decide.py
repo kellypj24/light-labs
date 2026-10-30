@@ -22,13 +22,16 @@ class Answer:
     choice: str
     confidence: float
     probs: dict
+    raw: dict = None  # before calibration; the probs a shadow pair records
 
     def p(self, choice="yes"):
         return self.probs.get(choice, 0.0)
 
 
-def ask(brain, state, question, choices=YES_NO, num_ctx=None):
-    """One question about `state`, answered with exactly one of `choices`."""
+def ask(brain, state, question, choices=YES_NO, num_ctx=None, key=None):
+    """One question about `state`, answered with exactly one of `choices`. With `key` (the
+    question's calibration name) a yes/no answer from a local brain goes through that
+    brain's fitted map, if there is one (core/calibrate.py); `raw` keeps the model's own."""
     system = (
         "Read the input, then answer the question about it with exactly one word: "
         + " or ".join(choices)
@@ -42,5 +45,13 @@ def ask(brain, state, question, choices=YES_NO, num_ctx=None):
         found = next((w for w in re.findall(r"[a-z]+", text) if w in choices), None)
         probs = {c: float(c == found) for c in choices} if found else None
         probs = probs or {c: 1 / len(choices) for c in choices}
+    raw = probs
+    if key and choices == YES_NO and hasattr(brain, "choose") and getattr(brain, "model", None):
+        from light_labs.core import calibrate
+
+        m = calibrate.lookup(f"ollama:{brain.model}", key)
+        if m:
+            yes = calibrate.apply(m, probs["yes"])
+            probs = {"yes": yes, "no": 1 - yes}
     choice = max(choices, key=lambda c: probs[c])
-    return Answer(choice, probs[choice], probs)
+    return Answer(choice, probs[choice], probs, raw)

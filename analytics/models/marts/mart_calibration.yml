@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: mart_calibration
+    description: One row per robot, question and brain with shadow pairs, and its map.
+    columns:
+      - name: calibration_key
+        description: robot | question | brain ('(unrecorded)' for pairs without one)
+        tests:
+          - unique
+          - not_null
+      - name: calibration_method
+        description: platt, isotonic or identity
+      - name: map_status
+        description: fitted, too-few, one-class, no-gain, or no-brain (pairs that can't be fitted)
+      - name: overconfidence
+        description: Mean raw p minus the positive rate; positive means the brain says yes too readily
+      - name: brier_gain
+        description: Raw minus held-out calibrated Brier score; positive is better
+      - name: ece_gain
+        description: Raw minus held-out calibrated ECE; positive is better

@@ -116,7 +116,7 @@ class ChoresTest(unittest.TestCase):
         self.assertIn("--match-head-commit", merge)
         self.assertEqual(merge[merge.index("--match-head-commit") + 1], "sha7")
         (item,) = [json.loads(p.read_text()) for p in self.store.root.glob("queue/sent/*.json")]
-        self.assertEqual(item["roll"], {"choice": "yes", "p_yes": 0.9})
+        self.assertEqual(item["roll"], {"choice": "yes", "p_yes": 0.9, "p_raw": 0.9, "brain": None})
         self.assertEqual(item["big_brother"]["model"], "haiku")
         self.assertEqual(item["reason"], "merged by roll")
         self.assertNotIn("--admin", merge)

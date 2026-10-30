@@ -1,7 +1,7 @@
 # Plan: decision framework and the sensitivity gate
 
 Status: step 1 done 2026-10-30 (#91; `client-repo` denies, every other rule records until
-2026-11-13); step 1b in review. Written 2026-10-30.
+2026-11-13); step 1b done (#93); step 2a in review. Written 2026-10-30.
 
 Builds what the spec describes: a gate on every Claude call, then a Jev-style decision
 framework on `decide.py` (calibration, named and score questions, routing rules, an
@@ -51,15 +51,35 @@ to those files on `main` before the step starts means re-reading the step.
    Files: `light_labs/core/sanitize.py`, `light_labs/agents/rush/mail.py`,
    `light_labs/cli.py` (`_auto`), `light_labs/core/gate.py`.
 
-2. **Calibration in core.** Generalise `agents/roll/calibrate.py` (per-question yes-bias
-   baselines in `calibration.json`, Roll only) into `light_labs/core/calibrate.py`: an
-   isotonic or Platt fit per brain and question on shadow pairs (local answer and Claude's
-   on the same input; Roll's keep and chores records first). Fitted maps become a Dagster
-   asset in DuckDB; `decide.ask` applies them read-only. `calibration.json` retires once
-   Roll's writer reads the asset.
-   Files: `light_labs/core/calibrate.py`, `light_labs/core/decide.py`,
-   `light_labs/agents/roll/calibrate.py`, `light_labs/agents/roll/writer.py`,
-   `light_labs/orchestration/`, `analytics/models/`.
+2. **Calibration in core.** A shadow pair is a local yes/no answer's raw p and the label
+   it should have had. Per (robot, question, brain): Platt below 200 pairs, isotonic from
+   there, kept only when it beats raw p on 5-fold held-out Brier; identity below 30 pairs,
+   on one class, or with no gain. Fitted with scikit-learn (analytics group); applied in
+   plain Python.
+
+   2a (in review): `light_labs/core/calibrate.py` and `calibration_results.py`
+   (`lab calibration ingest`); Dagster's `calibration` asset lands `raw.shadow_pairs` and
+   `raw.calibration_maps`, refits with the queue job, and exports
+   `var/calibration/maps.json`, which robots read (robots never open the DuckDB file
+   Dagster writes). `mart_calibration` reports Brier, ECE and overconfidence per map.
+   `decide.ask(..., key=)` applies a map and keeps `raw`. Pairs so far:
+   - Roll chores (`chores-merge`): Roll's raw p against Claude's MERGE/HOLD, from her
+     queue. Records now carry the brain and `p_raw`; the 41 older ones have no brain and
+     never fit. PRs that are `dependabot-merge` fixtures are left out (a robot is never
+     calibrated on what it is scored on), which leaves 3 today.
+   - Roll writer (`deps`): `agents/roll/calibrate.py` also writes pairs (raw p against
+     "the title says chore") to `var/roll/pairs/deps.jsonl`. 41 PRs on `llama3.1:8b`,
+     2026-10-30: raw Brier 0.121, Platt held-out 0.132, so identity (`no-gain`). The raw
+     p is calibrated; newer Dependabot chores score 0.16-0.61, which is discrimination,
+     not calibration.
+
+   2b: Roll's mail-keep keep/discard as a `decide.ask` yes/no; replay the 1,000 stored
+   shadow records on `qwen2.5:14b` against the stored teacher labels (heavy, about 80
+   minutes; ask first). Move Roll's writer from baseline-plus-lift to the calibrated p and
+   retire `calibration.json`, measured by a commit-message fight.
+   Files: `light_labs/core/calibrate.py`, `light_labs/core/calibration_results.py`,
+   `light_labs/core/decide.py`, `light_labs/agents/roll/{calibrate,chores,keep,writer}.py`,
+   `light_labs/orchestration/`, `analytics/models/`, `analytics/fixtures/calibration/`.
 
 3. **Named and score questions.** `decide.ask_many(brain, state, questions)` returns
    `answers.<name>`, sharing the cached prefix. A score question takes ordered labels; the
@@ -103,6 +123,10 @@ When the last step lands, fold the result into the spec and archive this plan
   drops `evals/scorer.go`.
 - `sanitize.py` moves to `light_labs/core` in step 1: Rush is the second robot (step 1b).
 - Gate rules are constants in `gate.py`, not `rules/` (routing rules, step 4).
+- Step 2: shadow pairs from mail-keep (converted to `decide.ask`, replayed locally) and
+  Roll chores; Platt under 200 pairs, isotonic from there, identity unless it beats raw on
+  held-out Brier; scikit-learn in the analytics group only; Rush waits for step 3; 2a is
+  the library and asset, 2b the mail-keep replay and the writer.
 - `lab rush auto` stays a full Claude Code session, checked by the gate before launch.
 - Step 1b: Rush's personal mail stays local; the teacher labels from the sanitized view and
   the local model writes every summary; `memory.md` leaves scrubbed with a `## Private`

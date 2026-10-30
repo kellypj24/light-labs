@@ -32,14 +32,15 @@ def setUpModule():
 
 
 def fixture_var(root):
-    """The CI fixtures laid out like var/: evals/, rush/queue/, and the Claude Code
-    transcripts as the archive copy in claude/projects/."""
+    """The CI fixtures laid out like var/: evals/, rush/queue/, roll/pairs/, and the Claude
+    Code transcripts as the archive copy in claude/projects/."""
     evals = Path(root) / "evals"
     evals.mkdir()
     for path in ANALYTICS.glob("fixtures/*.json*"):
         shutil.copy(path, evals)
     shutil.copytree(ANALYTICS / "fixtures/queue/rush", Path(root) / "rush")
     shutil.copytree(ANALYTICS / "fixtures/claude/projects", Path(root) / "claude/projects")
+    shutil.copytree(ANALYTICS / "fixtures/calibration/roll", Path(root) / "roll")
     return Path(root)
 
 
@@ -221,6 +222,7 @@ class FullRunTest(unittest.TestCase):
                     "mart_claude_sessions",
                     "mart_claude_repeated_work",
                     "mart_claude_activity_weekly",
+                    "mart_calibration",
                 ):
                     n = con.execute(f"SELECT count(*) FROM marts.{table}").fetchone()[0]
                     self.assertGreater(n, 0, table)

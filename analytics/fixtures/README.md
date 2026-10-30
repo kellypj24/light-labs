@@ -12,3 +12,7 @@ a slash-command expansion that is not a typed prompt.
 
 `*.run.json` and `*.telemetry.jsonl` are run records and heat readings for the two runs: one
 completed on AC, one cancelled ("machine hot") on battery after a throttled reading.
+
+`calibration/roll/pairs/` mirrors `var/roll/pairs/`: 60 synthetic shadow pairs for one
+question and brain, overconfident (raw p 0.55-0.97, about 40% positive), so Platt scaling
+fits and beats the raw probability.

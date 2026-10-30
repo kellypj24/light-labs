@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: stg_shadow_pairs
+    description: One row per shadow pair; pairs without a brain are never fitted.
+    columns:
+      - name: p_raw
+        description: The local brain's own yes-probability, before any map
+        tests:
+          - not_null
+      - name: is_positive
+        description: The label (Claude said MERGE, the PR title says chore, and so on)
+      - name: label_by
+        description: Who set the label (claude:<model>, pr-title)
+      - name: has_brain
+        description: The answer recorded its brain; false on older Roll records

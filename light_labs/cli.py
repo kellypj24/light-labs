@@ -129,6 +129,15 @@ def queue_ingest(args):
     print(f"db: {results.DB}")
 
 
+def calibration_ingest(args):
+    from light_labs.core import calibration_results
+    from light_labs.evals import results
+
+    pairs, fitted = calibration_results.ingest(args.root)
+    print(f"loaded {pairs} shadow pairs; {fitted} map(s) fitted")
+    print(f"db: {results.DB}")
+
+
 def claude_ingest(args):
     from light_labs.core import claude_results
     from light_labs.evals import results
@@ -819,6 +828,11 @@ def main(argv=None):
         "--root", help="directory holding <robot>/queue (default: var/)"
     )
     qcmd.add_parser("status", help="per robot and draft kind: ready to skip approval?")
+    calib_p = sub.add_parser("calibration", help="shadow pairs and calibration maps")
+    calcmd = calib_p.add_subparsers(dest="cmd", required=True)
+    calcmd.add_parser(
+        "ingest", help="refit maps; land raw.shadow_pairs, raw.calibration_maps"
+    ).add_argument("--root", help="var/ directory holding the pairs (default: var/)")
     claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
     ccmd = claude_p.add_subparsers(dest="cmd", required=True)
     cingest = ccmd.add_parser(
@@ -965,7 +979,7 @@ def main(argv=None):
                       "heavy"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
-    if args.robot in ("evals", "queue", "claude"):
+    if args.robot in ("evals", "queue", "claude", "calibration"):
         globals()[f"{args.robot}_{args.cmd}"](args)
         return
     from light_labs.agents import rush
