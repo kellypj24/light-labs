@@ -3,7 +3,7 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-10-29._
+_Updated 2026-10-30._
 
 ## Now
 
@@ -26,6 +26,10 @@ _Updated 2026-10-29._
   `lab heavy watch` or Rush's `/lab` page follow one live. Both list loaded Ollama
   models (size, time to unload): a model is wired memory and the usual cause of a pressure
   pause outside any heavy job (Rush's hourly mail triage loads `qwen2.5:14b`).
+- Design principle for local vs paid models: `docs/system-1-system-2.md` (local first,
+  sanitized escalation, full context only past two gates; harness, not training). Build
+  plan: `docs/plans/decision-framework.md` (gate on every Claude call first, then
+  Jev-style calibration, typed questions and routing rules); no step started.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
