@@ -12,7 +12,7 @@ subscription) decides; code guards both.
 | Step | Who | What |
 |---|---|---|
 | Answer | Roll, local (`ROLL_CHORES_BRAIN`, default `ollama:llama3.1:8b`) | "Safe to merge with no human review?" yes/no by token probability. Recorded, never acted on. Skipped while a fight runs. |
-| Guard | code | Dependabot author, CI green, mergeable. Otherwise HOLD without calling Claude. |
+| Guard | code | Dependabot author, CI green, mergeable, and main has not changed the PR's directory (`.github/` for root PRs) since its head: CI that never ran against current code doesn't count. Otherwise HOLD without calling Claude; a stale PR gets `@dependabot rebase` on `--apply` and is decided again at its new head. |
 | Decide | Claude, tier by size | patch of lock files only: haiku. Minor: sonnet. Major (0.x minor counts), or files beyond lock files: opus. Notes that mention a breaking change, deprecation or removal: one tier up. Sonnet and opus get read-only Read/Grep/Glob in the repo. Answers MERGE or HOLD, and critiques Roll's answer. |
 | Merge | code, `--apply` only | `gh pr merge --squash --match-head-commit <reviewed sha>`, plus `--admin` when the run passes it; the squash body says who decided. At most one merge per directory per run (lock files conflict; Dependabot rebases the rest) and 10 a day. |
 

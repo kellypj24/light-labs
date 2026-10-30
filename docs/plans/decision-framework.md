@@ -1,7 +1,7 @@
 # Plan: decision framework and the sensitivity gate
 
-Status: approved with its spec, `docs/system-1-system-2.md`, in the same PR; no step started.
-Written 2026-10-30.
+Status: step 1 in review (gate records from 2026-10-30; `client-repo` denies, every other rule
+records until 2026-11-13). Written 2026-10-30.
 
 Builds what the spec describes: a gate on every Claude call, then a Jev-style decision
 framework on `decide.py` (calibration, named and score questions, routing rules, an
@@ -11,20 +11,36 @@ to those files on `main` before the step starts means re-reading the step.
 ## Steps
 
 1. **Sensitivity gate.** `light_labs/core/gate.py`: `check(source, system, user, tools,
-   cwd)` returns allow, sanitize or deny, from fixed rules:
-   - deny: content or `cwd` from client repos (recoup, dentasys-modernization), personal
-     mail senders, `memory.md` content, unreleased-ideas paths;
-   - repo tools (`tools`, `cwd`) only for repos on the allowlist;
-   - each verdict is recorded (source, verdict, rule, no payload) for the marts.
+   cwd)` evaluates fixed rules, records the verdict, and raises `Denied` when an enforced
+   rule denies. Rules (`ENFORCED` holds the ones that block):
+   - `client-repo` (deny, enforced): `cwd` in, or text naming, recoup or
+     dentasys-modernization;
+   - `memory` (deny): the source carries `memory.md`;
+   - `personal-mail` (sanitize): the source carries mail, or the text holds a
+     personal-domain address;
+   - `tool-repo` (deny): tools outside the allowlist;
+   - `unreleased` (sanitize): tools in an allowed repo; once enforced, adds
+     `--disallowedTools Read(./docs/plans/**),Read(./STATUS.md)`.
 
-   `ClaudeCLI.think` calls the gate and takes a required `source` (robot plus data kind).
-   `tests/test_gate.py` fails when a module other than `brain.py` runs `claude` or builds
-   `ClaudeCLI` without a source. Call sites to update: `agents/roll/chores.py`,
-   `agents/roll/calibrate.py`, `agents/rush/__init__.py` (`AUTO_BRAIN`),
-   `cli.py` (mail and keep teachers, `keep-fixtures`), `evals/run_one.py`,
-   `evals/dbt_model.py` (Bass).
-   Files: `light_labs/core/gate.py`, `light_labs/core/brain.py`, the call sites above,
-   `tests/test_gate.py`.
+   `gate.SOURCES` maps each caller's source to what it carries. `ClaudeCLI` requires
+   `source=`; `brain_for` refuses a `claude:` spec without one. `lab rush auto`, the one
+   full Claude Code session, calls `gate.check` itself (`rush/auto-handoff`).
+   `tests/test_gate.py` fails on a `claude` subprocess outside `brain.py` without
+   `gate.check` in the same function, and on a `ClaudeCLI` or `brain_for` call without a
+   known source. Verdicts go to `var/gate/verdicts.jsonl`; a Dagster asset loading them
+   into the marts is a follow-up. `sanitize.py` moves to `light_labs/core` here.
+   Files: `light_labs/core/gate.py`, `light_labs/core/brain.py`, `light_labs/core/sanitize.py`,
+   `light_labs/cli.py`, `light_labs/agents/roll/{chores,calibrate,keep}.py`,
+   `light_labs/evals/run_one.py`, `tests/test_gate.py`, `tests/test_sanitize.py`.
+
+1b. **Rush through the sanitizer.** Before the window ends (2026-11-13): Rush's Auto
+   prompt carries `memory.md` and its mail teacher carries real mail, personal senders
+   included, so both would fail `memory` and `personal-mail` once enforced. Put Rush's
+   notes and mail through `core/sanitize.py` (personal mail stays local, as Roll's does),
+   tested against the live model, several samples per case. Then add `memory`,
+   `personal-mail`, `tool-repo` and `unreleased` to `ENFORCED`.
+   Files: `light_labs/core/sanitize.py`, `light_labs/agents/rush/mail.py`,
+   `light_labs/cli.py` (`_auto`), `light_labs/core/gate.py`.
 
 2. **Calibration in core.** Generalise `agents/roll/calibrate.py` (per-question yes-bias
    baselines in `calibration.json`, Roll only) into `light_labs/core/calibrate.py`: an
@@ -76,4 +92,6 @@ When the last step lands, fold the result into the spec and archive this plan
   gate's rules.
 - Escalation stage: `Expect.label` with `escalate`/`handle`; no scorer change, so step 5
   drops `evals/scorer.go`.
-- `agents/roll/sanitize.py` moves to `light_labs/core` when a second robot needs it.
+- `sanitize.py` moves to `light_labs/core` in step 1: Rush is the second robot (step 1b).
+- Gate rules are constants in `gate.py`, not `rules/` (routing rules, step 4).
+- `lab rush auto` stays a full Claude Code session, checked by the gate before launch.

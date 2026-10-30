@@ -26,8 +26,8 @@ System 1 escalates when:
 - the stakes are high enough that a miss costs more than the call (lost keeps, merges).
 
 The default payload is a sanitized, generalized sub-problem: the question with identifying
-detail replaced by placeholders, built locally. Roll's `sanitize.py` is the first
-implementation (`docs/plans/roll-keep.md`, step 4b).
+detail replaced by placeholders, built locally by `light_labs/core/sanitize.py` (written
+for Roll, `docs/plans/roll-keep.md` step 4b).
 
 ## Full context: two gates
 

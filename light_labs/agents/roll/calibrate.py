@@ -44,7 +44,7 @@ def calibrate(spec, prs):
     import yaml
 
     fixture_ids = {f["id"] for f in yaml.safe_load(FIXTURES.read_text())["fixtures"]}
-    brain = brain_for(spec)
+    brain = brain_for(spec, source="roll/calibrate")
     rows = []
     for repo, pr in prs:
         if f"{repo.replace('-', '_')}_{pr}" in fixture_ids:

@@ -1,10 +1,12 @@
 import io
 import json
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest import mock
 
-from light_labs.core import brain
+from light_labs.core import brain, gate
 from light_labs.evals import run_one
 
 MEMORY = "# What Rush knows\n- Rush runs on a local model."
@@ -18,10 +20,17 @@ def envelope(payload):
 
 
 class BrainForTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()  # gate verdicts land here, not in var/
+        self.addCleanup(tmp.cleanup)
+        patch = mock.patch.object(gate.config, "VAR", Path(tmp.name))
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def test_specs(self):
         self.assertIsInstance(brain.brain_for("ollama:llama3.1:8b"), brain.Brain)
         self.assertEqual(brain.brain_for("ollama:llama3.1:8b").model, "llama3.1:8b")
-        self.assertIsInstance(brain.brain_for("claude:sonnet"), brain.ClaudeCLI)
+        self.assertIsInstance(brain.brain_for("claude:sonnet", source="evals/x"), brain.ClaudeCLI)
         self.assertIsInstance(brain.brain_for("mock"), brain.Mock)
         for bad in ("ollama", "claude:", "gpt:4", ""):
             with self.subTest(spec=bad), self.assertRaises(ValueError):
@@ -43,7 +52,7 @@ class BrainForTest(unittest.TestCase):
         )
         with mock.patch("subprocess.run", return_value=done) as run:
             with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "k"}):
-                b = brain.ClaudeCLI("sonnet")
+                b = brain.ClaudeCLI("sonnet", source="evals/x")
                 self.assertEqual(b.think("sys", "user"), "hi")
             self.assertIn("--bare", run.call_args.args[0])
             self.assertTrue(b.last["isolated"])
@@ -59,7 +68,7 @@ class BrainForTest(unittest.TestCase):
     def test_claude_cli_errors(self):
         failed = mock.Mock(returncode=1, stdout="", stderr="not logged in")
         with mock.patch("subprocess.run", return_value=failed), self.assertRaises(RuntimeError):
-            brain.ClaudeCLI("sonnet").think("s", "u")
+            brain.ClaudeCLI("sonnet", source="evals/x").think("s", "u")
 
 
 class RunOneTest(unittest.TestCase):
