@@ -88,7 +88,7 @@ def run(payload):
     stage = STAGES.get(payload.get("stage"))
     if stage is None:
         raise ValueError(f"unknown stage {payload.get('stage')!r}; known: {', '.join(STAGES)}")
-    brain = brain_for(payload["brain"])
+    brain = brain_for(payload["brain"], source=f"evals/{payload['stage']}")
     # stdout carries only the envelope; anything a stage's tools print (dbt logs its
     # errors there even with --quiet) goes to stderr.
     with contextlib.redirect_stdout(sys.stderr):

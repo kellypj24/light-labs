@@ -14,8 +14,8 @@ import re
 from collections import Counter
 from datetime import UTC, datetime
 
-from light_labs.agents.roll import sanitize
 from light_labs.agents.rush.mail import prompt
+from light_labs.core import sanitize
 
 KEEP = ("finance", "security", "receipts", "school", "health", "insurance", "legal-tax", "people")
 DISCARD = ("promotion", "newsletter", "job-alert", "notification", "marketing")

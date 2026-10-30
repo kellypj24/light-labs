@@ -26,12 +26,15 @@ def pr(number, title, files=("orchestration/airflow/uv.lock",), checks=GREEN, he
 class FakeRepo:
     path = Path("/repo")
 
-    def __init__(self, prs, states=None):
+    def __init__(self, prs, states=None, main_files=()):
         self.prs, self.states, self.calls = prs, states or {}, []
+        self.main_files = list(main_files)
 
     def gh_json(self, *args):
         if args[:2] == ("repo", "view"):
-            return {"nameWithOwner": "pj/de"}
+            return {"nameWithOwner": "pj/de", "defaultBranchRef": {"name": "main"}}
+        if args[0] == "api" and "/compare/" in args[1]:
+            return {"files": [{"filename": f} for f in self.main_files]}
         if args[:2] == ("pr", "list"):
             return self.prs
         if args[:2] == ("pr", "view"):
@@ -189,6 +192,20 @@ class ChoresTest(unittest.TestCase):
 
         self.assertEqual(tier("Wildcard selectors now match nested models"), "minor")
         self.assertEqual(tier("Rename internals; no user-facing behavior change"), "patch")
+
+    def test_main_moving_under_the_pr_holds_it_for_a_rebase(self):
+        title = "Bump b from 1.0 to 1.1 in /orchestration/airflow"
+        repo = FakeRepo([pr(9, title)], main_files=["orchestration/airflow/tests/t.py"])
+        ((_, action, note),) = self.chores(repo).run()
+        self.assertEqual(action, "hold")
+        self.assertIn("since CI ran", note)
+        self.assertEqual(self.brother.models, [])  # code held it; Claude never asked
+        self.assertIn(("pr", "comment", "9", "--body", "@dependabot rebase"), repo.calls)
+
+    def test_main_moving_elsewhere_does_not_hold(self):
+        title = "Bump b from 1.0 to 1.1 in /orchestration/airflow"
+        repo = FakeRepo([pr(9, title)], main_files=["orchestration/dagster/x.py", "STATUS.md"])
+        self.assertEqual(self.chores(repo).run()[0][1], "merged")
 
     def test_verdict_without_a_line_is_a_hold(self):
         self.assertEqual(chores.verdict("looks fine to me")[0], "HOLD")

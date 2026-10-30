@@ -30,7 +30,7 @@ CHORES_BRAIN = os.environ.get("ROLL_CHORES_BRAIN", "ollama:llama3.1:8b")
 
 # Mail keep (keep.py): the brain that earned the mail-keep weapon, and the cloud teacher for
 # shadow labelling. The teacher reads only the sanitized view and never personal mail
-# (sanitize.py; PJ 2026-10-28). Off by default: ROLL_KEEP_TEACHER=claude:sonnet turns it on.
+# (core/sanitize.py; PJ 2026-10-28). Off by default: ROLL_KEEP_TEACHER=claude:sonnet turns it on.
 def weapon_brain(stage):
     return next((w["brain"] for w in ENTRY["weapons"] if w["stage"] == stage), None)
 

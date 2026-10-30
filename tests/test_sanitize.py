@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from light_labs.agents.roll import keep, sanitize
+from light_labs.agents.roll import keep
+from light_labs.core import sanitize
 
 # Invented, but shaped like the real thing; none of these may reach the rewriter.
 RAW = (

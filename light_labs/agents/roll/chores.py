@@ -171,7 +171,8 @@ class Chores:
     def __init__(self, repo, store, roll, big_brother, apply=False, cap=DAILY_CAP, admin=False):
         self.repo, self.store, self.roll, self.admin = repo, store, roll, admin
         self.big_brother, self.apply, self.cap = big_brother, apply, cap
-        self.name = repo.gh_json("repo", "view", "--json", "nameWithOwner")["nameWithOwner"]
+        view = repo.gh_json("repo", "view", "--json", "nameWithOwner,defaultBranchRef")
+        self.name, self.main = view["nameWithOwner"], view["defaultBranchRef"]["name"]
 
     def run(self):
         """[(pr number, action, note)] for each open Dependabot PR, after settling holds
@@ -208,7 +209,9 @@ class Chores:
                 roll = answer(self.roll, f)
             except (OSError, RuntimeError) as e:
                 self.store.journal(f"Roll could not answer on #{f['number']}: {e}")
-        why = blocked(f)
+        why = blocked(f) or self.stale(f)
+        if why and why.startswith("main changed") and self.apply:
+            self.repo.gh("pr", "comment", str(f["number"]), "--body", "@dependabot rebase")
         model = critique = question = None
         if why:
             call, question = "HOLD", why
@@ -248,6 +251,18 @@ class Chores:
             self.store.journal(f"merged {self.name}#{f['number']} ({model}): {why}")
             return f["number"], "merged", why
         return f["number"], "hold", self._note(f, roll, model, question, why)
+
+    def stale(self, f):
+        """Why the PR's green CI no longer counts, or None: main changed files in the PR's
+        directory since its head, so CI never ran against them (#288: a test that landed
+        on main after the PR opened failed on duckdb 2.0). The PR waits for a rebase."""
+        cmp = self.repo.gh_json("api", f"repos/{self.name}/compare/{f['head']}...{self.main}")
+        d = f["directory"].strip("/")
+        prefix = f"{d}/" if d else ".github/"
+        hit = [x["filename"] for x in cmp.get("files") or [] if x["filename"].startswith(prefix)]
+        if not hit:
+            return None
+        return f"main changed {len(hit)} file(s) in {prefix} since CI ran; rebasing"
 
     def _note(self, f, roll, model, question, why):
         said = f"roll {roll['choice']} {roll['p_yes']:.2f}" if roll else "roll -"
@@ -302,8 +317,10 @@ def big_brother(repo_path):
 
     def for_tier(model):
         if model == "haiku":
-            return ClaudeCLI(model)
-        return ClaudeCLI(model, timeout=600, tools="Read,Grep,Glob", cwd=str(repo_path))
+            return ClaudeCLI(model, source="roll/chores")
+        return ClaudeCLI(
+            model, source="roll/chores", timeout=600, tools="Read,Grep,Glob", cwd=str(repo_path)
+        )
 
     return for_tier
 
@@ -315,7 +332,7 @@ def roll_brain(spec):
 
     if not spec or live_fight(config.VAR / "evals"):
         return None
-    return brain_for(spec)
+    return brain_for(spec, source="roll/chores")
 
 
 def scorecard(store):

@@ -16,6 +16,7 @@ import time
 import urllib.request
 
 from light_labs import config
+from light_labs.core import gate
 
 
 class Brain:
@@ -96,15 +97,20 @@ class ClaudeCLI:
     ANTHROPIC_API_KEY set it runs `--bare` (billed to the key); without one it uses the
     logged-in subscription with `--setting-sources project` from an empty directory, which
     skips the user's settings, hooks (no Stop chime per call) and ~/.claude/CLAUDE.md.
+
+    Every call passes the sensitivity gate (`gate.check`) under its `source` first.
     """
 
-    def __init__(self, model, timeout=300, tools="", cwd=None):
+    def __init__(self, model, *, source, timeout=300, tools="", cwd=None):
+        gate.carries(source)  # an unknown source fails here, not on the first call
         self.model = model
+        self.source = source
         self.timeout = timeout
         self.tools, self.cwd = tools, cwd
         self.last = {}
 
     def think(self, system, user, temperature=None, num_ctx=None):
+        verdict = gate.check(self.source, system, user, self.tools, self.cwd)
         isolated = bool(os.environ.get("ANTHROPIC_API_KEY"))  # else: subscription
         cmd = [
             "claude",
@@ -123,6 +129,8 @@ class ClaudeCLI:
         cmd += ["--bare"] if isolated else ["--setting-sources", "project"]
         if self.tools:
             cmd += [f"--allowedTools={self.tools}"]  # variadic: a bare value eats the prompt
+        if verdict.disallowed:
+            cmd += [f"--disallowedTools={','.join(verdict.disallowed)}"]
         start = time.monotonic()
         with tempfile.TemporaryDirectory() as empty:
             proc = subprocess.run(
@@ -170,12 +178,15 @@ class Mock:
         return "Thanks, good to hear from you."
 
 
-def brain_for(spec, **kwargs):
+def brain_for(spec, source=None, **kwargs):
+    """A brain for `spec`. A `claude:` spec needs the gate `source` of its caller."""
     kind, _, model = spec.partition(":")
     if kind == "ollama" and model:
         return Brain(model, **kwargs)
     if kind == "claude" and model:
-        return ClaudeCLI(model, **kwargs)
+        if not source:
+            raise ValueError(f"{spec}: a claude brain needs a gate source")
+        return ClaudeCLI(model, source=source, **kwargs)
     if spec == "mock":
         return Mock()
     raise ValueError(f"unknown brain spec {spec!r} (want ollama:<tag>, claude:<model>, mock)")

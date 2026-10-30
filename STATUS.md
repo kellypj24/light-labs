@@ -28,8 +28,10 @@ _Updated 2026-10-30._
   pause outside any heavy job (Rush's hourly mail triage loads `qwen2.5:14b`).
 - Design principle for local vs paid models: `docs/system-1-system-2.md` (local first,
   sanitized escalation, full context only past two gates; harness, not training). Build
-  plan: `docs/plans/decision-framework.md` (gate on every Claude call first, then
-  Jev-style calibration, typed questions and routing rules); no step started.
+  plan: `docs/plans/decision-framework.md`. Step 1 (sensitivity gate on every Claude
+  call) in review: `client-repo` denies, other rules record to `var/gate/verdicts.jsonl`
+  until 2026-11-13. Step 1b (Rush's notes and mail through `core/sanitize.py`) must land
+  before then.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 

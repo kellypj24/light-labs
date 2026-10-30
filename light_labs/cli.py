@@ -191,7 +191,7 @@ def _mail(store, rush):
     if rush.MAIL_TEACHER and not rush.mail_weapon():
         from light_labs.core.brain import brain_for
 
-        teacher = brain_for(rush.MAIL_TEACHER)
+        teacher = brain_for(rush.MAIL_TEACHER, source="rush/mail-teacher")
     mail.check(
         store,
         rush.MAIL_ACCOUNTS,
@@ -274,7 +274,9 @@ def _auto(rush):
     repo = {"tools": "Read,Grep,Glob", "cwd": str(config.REPO), "timeout": 600}
     return {
         "brain": brain_for(
-            rush.AUTO_BRAIN, **(repo if rush.AUTO_BRAIN.startswith("claude:") else {})
+            rush.AUTO_BRAIN,
+            source="rush/auto",
+            **(repo if rush.AUTO_BRAIN.startswith("claude:") else {}),
         ),
         "system": AUTO_SYSTEM + notes,
         "signoff": rush.AUTO_SIGNOFF,
@@ -485,6 +487,10 @@ def rush_escalate(args, store, rush):
         f"escalated the work in {path}. Do a first pass and write the result to {out}. "
         "Do not post anything to Agent Net; PJ reviews first."
     )
+    from light_labs.core import gate
+
+    # A full Claude Code session, so the gate sees the prompt and the escalation it reads.
+    gate.check("rush/auto-handoff", "", f"{prompt}\n{path.read_text()}", "*", os.getcwd())
     subprocess.run(["claude", "-p", prompt], check=True)
 
 
@@ -508,7 +514,8 @@ def rush_mail_fixtures(args, store, rush):
 
     if not rush.MAIL_TEACHER:
         sys.exit("RUSH_MAIL_TEACHER is not set")
-    made = mail.fixture_candidates(store, brain_for(rush.MAIL_TEACHER), args.limit)
+    teacher = brain_for(rush.MAIL_TEACHER, source="rush/mail-fixtures")
+    made = mail.fixture_candidates(store, teacher, args.limit)
     for fx in made:
         print(f"{fx['id']}: {fx['label']} (local said {fx['student_label']})")
     print(f"{len(made)} candidate(s) in {store.root / 'mail' / 'fixture-candidates.jsonl'}")
@@ -572,7 +579,8 @@ def roll_keep(args, bot, roll):
     from light_labs.core.brain import brain_for
 
     if args.cmd == "keep-fixtures":
-        made, personal = keep.fixture_candidates(roll.HOME, brain_for("claude:sonnet"), args.limit)
+        teacher = brain_for("claude:sonnet", source="roll/keep-fixtures")
+        made, personal = keep.fixture_candidates(roll.HOME, teacher, args.limit)
         print(f"{len(made)} candidates -> {roll.HOME / 'keep' / 'fixture-candidates.jsonl'}; "
               f"{personal} personal emails skipped (stay local)")  # fmt: skip
         return
@@ -580,12 +588,14 @@ def roll_keep(args, bot, roll):
         sys.exit("no mail-keep brain: Roll has no mail-keep weapon and ROLL_KEEP_BRAIN is unset")
     from light_labs.core import heavy
 
-    teacher = brain_for(roll.KEEP_TEACHER) if roll.KEEP_TEACHER else None
+    teacher = (
+        brain_for(roll.KEEP_TEACHER, source="roll/keep-teacher") if roll.KEEP_TEACHER else None
+    )
     try:
         detail = {"label": args.label, "sample": args.sample}
         with heavy.job("roll-keep", force=args.force, detail=detail) as guard:
             records = keep.shadow(
-                bot.gmail, brain_for(roll.KEEP_BRAIN), teacher, args.label, args.sample,
+                bot.gmail, brain_for(roll.KEEP_BRAIN, source="roll/keep"), teacher, args.label, args.sample,
                 roll.HOME, pace=guard.check, on_picked=lambda n: heavy.note(total=n),
             )  # fmt: skip
     except heavy.Busy as e:
