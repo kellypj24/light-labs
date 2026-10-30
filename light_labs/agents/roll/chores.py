@@ -139,8 +139,11 @@ def state(f):
 
 def answer(brain, f):
     """Roll's yes/no on a PR: what a run records and the dependabot-merge stage scores."""
-    a = ask(brain, state(f), QUESTION)
-    return {"choice": a.choice, "p_yes": round(a.p(), 3)}
+    a = ask(brain, state(f), QUESTION, key="chores-merge")
+    model = getattr(brain, "model", None)
+    spec = f"ollama:{model}" if model and hasattr(brain, "choose") else model
+    return {"choice": a.choice, "p_yes": round(a.p(), 3), "p_raw": round(a.raw["yes"], 3),
+            "brain": spec}  # fmt: skip
 
 
 def blocked(f):

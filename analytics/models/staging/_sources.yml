@@ -59,3 +59,28 @@ sources:
             tests:
               - unique
               - not_null
+      - name: shadow_pairs
+        description: >
+          One local yes/no answer's raw probability against the label it should have had
+          (Claude's verdict, or a ground truth such as a PR title's type). Reloaded in full
+          by `lab calibration ingest` from var/<robot>/pairs/*.jsonl and Roll's Dependabot
+          queue; brain is NULL on answers recorded before it was. Eval fixtures are left out.
+        columns:
+          - name: robot
+            tests:
+              - not_null
+          - name: question
+            tests:
+              - not_null
+      - name: calibration_maps
+        description: >
+          One map per robot, question and brain, fitted by `lab calibration ingest`:
+          Platt or isotonic when it beats the raw probability on held-out Brier score,
+          else identity (too few pairs, one class, or no gain). Brier and ECE before and
+          after; the held-out numbers are NULL for identity maps that never fitted.
+        columns:
+          - name: method
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ["platt", "isotonic", "identity"]

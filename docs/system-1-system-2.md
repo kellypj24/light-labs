@@ -104,7 +104,7 @@ Authored rules in files, derived data in DuckDB:
 | Rules, queryable | dbt seed of the YAML, loaded by Dagster | Joins with decision records |
 | Rule hits | Each decision record names the rule that fired | Marts give hit rate, agreement with Claude and missed escalations per rule |
 | Rule proposals from System 2 | DuckDB table, written through Dagster; a command turns accepted ones into a PR against the YAML | Fast capture, reviewed adoption |
-| Calibration maps | Dagster asset in DuckDB, read-only by robots | Fitted from records, rebuildable |
+| Calibration maps | Dagster asset in DuckDB (`raw.calibration_maps`), exported to `var/calibration/maps.json` for robots | Fitted from records, rebuildable; robots never open the file Dagster writes |
 
 ## Where the lab stands
 

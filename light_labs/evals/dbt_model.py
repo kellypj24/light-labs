@@ -228,7 +228,7 @@ def _invoke(runner, project, args):
 
 def prepare():
     """Path to the cached database: synthetic raw data plus the built project."""
-    from light_labs.core import claude_results, queue_results
+    from light_labs.core import calibration_results, claude_results, queue_results
     from light_labs.evals import results
 
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -249,6 +249,8 @@ def prepare():
             results.ingest_health(Path(tmp) / "no-runs", db=building)
             # ...and Claude Code's usage; empty here too.
             claude_results.ingest([Path(tmp) / "no-transcripts"], db=building)
+            # ...and calibration; empty, and never exported over the robots' maps.
+            calibration_results.ingest(Path(tmp) / "no-pairs", db=building, export=False)
             res = dbt(copy_project(Path(tmp) / "project"), building, "build")
             if not res.success:
                 failed = [

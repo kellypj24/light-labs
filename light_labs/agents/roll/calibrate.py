@@ -3,7 +3,8 @@
 A question has its own yes-bias per brain, so classify() compares an answer with that
 question's baseline: the mean yes-probability across change types, from PRs whose type is
 known from their titles. The commit-message fixtures are refused here, so the fight still
-measures generalisation.
+measures generalisation. Each PR is also a shadow pair (raw p against "the title says
+chore") in var/roll/pairs/deps.jsonl, which core/calibrate.py fits a map from.
 
     uv run --group analytics python -m light_labs.agents.roll.calibrate \\
         ollama:llama3.1:8b data-engineering:84 scouter:17 ...
@@ -16,6 +17,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from light_labs import config
 from light_labs.agents.roll import NUM_CTX
 from light_labs.agents.roll.writer import DEPS
 from light_labs.core.brain import brain_for
@@ -72,7 +74,30 @@ def calibrate(spec, prs):
             for t, ps in sorted(by_type.items())
         },
         "prs": [r["pr"] for r in rows],
+        "pairs": [
+            {
+                "robot": "roll",
+                "question": q,
+                "brain": spec,
+                "p": round(r["p"][q], 4),
+                "label": r["type"] == "chore",
+                "source_id": r["pr"],
+                "label_by": "pr-title",
+                "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            }
+            for r in rows
+            for q in QUESTIONS
+        ],
     }
+
+
+def write_pairs(spec, pairs):
+    """Replace this brain's pairs in var/roll/pairs/deps.jsonl."""
+    path = config.VAR / "roll" / "pairs" / "deps.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    keep = [json.loads(x) for x in path.read_text().splitlines()] if path.exists() else []
+    rows = [p for p in keep if p["brain"] != spec] + pairs
+    path.write_text("".join(json.dumps(p) + "\n" for p in rows))
 
 
 def baseline(brain, question):
@@ -95,9 +120,10 @@ def main(argv=None):
     except subprocess.CalledProcessError as e:
         sys.exit(f"gh failed: {e.stderr}")
     data = load()
-    data[spec] = result
+    data[spec] = {k: v for k, v in result.items() if k != "pairs"}
     CALIBRATION.write_text(json.dumps(data, indent=2) + "\n")
-    print(json.dumps(result, indent=2))
+    write_pairs(spec, result["pairs"])
+    print(json.dumps(data[spec], indent=2))
 
 
 if __name__ == "__main__":

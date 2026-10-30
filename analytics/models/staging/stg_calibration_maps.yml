@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_calibration_maps
+    description: One row per robot, question and brain with a map.
+    columns:
+      - name: map_key
+        description: robot | question | brain
+        tests:
+          - unique
+          - not_null
+      - name: status
+        description: fitted, too-few, one-class or no-gain
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["fitted", "too-few", "one-class", "no-gain"]
+      - name: brier_cal
+        description: Held-out Brier score of the fitted method; NULL when never fitted
+      - name: params
+        description: Platt a, b or isotonic x, y; empty for identity

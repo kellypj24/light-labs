@@ -3,6 +3,7 @@
 from dagster import AssetSelection, define_asset_job
 
 from light_labs.orchestration.assets import (
+    calibration,
     claude_records,
     eval_run_health,
     eval_samples,
@@ -16,8 +17,9 @@ evals_job = define_asset_job(
 )
 queue_job = define_asset_job(
     "queue_job",
-    selection=AssetSelection.assets(queue_items).downstream(),
-    description="Land the approval queues, then build what reads them.",
+    selection=AssetSelection.assets(queue_items, calibration).downstream(),
+    description="Land the approval queues and refit calibration (Roll's Dependabot answers "
+    "are pairs), then build what reads them.",
 )
 claude_job = define_asset_job(
     "claude_job",

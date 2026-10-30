@@ -30,9 +30,11 @@ _Updated 2026-10-30._
   sanitized escalation, full context only past two gates; harness, not training). Build
   plan: `docs/plans/decision-framework.md`. Step 1 live: a sensitivity gate on every
   Claude call; `client-repo` denies, other rules record to `var/gate/verdicts.jsonl`.
-  Step 1b in review: Rush's teacher labels from the sanitized view (48/50 against its
+  Step 1b live: Rush's teacher labels from the sanitized view (48/50 against its
   full-view labels), personal mail stays local, Auto's notes leave scrubbed. On
-  2026-11-13, read the verdicts and enforce the remaining rules.
+  2026-11-13, read the verdicts and enforce the remaining rules. Step 2a (calibration
+  maps per brain and question, `mart_calibration`) in review; first real map, Roll's
+  `deps` on `llama3.1:8b`, stays identity (raw p already calibrated). 2b replays mail-keep.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 

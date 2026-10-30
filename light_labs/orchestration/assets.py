@@ -86,6 +86,33 @@ def claude_records(context: AssetExecutionContext) -> None:
     context.add_output_metadata({"new": new, "rows": total})
 
 
+@multi_asset(
+    specs=[
+        AssetSpec(
+            AssetKey(["raw", "shadow_pairs"]),
+            description="Local answers' raw p against their labels, from var/<robot>/pairs "
+            "and Roll's queue.",
+        ),
+        AssetSpec(
+            AssetKey(["raw", "calibration_maps"]),
+            description="One fitted map per robot, question and brain; also exported to "
+            "var/calibration/maps.json for robots.",
+        ),
+    ],
+    group_name="landing",
+    retry_policy=LOCKED,
+)
+def calibration(context: AssetExecutionContext):
+    """`lab calibration ingest`: reload the pairs, fit, land both tables."""
+    from dagster import MaterializeResult
+
+    from light_labs.core import calibration_results
+
+    pairs, fitted = calibration_results.ingest(config.VAR)
+    yield MaterializeResult(asset_key=["raw", "shadow_pairs"], metadata={"rows": pairs})
+    yield MaterializeResult(asset_key=["raw", "calibration_maps"], metadata={"fitted": fitted})
+
+
 class Translator(DagsterDbtTranslator):
     """dbt models grouped by layer: staging, intermediate, marts."""
 
@@ -100,5 +127,5 @@ def analytics(context: AssetExecutionContext, dbt: DbtCliResource):
     yield from dbt.cli(["build"], context=context).stream()
 
 
-LANDING = [eval_samples, eval_run_health, queue_items, claude_records]
+LANDING = [eval_samples, eval_run_health, queue_items, claude_records, calibration]
 ALL_ASSETS = [*LANDING, analytics]
