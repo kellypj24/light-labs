@@ -267,9 +267,12 @@ def _auto(rush):
     if not rush.AUTO_BRAIN:
         return None
     from light_labs.agents.rush.heartbeat import AUTO_SYSTEM
+    from light_labs.core import sanitize
     from light_labs.core.brain import brain_for
 
     notes = (rush.MEMORY if rush.MEMORY.exists() else rush.HERE / "memory.example.md").read_text()
+    if rush.AUTO_BRAIN.startswith("claude:"):
+        notes = sanitize.notes(notes)  # leaves the laptop: no Private section, scrubbed
     # Claude reads the repo to answer; nothing it can run or write.
     repo = {"tools": "Read,Grep,Glob", "cwd": str(config.REPO), "timeout": 600}
     return {

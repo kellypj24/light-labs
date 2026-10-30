@@ -54,6 +54,21 @@ class SanitizeTest(unittest.TestCase):
                        "Chase <alerts@chase.com>", "Orders <orders@shop.example.com>"):  # fmt: skip
             self.assertFalse(sanitize.is_personal({"from": sender}), sender)
 
+    def test_notes_drop_private_keep_dates(self):
+        text = (
+            "## Work so far\n- 2026-10-05: shipped v2 for nova@lab.example.com, see "
+            "https://example.com/a; port 8443 1234\n## Private\n- Ketan's token lives in X\n"
+            "## Open threads\n- owed 2026-11-01\n"
+        )
+        out = sanitize.notes(text)
+        self.assertNotIn("Private", out)
+        self.assertNotIn("token", out)
+        self.assertIn("2026-10-05", out)
+        self.assertIn("2026-11-01", out)
+        self.assertIn("## Open threads", out)
+        for raw in ("nova@lab", "https://", "1234"):
+            self.assertNotIn(raw, out)
+
     def test_scrub_placeholders(self):
         self.assertEqual(
             sanitize.scrub("Dana: $1,204.18, card 4417 1234 5678 9010, (614) 555-0142", ["dana"]),

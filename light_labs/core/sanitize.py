@@ -1,6 +1,8 @@
-"""The sanitized view of an email: what may leave the laptop for the teacher.
+"""What may leave the laptop for a teacher: the sanitized view of an email, and a robot's
+notes (`notes`).
 
-docs/plans/roll-keep.md step 4b. Personal mail never leaves: a consumer mailbox
+docs/plans/roll-keep.md step 4b; Rush's mail teacher and Auto's notes use it too
+(docs/plans/decision-framework.md step 1b). Personal mail never leaves: a consumer mailbox
 (gmail.com and the like), or a domain that carries the sender's own name (a family or
 vanity domain). Roll keeps it as `keep/people`. Everything else goes as its sender
 domain, Gmail category, unsubscribe flag, and subject and snippet with amounts, numbers,
@@ -12,7 +14,7 @@ other than the sender's are not caught yet (the weapon-brain pass comes later).
 import re
 from email.utils import parseaddr
 
-from light_labs.agents.rush.mail import SNIPPET_CHARS
+SNIPPET_CHARS = 600  # of an email's text, for the local model and the sanitized view
 
 # Consumer mailboxes and relays: a sender here is a person, not an organization.
 PERSONAL = re.compile(
@@ -86,6 +88,21 @@ def scrub(text, names=()):
     for w in sorted(names, key=len, reverse=True):
         # never inside a placeholder like <phone>
         text = re.sub(rf"(?<![\w<]){re.escape(w)}(?![\w>])", "<name>", text, flags=re.IGNORECASE)
+    return text
+
+
+DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+PRIVATE = re.compile(r"^## Private\b.*?(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+
+
+def notes(text):
+    """A robot's memory.md as it may leave: the `## Private` section dropped, the rest
+    scrubbed. ISO dates stay; the notes are a dated log."""
+    text = PRIVATE.sub("", text or "")
+    dates = DATE.findall(text)
+    text = scrub(DATE.sub("\0", text))
+    for d in dates:
+        text = text.replace("\0", d, 1)
     return text
 
 

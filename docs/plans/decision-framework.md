@@ -1,7 +1,7 @@
 # Plan: decision framework and the sensitivity gate
 
-Status: step 1 in review (gate records from 2026-10-30; `client-repo` denies, every other rule
-records until 2026-11-13). Written 2026-10-30.
+Status: step 1 done 2026-10-30 (#91; `client-repo` denies, every other rule records until
+2026-11-13); step 1b in review. Written 2026-10-30.
 
 Builds what the spec describes: a gate on every Claude call, then a Jev-style decision
 framework on `decide.py` (calibration, named and score questions, routing rules, an
@@ -35,10 +35,19 @@ to those files on `main` before the step starts means re-reading the step.
 
 1b. **Rush through the sanitizer.** Before the window ends (2026-11-13): Rush's Auto
    prompt carries `memory.md` and its mail teacher carries real mail, personal senders
-   included, so both would fail `memory` and `personal-mail` once enforced. Put Rush's
-   notes and mail through `core/sanitize.py` (personal mail stays local, as Roll's does),
-   tested against the live model, several samples per case. Then add `memory`,
-   `personal-mail`, `tool-repo` and `unreleased` to `ENFORCED`.
+   included, so both would fail `memory` and `personal-mail` once enforced. Rush now:
+   - mail teacher: labels only, from `sanitize.view`; personal mail and rule-filed bulk
+     mail never reach it; summaries stay local, rewritten when the teacher's label moves
+     mail into or out of `needs_reply`;
+   - `lab rush queue`: the rewriter reads the sanitized view and skips personal mail;
+   - Auto's notes: `sanitize.notes` drops `## Private` and scrubs the rest, dates kept;
+     the gate's `memory` rule also fires on an unscrubbed `## Private` heading.
+
+   Live check, 2026-10-30: 50 non-personal emails Sonnet had labelled on the full view,
+   re-labelled on the sanitized view: 48/50 (bar 0.90). Misses: one `needs_reply` to
+   `fyi`, one `receipt` to `fyi`.
+   Still to do, in its own PR on 2026-11-13: add `memory`, `personal-mail`, `tool-repo`
+   and `unreleased` to `ENFORCED` after reading `var/gate/verdicts.jsonl`.
    Files: `light_labs/core/sanitize.py`, `light_labs/agents/rush/mail.py`,
    `light_labs/cli.py` (`_auto`), `light_labs/core/gate.py`.
 
@@ -95,3 +104,7 @@ When the last step lands, fold the result into the spec and archive this plan
 - `sanitize.py` moves to `light_labs/core` in step 1: Rush is the second robot (step 1b).
 - Gate rules are constants in `gate.py`, not `rules/` (routing rules, step 4).
 - `lab rush auto` stays a full Claude Code session, checked by the gate before launch.
+- Step 1b: Rush's personal mail stays local; the teacher labels from the sanitized view and
+  the local model writes every summary; `memory.md` leaves scrubbed with a `## Private`
+  section that never leaves; board posts go to Auto as written; the mail rewriter reads the
+  sanitized view.

@@ -68,9 +68,7 @@ class GateTest(unittest.TestCase):
 
     def test_other_rules_record_without_blocking(self):
         v = gate.check("rush/auto", "notes", "Dana <dana@gmail.com> asked", "Read", "/tmp")
-        self.assertEqual(
-            v.hits, {"memory": "deny", "personal-mail": "sanitize", "tool-repo": "deny"}
-        )
+        self.assertEqual(v.hits, {"personal-mail": "sanitize", "tool-repo": "deny"})
         self.assertEqual(v.action, "deny")
         self.assertFalse(v.blocked)
         (row,) = self.rows()
@@ -83,6 +81,11 @@ class GateTest(unittest.TestCase):
             v = gate.check("roll/chores", "s", "u", "Read,Grep,Glob", str(config.REPO))
         self.assertEqual(v.disallowed, ("Read(./docs/plans/**)", "Read(./STATUS.md)"))
         self.assertFalse(v.blocked)
+
+    def test_unscrubbed_notes_hit_the_memory_rule(self):
+        v = gate.check("rush/auto", "notes\n## Private\n- secret", "u")
+        self.assertEqual(v.hits, {"memory": "deny"})
+        self.assertEqual(gate.check("rush/auto", "notes", "u").hits, {})
 
     def test_clean_call_allowed(self):
         self.assertEqual(gate.check("evals/mail-keep", "s", "synthetic").action, "allow")

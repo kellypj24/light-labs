@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from light_labs import config
+from light_labs.core import sanitize
 from light_labs.core.sanitize import PERSONAL
 
 CLIENT_REPOS = ("recoup", "dentasys-modernization")
@@ -27,10 +28,10 @@ UNRELEASED = {repo: ("docs/plans/**", "STATUS.md") for repo in TOOL_REPOS}
 
 # What each source carries, as its caller hands it over. "evals/<stage>" is synthetic.
 SOURCES = {
-    "rush/auto": {"memory", "board"},
+    "rush/auto": {"board"},  # memory.md through sanitize.notes
     "rush/auto-handoff": {"board"},
-    "rush/mail-teacher": {"mail"},
-    "rush/mail-fixtures": {"mail"},
+    "rush/mail-teacher": set(),  # sanitized view, personal mail skipped
+    "rush/mail-fixtures": set(),
     "roll/keep": {"mail"},
     "roll/keep-teacher": set(),  # sanitized view, personal mail skipped
     "roll/keep-fixtures": set(),
@@ -97,7 +98,7 @@ def evaluate(source, text, tools="", cwd=None):
     repo = repo_name(cwd) if cwd else None
     if repo in CLIENT_REPOS or CLIENT_TEXT.search(text):
         v.hits["client-repo"] = "deny"
-    if "memory" in tags:
+    if "memory" in tags or sanitize.PRIVATE.search(text):
         v.hits["memory"] = "deny"
     personal = any(PERSONAL.fullmatch(d.lower()) for d in PERSONAL_ADDRESS.findall(text))
     if "mail" in tags or personal:
