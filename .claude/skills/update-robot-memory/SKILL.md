@@ -17,4 +17,7 @@ of finishing any task done as a robot's actor.
   "will answer soon".
 - Keep it short. It is in every prompt, and the model's context is small. Merge or prune
   old entries once they no longer affect what the robot should say.
+- Notes go to Auto's cloud brain scrubbed (`sanitize.notes`: addresses, URLs, ids and
+  numbers replaced; dates kept). What it must not see at all goes under `## Private`,
+  which never leaves the laptop.
 - If the structure changes, update `memory.example.md` to match.

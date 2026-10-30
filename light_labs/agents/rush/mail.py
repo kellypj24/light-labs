@@ -2,8 +2,10 @@
 
 Each tick reads new inbox mail in every account in RUSH_MAIL_ACCOUNTS (read-only Gmail,
 google.py), labels it, and texts PJ once about anything that needs a reply. The model is
-Rush's local brain, so message contents never leave the Mac; the text to PJ carries only
-sender, subject and a one-line summary, and the full list is on the remote page.
+Rush's local brain. While Rush has no mail-triage weapon, a teacher labels too, from the
+sanitized view only (core/sanitize.py) and never on personal mail; summaries are always
+local. The text to PJ carries only sender, subject and a one-line summary, and the full
+list is on the remote page.
 
 Labels:
     needs_reply  a person (or a business about PJ's account) is waiting on PJ
@@ -22,9 +24,10 @@ import json
 import re
 
 from light_labs.agents.rush.phone import PREFIX, quiet
+from light_labs.core import sanitize
+from light_labs.core.sanitize import SNIPPET_CHARS
 
 LABELS = ("needs_reply", "unsorted", "fyi", "receipt", "newsletter", "spam")
-SNIPPET_CHARS = 600
 SUMMARY_CHARS = 140
 SEED = 50  # first look at an account: remember this many, triage none
 KEEP_SEEN = 500
@@ -96,14 +99,17 @@ def triage(brain, msg):
     if msg.get("category") == "promotions" and msg.get("unsubscribe"):
         return {"label": "newsletter", "summary": msg.get("subject", "")[:SUMMARY_CHARS],
                 "raw": "", "by": "rule"}  # fmt: skip
-    text = prompt(msg)
-    raw = brain.think(CLASSIFY, f"{text}\nLabel:", temperature=0)
+    raw = brain.think(CLASSIFY, f"{prompt(msg)}\nLabel:", temperature=0)
     label = parse_label(raw)
-    # The summary call is told the label, so a needs_reply summary says what is asked.
-    task = ASK if label in (None, "needs_reply") else NOTE
-    summary = parse_summary(brain.think(SUMMARIZE.format(task=task), text, temperature=0))
-    return {"label": label or "unsorted", "summary": summary or msg.get("subject", ""),
+    return {"label": label or "unsorted", "summary": summarize(brain, msg, label),
             "raw": raw, "by": "model" if label else "model-unparsed"}  # fmt: skip
+
+
+def summarize(brain, msg, label):
+    """The summary call is told the label, so a needs_reply summary says what is asked."""
+    task = ASK if label in (None, "needs_reply") else NOTE
+    raw = brain.think(SUMMARIZE.format(task=task), prompt(msg), temperature=0)
+    return parse_summary(raw) or msg.get("subject", "")
 
 
 # --- Gmail
@@ -207,21 +213,35 @@ def _who(item):
 
 def teach(brain, teacher, item):
     """Triage with the local brain and, while one is set, the teacher (a cloud model PJ
-    allowed until a local model earns the mail-triage weapon). The teacher's label is the
-    one PJ acts on; the local answer is kept as `student` so agreement on real mail is
-    measured. Disagreements keep the snippet, locally, to become synthetic fixtures."""
+    allowed until a local model earns the mail-triage weapon). The teacher labels from the
+    sanitized view and never sees personal mail, which stays local (`teacher: "skipped"`).
+    Its label is the one PJ acts on; the summary is always local, rewritten when the
+    teacher's label changes what it should say. The local answer is kept as `student` so
+    agreement on real mail is measured. Disagreements keep the snippet, locally, to become
+    synthetic fixtures."""
     student = triage(brain, item)
-    if teacher is None:
+    if teacher is None or student["by"] == "rule":
         return student
+    if sanitize.is_personal(item):
+        return {**student, "teacher": "skipped"}
     try:
-        taught = triage(teacher, item)
+        text = sanitize.prompt(sanitize.view(item))
+        raw = teacher.think(CLASSIFY, f"{text}\nLabel:", temperature=0)
     except Exception as e:  # noqa: BLE001 - a teacher outage falls back to the student
         return {**student, "teacher_error": str(e)[:200]}
+    label = parse_label(raw)
+    if label is None:
+        return {**student, "teacher_error": f"unparsed: {raw[:100]}"}
+    summary = student["summary"]
+    if (label == "needs_reply") != (student["label"] in ("needs_reply", "unsorted")):
+        summary = summarize(brain, item, label)
     return {
-        **taught,
-        "by": f"teacher-{taught['by']}",
+        "label": label,
+        "summary": summary,
+        "raw": raw,
+        "by": "teacher-model",
         "student": {k: student[k] for k in ("label", "summary", "by")},
-        "agree": student["label"] == taught["label"],
+        "agree": student["label"] == label,
     }
 
 
@@ -292,8 +312,11 @@ def fixture_candidates(store, rewriter, limit=20):
     done_path = store.root / "mail" / "fixtured.json"
     done = set(json.loads(done_path.read_text())) if done_path.exists() else set()
     out = []
-    for item in [d for d in disagreements(store) if d["id"] not in done][:limit]:
-        raw = rewriter.think(REWRITE, f"Label: {item['label']}\n{prompt(item)}", temperature=0)
+    todo = [d for d in disagreements(store) if d["id"] not in done]
+    # The rewriter reads the sanitized view; personal mail from before step 1b stays local.
+    for item in [d for d in todo if not sanitize.is_personal(d)][:limit]:
+        text = sanitize.prompt(sanitize.view(item))
+        raw = rewriter.think(REWRITE, f"Label: {item['label']}\n{text}", temperature=0)
         try:
             fx = json.loads(raw[raw.index("{") : raw.rindex("}") + 1])
         except ValueError:

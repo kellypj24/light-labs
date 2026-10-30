@@ -136,6 +136,39 @@ class TeacherTest(unittest.TestCase):
         )
         self.assertTrue(out["by"].startswith("teacher-"))
 
+    def test_teacher_reads_the_sanitized_view_and_labels_only(self):
+        teacher = Brain("needs_reply")
+        item = msg(snippet="Call 614-555-0142 or dana@whitfield.example.org")
+        mail.teach(Brain("needs_reply"), teacher, item)
+        [seen] = teacher.calls  # one label call; the summary stays local
+        self.assertIn("sender at example.org", seen)
+        for raw in ("Dana", "614-555-0142", "whitfield"):
+            self.assertNotIn(raw, seen)
+
+    def test_summary_rewritten_locally_when_the_teacher_changes_what_it_asks(self):
+        student = Brain("fyi")
+        mail.teach(student, Brain("needs_reply"), msg())
+        self.assertEqual(len(student.calls), 3)  # classify, summary, summary again
+        same = Brain("fyi")
+        mail.teach(same, Brain("receipt"), msg())
+        self.assertEqual(len(same.calls), 2)
+
+    def test_personal_mail_never_reaches_the_teacher(self):
+        teacher = Brain("needs_reply")
+        out = mail.teach(Brain("fyi"), teacher, msg(**{"from": "Dana <dana@gmail.com>"}))
+        self.assertEqual((teacher.calls, out["teacher"], out["label"]), ([], "skipped", "fyi"))
+        self.assertNotIn("agree", out)
+
+    def test_filed_bulk_mail_skips_the_teacher(self):
+        teacher = Brain("spam")
+        mail.teach(Brain("fyi"), teacher, msg(category="promotions", unsubscribe=True))
+        self.assertEqual(teacher.calls, [])
+
+    def test_unparsed_teacher_answer_falls_back_to_local(self):
+        out = mail.teach(Brain("receipt"), Brain("no idea"), msg())
+        self.assertEqual(out["label"], "receipt")
+        self.assertIn("unparsed", out["teacher_error"])
+
     def test_no_teacher_is_the_local_answer(self):
         out = mail.teach(Brain("fyi"), None, msg())
         self.assertNotIn("agree", out)
@@ -158,7 +191,16 @@ class TeacherTest(unittest.TestCase):
         [fx] = mail.fixture_candidates(self.store, rewriter)
         self.assertEqual((fx["label"], fx["student_label"]), ("needs_reply", "fyi"))
         self.assertIn("Label: needs_reply", rewriter.calls[0])
+        self.assertNotIn("Dana", rewriter.calls[0])
         self.assertEqual(mail.fixture_candidates(self.store, rewriter), [])
+
+    def test_personal_disagreements_stay_local(self):
+        item = {**msg(**{"from": "Dana <dana@gmail.com>"}), "id": "m2", "label": "needs_reply",
+                "student": {"label": "fyi"}}  # fmt: skip
+        mail._keep_disagreement(self.store, item)
+        rewriter = Brain("{}")
+        self.assertEqual(mail.fixture_candidates(self.store, rewriter), [])
+        self.assertEqual(rewriter.calls, [])
 
 
 if __name__ == "__main__":

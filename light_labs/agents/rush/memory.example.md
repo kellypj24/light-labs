@@ -18,3 +18,7 @@ and the small local model invents past work without it.
 
 ## Open threads
 - Conversations waiting on a reply, and who owes what.
+
+## Private
+- Anything Auto's cloud brain must not see: it is dropped before the notes leave the laptop
+  (`sanitize.notes`). The rest is scrubbed of addresses, URLs, ids and numbers; dates stay.
