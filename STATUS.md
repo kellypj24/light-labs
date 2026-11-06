@@ -3,7 +3,7 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-10-30._
+_Updated 2026-11-06._
 
 ## Now
 
@@ -33,24 +33,40 @@ _Updated 2026-10-30._
   Step 1b live: Rush's teacher labels from the sanitized view (48/50 against its
   full-view labels), personal mail stays local, Auto's notes leave scrubbed. On
   2026-11-13, read the verdicts and enforce the remaining rules. Step 2a (calibration
-  maps per brain and question, `mart_calibration`) in review; first real map, Roll's
-  `deps` on `llama3.1:8b`, stays identity (raw p already calibrated). 2b replays mail-keep.
+  maps per brain and question, `mart_calibration`) live; first real map, Roll's
+  `deps` on `llama3.1:8b`, stays identity (raw p already calibrated). Step 2b in review:
+  mail-keep keep pairs and `lab roll keep-replay`; the writer gates on calibrated p.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
 ## Next
 
-1. Roll keep-plan step 4: every `Roll/*` label shadow-labelled (200 each). Keep-vs-discard
+1. Decision framework (`docs/plans/decision-framework.md`), where it stopped 2026-10-30:
+   - Step 2b PR open (`feature/calibration-2b`): keep pairs, `lab roll keep-replay`,
+     writer gate at 0.60 on calibrated p, `calibration.json` gone. Merge needs PJ.
+   - Replay smoke (20 records, `qwen2.5:14b`): every keep p was 0.00 or 1.00, and 3 of
+     13 at 1.00 were teacher discards; 9m42s for 20, mostly cooling pauses with the 14b
+     loaded (memory pressure warn).
+   - Step 2c proposed, not agreed (Open decisions below): Bayesian fits for small
+     samples, ML over time for large ones.
+   - 2026-11-13: read `var/gate/verdicts.jsonl`, then enforce `memory`, `personal-mail`,
+     `tool-repo` and `unreleased` (its own PR).
+   - `docs/plans/operational-store.md` (SQLite store) PR #95 open, not merged.
+2. Roll keep-plan step 4: every `Roll/*` label shadow-labelled (200 each). Keep-vs-discard
    agreement: Social 190/200, Forums 136/200 (63 local keeps the teacher discards: group
    lists), Bulk 180/200; one lost keep (Forums). Step 4b started: `sanitize.py` (personal
    senders stay local, rule-based scrubber); `keep-fixtures` rewrites from it; the teacher
    is off by default. Next: run `keep-fixtures` (230 of 271 disagreements are
    non-personal), then the matchers and escalation rules (`docs/plans/roll-keep.md`).
-2. `dependabot-merge` fight (mega-man, proto-14b, bass) once the backlog is through and
+3. `dependabot-merge` fight (mega-man, proto-14b, bass) once the backlog is through and
    the stage is re-generated; bar 0.95 and zero false yeses, per tier, patch first.
-3. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
+4. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 
 ## Open decisions
+
+- Decision framework step 2c (`docs/plans/decision-framework.md`, Open questions 1-5):
+  the fit ladder, credible intervals as an escalation signal, ship 2b before 2c, the full
+  replay at `--limit 300` overnight, the commit-message fight after 2c.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today

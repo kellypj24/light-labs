@@ -1,6 +1,8 @@
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from light_labs.evals import commit_message as cm
 
@@ -104,6 +106,16 @@ class Choosing(Scripted):
 
 
 class WriterTest(unittest.TestCase):
+    def setUp(self):
+        from light_labs.core import calibrate
+
+        tmp = tempfile.TemporaryDirectory()  # no real maps.json leaks in
+        self.addCleanup(tmp.cleanup)
+        patch = mock.patch.object(calibrate.config, "VAR", Path(tmp.name))
+        patch.start()
+        self.addCleanup(patch.stop)
+        calibrate.MAPS = None
+
     def test_files_that_decide_the_type(self):
         from light_labs.agents.roll.writer import rule_type
 
@@ -128,8 +140,20 @@ class WriterTest(unittest.TestCase):
         brain = Choosing(model="llama3.1:8b", deps=0.85)
         kind, how = classify(brain, ["pyproject.toml", "uv.lock"], "p")
         self.assertEqual(kind, "chore")
-        self.assertIn("lift", how)
+        self.assertIn("raw 0.85", how)
         self.assertEqual(brain.calls, [])  # no text call
+
+    def test_the_gate_is_060_on_the_calibrated_p(self):
+        from light_labs.agents.roll.writer import classify
+        from light_labs.core import calibrate
+
+        brain = Choosing(model="llama3.1:8b", deps=0.55, answer="fix")
+        self.assertEqual(classify(brain, ["a.py"], "p"), ("fix", "model"))
+        calibrate.export([{"brain": "ollama:llama3.1:8b", "question": "deps", "method": "platt",
+                           "a": 1.0, "b": 1.0}])  # fmt: skip
+        kind, how = classify(Choosing(model="llama3.1:8b", deps=0.55), ["a.py"], "p")
+        self.assertEqual(kind, "chore")
+        self.assertIn("raw 0.55", how)
 
     def test_otherwise_the_type_call_decides(self):
         from light_labs.agents.roll.writer import classify

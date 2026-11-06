@@ -564,6 +564,8 @@ def cmd_roll(args):
 
     if args.cmd in ("chores", "scorecard", "chores-fixtures"):
         return roll_chores(args)
+    if args.cmd == "keep-replay":
+        return roll_keep_replay(args, roll)
     if not roll.TELEGRAM_CHAT:
         sys.exit("ROLL_TELEGRAM_CHAT is not set")
     bot = roll.bot()
@@ -584,6 +586,28 @@ def cmd_roll(args):
     elif args.cmd == "undo":
         n = bot.undo(args.rule)
         print(f"{n} back in the inbox" if n is not None else "nothing to undo")
+
+
+def roll_keep_replay(args, roll):
+    """The keep question over stored shadow records on the mail-keep brain: shadow pairs
+    for calibration, locally, no Gmail and no teacher."""
+    from light_labs.agents.roll import keep
+    from light_labs.core import heavy
+    from light_labs.core.brain import brain_for
+
+    if not roll.KEEP_BRAIN.startswith("ollama:"):
+        sys.exit("keep-replay needs a local mail-keep brain (ollama:...)")
+    brain = brain_for(roll.KEEP_BRAIN, source="roll/keep")
+    try:
+        with heavy.job("roll-keep-replay", force=args.force) as guard:
+            pairs = keep.replay(brain, roll.HOME, args.limit, pace=guard.check,
+                                on_picked=lambda n: heavy.note(total=n))  # fmt: skip
+    except heavy.Busy as e:
+        sys.exit(f"roll keep-replay: not starting: {e}")
+    except heavy.Overheated as e:
+        sys.exit(f"roll keep-replay: stopped ({e}); models unloaded; nothing written")
+    keeps = sum(p["label"] for p in pairs)
+    print(f"{len(pairs)} pairs ({keeps} teacher keeps) -> {roll.HOME / 'pairs' / 'keep.jsonl'}")
 
 
 def roll_keep(args, bot, roll):
@@ -892,6 +916,11 @@ def main(argv=None):
     rocmd.add_parser(
         "keep-fixtures", help="teacher/local disagreements -> synthetic fixture candidates"
     ).add_argument("--limit", type=int, default=20)
+    replay_p = rocmd.add_parser(
+        "keep-replay", help="keep question over stored shadow records -> calibration pairs"
+    )
+    replay_p.add_argument("--limit", type=int, default=None)
+    replay_p.add_argument("--force", default="", metavar="REASON", help="start on a busy machine")
     rocmd.add_parser(
         "untrash", help="take a label's mail out of Trash, back to the archive"
     ).add_argument("--label", required=True, help="e.g. Roll/Promotions")

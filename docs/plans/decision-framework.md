@@ -1,7 +1,7 @@
 # Plan: decision framework and the sensitivity gate
 
 Status: step 1 done 2026-10-30 (#91; `client-repo` denies, every other rule records until
-2026-11-13); step 1b done (#93); step 2a in review. Written 2026-10-30.
+2026-11-13); step 1b done (#93); step 2a done (#94); step 2b in review. Written 2026-10-30.
 
 Builds what the spec describes: a gate on every Claude call, then a Jev-style decision
 framework on `decide.py` (calibration, named and score questions, routing rules, an
@@ -57,7 +57,7 @@ to those files on `main` before the step starts means re-reading the step.
    on one class, or with no gain. Fitted with scikit-learn (analytics group); applied in
    plain Python.
 
-   2a (in review): `light_labs/core/calibrate.py` and `calibration_results.py`
+   2a (done, #94): `light_labs/core/calibrate.py` and `calibration_results.py`
    (`lab calibration ingest`); Dagster's `calibration` asset lands `raw.shadow_pairs` and
    `raw.calibration_maps`, refits with the queue job, and exports
    `var/calibration/maps.json`, which robots read (robots never open the DuckDB file
@@ -73,10 +73,32 @@ to those files on `main` before the step starts means re-reading the step.
      p is calibrated; newer Dependabot chores score 0.16-0.61, which is discrimination,
      not calibration.
 
-   2b: Roll's mail-keep keep/discard as a `decide.ask` yes/no; replay the 1,000 stored
-   shadow records on `qwen2.5:14b` against the stored teacher labels (heavy, about 80
-   minutes; ask first). Move Roll's writer from baseline-plus-lift to the calibrated p and
-   retire `calibration.json`, measured by a commit-message fight.
+   2b (in review): mail-keep answers a yes/no next to its class ("in one of the keep
+   classes?", class guide first, `key="keep"`); `lab roll keep` writes keep pairs
+   (raw p against the teacher's keep or discard) to `var/roll/pairs/keep.jsonl`, and
+   `lab roll keep-replay` answers it over the stored shadow records on the mail-keep brain
+   with no Gmail or teacher call (heavy job). Roll's writer gates `deps` at 0.60 on the
+   calibrated p (`key="deps"`); with no fitted map that is the old llama3.1:8b gate
+   (baseline 0.40 plus 0.2 lift), while brains with no baseline move from 0.2 to 0.60.
+   `calibration.json` and its baselines are gone; `agents/roll/calibrate.py` only writes
+   pairs. Still to run, PJ's go first: the replay, then a commit-message fight.
+   Replay smoke, 2026-10-30, 20 records on `qwen2.5:14b`: every raw p was 0.00 or 1.00
+   (3 of 13 at 1.00 were teacher discards), so Platt and isotonic have almost nothing to
+   fit; 9m42s, mostly cooling pauses with the 14b loaded.
+
+2c. **Fit ladder** (proposed 2026-10-30 after PJ: Bayesian for small samples, ML over
+   time for large ones; not agreed, see Open questions):
+
+   | Pairs per group | Method |
+   |---|---|
+   | any n, saturated p (most at 0 or 1) | Beta-binomial per bucket, Beta(1,1) prior: (hits + 1) / (n + 2) |
+   | any n, graded p | Bayesian Platt: logistic on logit(p), prior slope N(1, 0.5), intercept N(0, 0.5), MAP via scipy; no 30-pair floor |
+   | both | posterior interval (Beta or Laplace) on the calibrated p, kept in `Answer` and the map |
+   | 500+ over weeks | isotonic, then gradient boosting on p plus features (class, sender domain, tier), rolling window, recent pairs weighted up |
+   | always | `mart_calibration` by week: Brier, ECE, interval width |
+
+   Files: `light_labs/core/calibrate.py`, `light_labs/core/decide.py`,
+   `light_labs/core/calibration_results.py`, `analytics/models/`, `tests/test_calibrate.py`.
    Files: `light_labs/core/calibrate.py`, `light_labs/core/calibration_results.py`,
    `light_labs/core/decide.py`, `light_labs/agents/roll/{calibrate,chores,keep,writer}.py`,
    `light_labs/orchestration/`, `analytics/models/`, `analytics/fixtures/calibration/`.
@@ -132,3 +154,16 @@ When the last step lands, fold the result into the spec and archive this plan
   the local model writes every summary; `memory.md` leaves scrubbed with a `## Private`
   section that never leaves; board posts go to Auto as written; the mail rewriter reads the
   sanitized view.
+
+## Open questions
+
+Proposed 2026-10-30 with step 2c; PJ hasn't answered yet.
+
+1. Merge 2b before 2c? Recommended: yes; 2c changes `core/calibrate.py` on its own PR.
+2. The 2c fit ladder as in its table? Recommended: yes.
+3. Credible interval on every calibrated answer, so step 4's routing rules can escalate on
+   a wide one? Recommended: yes.
+4. Full keep replay at `--limit 300`, overnight on a quiet machine (about 1-2 hours),
+   then grow pairs from live `lab roll keep` runs? Recommended: yes.
+5. Commit-message fight for the writer's 0.60 gate after 2c lands, since 2c changes what
+   calibrated p means? Recommended: yes.
