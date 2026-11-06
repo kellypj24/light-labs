@@ -28,11 +28,12 @@ QUESTIONS = {
 }
 
 
-# Scored by token probability. On 21 calibration PRs (calibrate.py) chores scored
-# 0.62-0.85 and other changes 0.04-0.30 bar one; a chore needs DEPS_MIN_LIFT over the
-# brain's calibrated baseline.
+# Scored by token probability, through the brain's calibration map for `deps` when one is
+# fitted (core/calibrate.py; pairs from calibrate.py). 0.60 is the old gate on
+# llama3.1:8b (baseline 0.40 plus 0.2 lift), so with no fitted map nothing moves there; a
+# brain that had no baseline used to clear at 0.2.
 DEPS = "Is this change only dependency version bumps, lock file refreshes, or cleanup?"
-DEPS_MIN_LIFT = 0.2
+DEPS_MIN_P = 0.60
 
 
 def classifier(allowed):
@@ -65,19 +66,17 @@ def rule_type(paths):
 
 
 def classify(brain, paths, prompt, num_ctx=None):
-    """(type, how): by rule when the files decide it; chore when the deps question clears
-    its baseline; else one short model call."""
-    from light_labs.agents.roll.calibrate import baseline
+    """(type, how): by rule when the files decide it; chore when the deps question's
+    calibrated p clears DEPS_MIN_P; else one short model call."""
     from light_labs.core.decide import ask
 
     kind = rule_type(paths)
     if kind:
         return kind, "rule"
-    if hasattr(brain, "choose"):  # a probability, so the calibrated gate means something
-        deps = ask(brain, prompt, DEPS, num_ctx=num_ctx).p()
-        lift = deps - baseline(brain, "deps")
-        if lift >= DEPS_MIN_LIFT:
-            return "chore", f"deps {deps:.2f}, lift {lift:.2f}"
+    if hasattr(brain, "choose"):  # a probability, so the gate means something
+        a = ask(brain, prompt, DEPS, num_ctx=num_ctx, key="deps")
+        if a.p() >= DEPS_MIN_P:
+            return "chore", f"deps {a.p():.2f} (raw {a.raw['yes']:.2f})"
     allowed = list(QUESTIONS)
     raw = brain.think(classifier(allowed), prompt, temperature=0, num_ctx=num_ctx)
     for word in re.findall(r"[a-z]+", raw.lower()):

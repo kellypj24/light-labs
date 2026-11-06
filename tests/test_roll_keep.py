@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from unittest import mock
 
 from light_labs import config
 from light_labs.agents.roll import keep
@@ -98,11 +99,70 @@ class ByText:
         return next((v for k, v in self.answers.items() if k in user), "unsure")
 
 
+class Choosing(ByText):
+    """A local brain with probabilities: `p` is its yes for the keep question."""
+
+    model = "fake"
+
+    def __init__(self, answers, p):
+        super().__init__(answers)
+        self.p, self.asked = p, []
+
+    def choose(self, system, user, choices, num_ctx=None):
+        self.asked.append(user)
+        return {"yes": self.p, "no": 1 - self.p}
+
+
 class FirstN:
     """A sample that keeps the ids in order."""
 
     def sample(self, ids, n):
         return ids[:n]
+
+
+class KeepPairsTest(unittest.TestCase):
+    def setUp(self):
+        from light_labs.core import calibrate
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        patch = mock.patch.object(calibrate.config, "VAR", self.root)  # no real maps.json
+        patch.start()
+        self.addCleanup(patch.stop)
+        calibrate.MAPS = None
+
+    def test_shadow_answers_the_keep_question_and_writes_pairs(self):
+        local = Choosing({"Statement": "finance", "Sale": "promotion", "order": "promotion"}, 0.7)
+        teacher = ByText({"Statement": "finance", "Sale": "promotion", "order": "receipts"})
+        recs = keep.shadow(FakeGmail(["m1", "m2", "m3"]), local, teacher, "Roll/Updates", 10,
+                           self.root, rng=FirstN())  # fmt: skip
+        self.assertEqual({r["keep_p_raw"] for r in recs}, {0.7})
+        self.assertIn("Keep classes:", local.asked[0])  # the class guide comes first
+        pairs = [json.loads(x) for x in (self.root / "pairs/keep.jsonl").read_text().splitlines()]
+        self.assertEqual([(p["source_id"], p["label"]) for p in pairs],
+                         [("m1", True), ("m2", False), ("m3", True)])  # fmt: skip
+        self.assertEqual({p["brain"] for p in pairs}, {"ollama:fake"})
+
+    def test_replay_uses_stored_records_and_replaces_its_pairs(self):
+        (self.root / "keep").mkdir()
+        rows = [
+            {"id": "a", "from": "S <s@x.example.com>", "subject": "s", "snippet": "x",
+             "teacher": "keep/finance"},
+            {"id": "b", "from": "S <s@x.example.com>", "subject": "s", "snippet": "x",
+             "teacher": "discard/promotion"},
+            {"id": "c", "from": "Dana <d@gmail.com>", "subject": "s", "snippet": "x",
+             "teacher_skipped": "personal"},
+        ]  # fmt: skip
+        (self.root / "keep/shadow-1.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        brain = Choosing({}, 0.9)
+        keep.replay(brain, self.root)
+        pairs = keep.replay(brain, self.root)  # twice: replaced, not doubled
+        self.assertEqual([(p["source_id"], p["label"], p["p"]) for p in pairs],
+                         [("a", True, 0.9), ("b", False, 0.9)])  # fmt: skip
+        lines = (self.root / "pairs/keep.jsonl").read_text().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(len(brain.asked), 4)  # no Gmail, no teacher; the personal one skipped
 
 
 class ShadowTest(unittest.TestCase):

@@ -1,10 +1,9 @@
-"""Calibrate Roll's yes/no questions for one brain on merged PRs outside the eval fixtures.
+"""Shadow pairs for Roll's writer questions: one brain on merged PRs outside the eval fixtures.
 
-A question has its own yes-bias per brain, so classify() compares an answer with that
-question's baseline: the mean yes-probability across change types, from PRs whose type is
-known from their titles. The commit-message fixtures are refused here, so the fight still
-measures generalisation. Each PR is also a shadow pair (raw p against "the title says
-chore") in var/roll/pairs/deps.jsonl, which core/calibrate.py fits a map from.
+Each PR's raw yes-probability on a question, against the type its title gives ("chore" is
+the label for `deps`), lands in var/roll/pairs/deps.jsonl; core/calibrate.py fits the map
+the writer applies. The commit-message fixtures are refused here, so the fight still
+measures generalisation.
 
     uv run --group analytics python -m light_labs.agents.roll.calibrate \\
         ollama:llama3.1:8b data-engineering:84 scouter:17 ...
@@ -15,7 +14,6 @@ import re
 import subprocess
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
 
 from light_labs import config
 from light_labs.agents.roll import NUM_CTX
@@ -24,8 +22,7 @@ from light_labs.core.brain import brain_for
 from light_labs.core.decide import ask
 from light_labs.evals.commit_message import excerpt, gh, prompt
 
-CALIBRATION = Path(__file__).resolve().parent / "calibration.json"
-FIXTURES = Path(__file__).resolve().parents[3] / "evals/stages/commit-message.yaml"
+FIXTURES = config.REPO / "evals/stages/commit-message.yaml"
 QUESTIONS = {"deps": DEPS}
 
 
@@ -43,52 +40,25 @@ def pr_input(repo, pr, owner="kellypj24"):
 
 
 def calibrate(spec, prs):
+    """One pair per PR and question, printed as it goes."""
     import yaml
 
     fixture_ids = {f["id"] for f in yaml.safe_load(FIXTURES.read_text())["fixtures"]}
     brain = brain_for(spec, source="roll/calibrate")
-    rows = []
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    pairs = []
     for repo, pr in prs:
         if f"{repo.replace('-', '_')}_{pr}" in fixture_ids:
             sys.exit(f"{repo}:{pr} is an eval fixture; calibrate on other PRs")
         kind, inp = pr_input(repo, pr)
         text = prompt(inp)
-        probs = {q: ask(brain, text, QUESTIONS[q], num_ctx=NUM_CTX).p() for q in QUESTIONS}
-        rows.append({"pr": f"{repo}:{pr}", "type": kind, "p": probs})
-        print(f"{repo}:{pr:<5} {kind:6} " + " ".join(f"{q} {p:.2f}" for q, p in probs.items()))
-    by_type = {}
-    for row in rows:
-        by_type.setdefault(row["type"], []).append(row["p"])
-    # Mean over types of the per-type mean, so the mix of types in the set doesn't move it.
-    baselines = {
-        q: sum(sum(p[q] for p in ps) / len(ps) for ps in by_type.values()) / len(by_type)
-        for q in QUESTIONS
-    }
-    return {
-        "brain": spec,
-        "built": datetime.now(UTC).date().isoformat(),
-        "baselines": {q: round(b, 4) for q, b in baselines.items()},
-        "types": {t: len(ps) for t, ps in sorted(by_type.items())},
-        "by_type": {
-            t: {q: round(sum(p[q] for p in ps) / len(ps), 4) for q in QUESTIONS}
-            for t, ps in sorted(by_type.items())
-        },
-        "prs": [r["pr"] for r in rows],
-        "pairs": [
-            {
-                "robot": "roll",
-                "question": q,
-                "brain": spec,
-                "p": round(r["p"][q], 4),
-                "label": r["type"] == "chore",
-                "source_id": r["pr"],
-                "label_by": "pr-title",
-                "at": datetime.now(UTC).isoformat(timespec="seconds"),
-            }
-            for r in rows
-            for q in QUESTIONS
-        ],
-    }
+        for q, question in QUESTIONS.items():
+            p = ask(brain, text, question, num_ctx=NUM_CTX).p()  # raw: no key, no map
+            pairs.append({"robot": "roll", "question": q, "brain": spec, "p": round(p, 4),
+                          "label": kind == "chore", "source_id": f"{repo}:{pr}",
+                          "label_by": "pr-title", "at": at})  # fmt: skip
+            print(f"{repo}:{pr:<5} {kind:6} {q} {p:.2f}")
+    return pairs
 
 
 def write_pairs(spec, pairs):
@@ -98,16 +68,7 @@ def write_pairs(spec, pairs):
     keep = [json.loads(x) for x in path.read_text().splitlines()] if path.exists() else []
     rows = [p for p in keep if p["brain"] != spec] + pairs
     path.write_text("".join(json.dumps(p) + "\n" for p in rows))
-
-
-def baseline(brain, question):
-    """The question's calibrated baseline for this brain; 0 when uncalibrated."""
-    spec = f"ollama:{brain.model}"
-    return load().get(spec, {}).get("baselines", {}).get(question, 0.0)
-
-
-def load():
-    return json.loads(CALIBRATION.read_text()) if CALIBRATION.exists() else {}
+    return path
 
 
 def main(argv=None):
@@ -116,14 +77,11 @@ def main(argv=None):
         sys.exit(__doc__)
     spec, prs = args[0], [(a.split(":")[0], int(a.split(":")[1])) for a in args[1:]]
     try:
-        result = calibrate(spec, prs)
+        pairs = calibrate(spec, prs)
     except subprocess.CalledProcessError as e:
         sys.exit(f"gh failed: {e.stderr}")
-    data = load()
-    data[spec] = {k: v for k, v in result.items() if k != "pairs"}
-    CALIBRATION.write_text(json.dumps(data, indent=2) + "\n")
-    write_pairs(spec, result["pairs"])
-    print(json.dumps(data[spec], indent=2))
+    print(f"{len(pairs)} pairs -> {write_pairs(spec, pairs)}; `lab calibration ingest` or "
+          "Dagster's queue job fits the map")  # fmt: skip
 
 
 if __name__ == "__main__":
