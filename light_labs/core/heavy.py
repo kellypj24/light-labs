@@ -2,7 +2,8 @@
 
 A heavy job (a fight, `lab roll keep`, `just check`) holds LOCK. Before taking it,
 `too_busy` refuses a busy machine: high load, memory pressure, a serious thermal state, a
-container VM, a Dagster run. While it runs, `Guard.check` between units of work pauses
+container VM using over VM_BUSY_CPU, a Dagster run. An idle VM (Docker Desktop with nothing
+running) doesn't block: load and memory pressure already count what a VM uses. While it runs, `Guard.check` between units of work pauses
 while the machine is hot (serious thermal state, CPU throttled, battery over 40°C, warn
 memory pressure) and stops the job after MAX_WAIT; a watchdog thread stops it on critical
 thermal state or memory pressure, or swap growth. A stop unloads the local models.
@@ -42,14 +43,19 @@ THERMAL = {0: "nominal", 1: "fair", 2: "serious", 3: "critical"}
 THERMAL_JS = 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.thermalState'
 # kern.memorystatus_vm_pressure_level
 PRESSURE = {1: "normal", 2: "warn", 4: "critical"}
-# What in `ps` makes the machine busy, and what to call it where command lines can't go.
+# What in `ps` makes the machine busy, and what to call it where command lines can't go:
+# (kind, executable, argv). The executable is a substring of argv[0] (a VM) or a prefix of
+# its basename; argv, when given, must appear as consecutive argument basenames. Matching
+# the program, not the whole line, keeps a shell whose -c script mentions "dbt build" out.
+VM_KIND = "container VM"
 BUSY_KINDS = (
-    ("com.apple.Virtualization.VirtualMachine", "container VM"),
-    ("qemu-system", "container VM"),
-    ("dagster api execute_run", "Dagster run"),
-    ("dbt build", "dbt build"),
+    (VM_KIND, "com.apple.Virtualization.VirtualMachine", ()),
+    (VM_KIND, "qemu-system", ()),
+    ("Dagster run", ("python", "dagster"), ("dagster", "api", "execute_run")),
+    ("dbt build", ("python", "dbt"), ("dbt", "build")),
 )
-BUSY = re.compile("|".join(re.escape(needle) for needle, _ in BUSY_KINDS))
+# A container VM blocks only above this %CPU (100 = one core); an idle one sits under 5.
+VM_BUSY_CPU = 50.0
 
 
 class Busy(RuntimeError):
@@ -89,14 +95,59 @@ def reading():
     return r
 
 
-def busy_processes(ps=None):
-    """Container VMs and Dagster runs: `ps` lines matching BUSY."""
-    ps = _run("ps", "-Ao", "pid,command") if ps is None else ps
-    return [line.strip()[:120] for line in ps.splitlines() if BUSY.search(line)]
+def cpu(line):
+    """%CPU from a `pid %cpu command` line; None when the line has no such field."""
+    parts = line.split(None, 2)
+    try:
+        return float(parts[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def _argv(line):
+    """The command's arguments from a `pid [%cpu] command` line."""
+    parts = line.split()
+    if parts[:1] and parts[0].isdigit():
+        parts = parts[1:]
+    if parts[:1] and cpu(f"0 {parts[0]}") is not None:
+        parts = parts[1:]
+    return parts
 
 
 def busy_kind(line):
-    return next(kind for needle, kind in BUSY_KINDS if needle in line)
+    """The BUSY_KINDS kind this `ps` line is, or None."""
+    argv = _argv(line)
+    if not argv:
+        return None
+    names = [Path(a).name for a in argv]
+    for kind, exe, seq in BUSY_KINDS:
+        if isinstance(exe, str):
+            hit = exe in argv[0]
+        else:
+            hit = names[0].startswith(exe)
+        n = len(seq)
+        if hit and (not n or any(tuple(names[i : i + n]) == seq for i in range(len(names)))):
+            return kind
+    return None
+
+
+def processes(ps=None):
+    """`ps` lines matching BUSY_KINDS, split into (blocking, idle VMs). A VM without a %CPU
+    reading counts as blocking."""
+    ps = _run("ps", "-Ao", "pid,%cpu,command") if ps is None else ps
+    busy, idle = [], []
+    for line in ps.splitlines():
+        if not (kind := busy_kind(line)):
+            continue
+        pct = cpu(line)
+        quiet = kind == VM_KIND and pct is not None and pct < VM_BUSY_CPU
+        (idle if quiet else busy).append(line.strip()[:120])
+    return busy, idle
+
+
+def busy_processes(ps=None):
+    """The `ps` lines that block a heavy job: busy container VMs, Dagster runs, dbt builds."""
+    return processes(ps)[0]
 
 
 def too_busy(r, procs):
