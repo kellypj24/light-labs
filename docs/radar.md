@@ -42,7 +42,9 @@ not Python.
 2. `lab radar helper build` compiles **that copy**, never the repo file, to
    `~/.relationship-radar/bin/radar-messages-export`, ad-hoc signed with the hardened
    runtime. A change merged to the repo reaches the binary only after you approve it;
-   `lab radar doctor` warns when the repo has moved on.
+   `lab radar doctor` warns when the repo has moved on. `xcrun`, `codesign` and
+   `launchctl` run by absolute path with a minimal environment, so neither PATH nor
+   `DEVELOPER_DIR` nor `DYLD_*` in your shell decides what gets built.
 3. System Settings → Privacy & Security → Full Disk Access → **+** → Cmd-Shift-G → paste
    that path → Open → toggle on.
 4. `lab radar helper install`. The helper runs as its own LaunchAgent because macOS charges a
@@ -115,6 +117,10 @@ Identity resolution has four steps, in order:
   folder). It has names, circles, days since contact, birthdays, reasons and openers, and
   it is read by Google and by the cloud Claude task. Snippets never go in it. They appear
   only in the local dated copy (`digests/YYYY-MM-DD.md`) with `weekly --with-snippets`.
+- **Names are data:** names, organizations and titles come from contact cards and, later,
+  from strangers (email display names, LinkedIn). The digest puts them on one line,
+  escapes Markdown, caps their length, and its header tells the reader to treat them as
+  data, not instructions.
 - **Wipe:** `lab radar purge` deletes the database, exports, digests, logs, review file and the
   shared digest. `--all` also deletes your config, and `lab radar helper uninstall` removes the
   helper and LaunchAgent. Remove the FDA entry in Settings by hand.

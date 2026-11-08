@@ -25,6 +25,21 @@ from pathlib import Path
 from light_labs.radar.config import Paths
 
 LABEL = "com.pjkelly.relationship-radar.messages-export"
+# Apple's tools by absolute path, with a minimal environment: a fake `codesign` early in
+# PATH, or DEVELOPER_DIR / DYLD_* in the shell, would otherwise decide what binary PJ
+# grants Full Disk Access to.
+XCRUN = "/usr/bin/xcrun"
+CODESIGN = "/usr/bin/codesign"
+LAUNCHCTL = "/bin/launchctl"
+
+
+def tool_env() -> dict[str, str]:
+    env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(Path.home())}
+    if "TMPDIR" in os.environ:
+        env["TMPDIR"] = os.environ["TMPDIR"]
+    return env
+
+
 BINARY = "radar-messages-export"
 SOURCE = Path(__file__).resolve().parent / "helper" / f"{BINARY}.swift"
 
@@ -94,13 +109,13 @@ def build(paths: Paths, snippets: bool = False) -> Path:
         raise NotApproved("no approved helper source: run `lab radar helper approve` first")
     paths.ensure()
     out = binary_path(paths)
-    cmd = ["swiftc", "-O", "-o", str(out), str(approved), "-lsqlite3"]
+    cmd = [XCRUN, "swiftc", "-O", "-o", str(out), str(approved), "-lsqlite3"]
     if snippets:
         cmd += ["-D", "RADAR_SNIPPETS"]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, env=tool_env())
     subprocess.run(
         [
-            "codesign",
+            CODESIGN,
             "--force",
             "--sign",
             "-",
@@ -111,6 +126,7 @@ def build(paths: Paths, snippets: bool = False) -> Path:
             str(out),
         ],
         check=True,
+        env=tool_env(),
     )
     built_from_path(paths).write_text(f"{sha256(approved)}\n")
     return out
@@ -183,7 +199,7 @@ def last_log_line(paths: Paths) -> str | None:
 
 
 def swiftc_available() -> bool:
-    return shutil.which("swiftc") is not None
+    return Path(XCRUN).exists() and shutil.which("swiftc", path="/usr/bin") is not None
 
 
 def _domain() -> str:
@@ -191,4 +207,6 @@ def _domain() -> str:
 
 
 def _launchctl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["launchctl", *args], capture_output=True, text=True, check=check)
+    return subprocess.run(
+        [LAUNCHCTL, *args], capture_output=True, text=True, check=check, env=tool_env()
+    )

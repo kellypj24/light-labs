@@ -190,9 +190,14 @@ class TestApproval(RadarCase):
         self.src.write_text(self.src.read_text() + "// unreviewed\n")
         with mock.patch.object(helper.subprocess, "run") as run_:
             helper.build(self.paths)
-        swiftc = run_.call_args_list[0].args[0]
+        swiftc, codesign = (c.args[0] for c in run_.call_args_list)
+        self.assertEqual(swiftc[:2], ["/usr/bin/xcrun", "swiftc"])
+        self.assertEqual(codesign[0], "/usr/bin/codesign")
         self.assertIn(str(helper.approved_path(self.paths)), swiftc)
         self.assertNotIn(str(self.src), swiftc)
+        env = run_.call_args_list[0].kwargs["env"]
+        self.assertEqual(env["PATH"], "/usr/bin:/bin:/usr/sbin:/sbin")
+        self.assertFalse(any(k.startswith(("DYLD_", "DEVELOPER_DIR")) for k in env))
         state = helper.source_state(self.paths)
         self.assertEqual(state["built"], state["approved"])
         self.assertNotEqual(state["repo"], state["approved"])

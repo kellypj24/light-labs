@@ -57,7 +57,7 @@ def helper_checks(paths: Paths) -> list[Check]:
         out.append(Check("helper", "warn", "built from an older approval",
                          "lab radar helper build, then re-grant Full Disk Access"))  # fmt: skip
     sig = subprocess.run(
-        ["codesign", "-dv", str(binary)], check=False, capture_output=True, text=True
+        [helper.CODESIGN, "-dv", str(binary)], check=False, capture_output=True, text=True
     )
     if "runtime" in sig.stderr:
         out.append(Check("helper", "ok", f"{binary} (hardened runtime)"))
