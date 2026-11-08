@@ -37,7 +37,8 @@ def register(sub) -> None:
     pu.add_argument("--yes", action="store_true")
     h = cmd.add_parser("helper", help="the Messages export helper (the only code with FDA)")
     hcmd = h.add_subparsers(dest="helper_cmd", required=True)
-    hb = hcmd.add_parser("build", help="compile and sign; re-grant FDA after every build")
+    hcmd.add_parser("approve", help="read the helper source's diff and approve it (terminal only)")
+    hb = hcmd.add_parser("build", help="compile the approved copy; re-grant FDA after a build")
     hb.add_argument("--snippets", action="store_true", help="compile in 140-char previews")
     hcmd.add_parser("install", help="LaunchAgent: daily 06:20 and on `lab radar sync`")
     hcmd.add_parser("uninstall", help="remove the LaunchAgent and binary")
@@ -249,17 +250,24 @@ def purge(args) -> int:
     return 0
 
 
-def helper_cmd(args) -> None:
+def helper_cmd(args) -> int:
     from light_labs.radar import doctor, helper
 
     paths, _ = _setup()
-    if args.helper_cmd == "build":
-        out = helper.build(paths, args.snippets)
-        print(f"built {out}")
-        print(doctor.FDA_STEPS.format(binary=out))
-    elif args.helper_cmd == "install":
-        print(f"installed {helper.install(paths)}")
-    else:
-        helper.uninstall()
-        helper.binary_path(paths).unlink(missing_ok=True)
-        print("uninstalled; remove radar-messages-export from Full Disk Access in Settings")
+    try:
+        if args.helper_cmd == "approve":
+            return 0 if helper.approve(paths) else 1
+        if args.helper_cmd == "build":
+            out = helper.build(paths, args.snippets)
+            print(f"built {out} from the approved source")
+            print(doctor.FDA_STEPS.format(binary=out))
+        elif args.helper_cmd == "install":
+            print(f"installed {helper.install(paths)}")
+        else:
+            helper.uninstall()
+            helper.binary_path(paths).unlink(missing_ok=True)
+            print("uninstalled; remove radar-messages-export from Full Disk Access in Settings")
+    except helper.NotApproved as e:
+        print(e)
+        return 1
+    return 0

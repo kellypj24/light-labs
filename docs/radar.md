@@ -15,7 +15,8 @@ Code: `light_labs/radar/`. Its dependencies are the `radar` uv group, which a pl
 
 ```sh
 lab radar init                 # ~/.relationship-radar (0700) with example config
-lab radar helper build         # compile and sign the Messages helper
+lab radar helper approve       # read the helper source, type approve (terminal only)
+lab radar helper build         # compile the approved copy and sign it
 #   grant it Full Disk Access (below), then:
 lab radar helper install       # LaunchAgent: daily 06:20 and on `lab radar sync`
 lab radar sync
@@ -35,11 +36,18 @@ macOS gates `~/Library/Messages/chat.db` behind Full Disk Access (FDA), and ther
 narrower permission. Only `light_labs/radar/helper/radar-messages-export.swift` gets it: not your terminal,
 not Python.
 
-1. `lab radar helper build` compiles it to `~/.relationship-radar/bin/radar-messages-export`,
-   ad-hoc signed with the hardened runtime.
-2. System Settings → Privacy & Security → Full Disk Access → **+** → Cmd-Shift-G → paste
+1. `lab radar helper approve` shows the source (later, only the diff since your last
+   approval) and asks you to type `approve`. It refuses without a terminal, so no robot
+   or script can approve. The approved copy is kept in `~/.relationship-radar/bin/`.
+2. `lab radar helper build` compiles **that copy**, never the repo file, to
+   `~/.relationship-radar/bin/radar-messages-export`, ad-hoc signed with the hardened
+   runtime. A change merged to the repo reaches the binary only after you approve it;
+   `lab radar doctor` warns when the repo has moved on. `xcrun`, `codesign` and
+   `launchctl` run by absolute path with a minimal environment, so neither PATH nor
+   `DEVELOPER_DIR` nor `DYLD_*` in your shell decides what gets built.
+3. System Settings → Privacy & Security → Full Disk Access → **+** → Cmd-Shift-G → paste
    that path → Open → toggle on.
-3. `lab radar helper install`. The helper runs as its own LaunchAgent because macOS charges a
+4. `lab radar helper install`. The helper runs as its own LaunchAgent because macOS charges a
    command-line tool's file access to the app that launched it. Started from Terminal,
    the helper would need Terminal's FDA.
 
@@ -58,13 +66,17 @@ The file is short. Check that it:
 - [ ] opens only `chat.db`, with `SQLITE_OPEN_READONLY`
 - [ ] runs only the two fixed `SELECT`s, with no input interpolated
 - [ ] reads `m.text` only under `#if RADAR_SNIPPETS`, truncated to 140 characters
-- [ ] writes only `messages.jsonl` (via `.tmp` and rename) inside an inbox it has checked:
-      not a symlink, owned by you, not group or other writable, and opened with
-      `O_NOFOLLOW`, mode 0600
+- [ ] writes only `messages.jsonl` (via `.tmp` and rename, mode 0600), creating it
+      relative to directories it has checked one by one: `~/.relationship-radar`, then
+      `inbox`, each opened with `O_NOFOLLOW`, owned by you, not group or other writable
 - [ ] is built by `lab radar helper build` with `--options runtime` (hardened runtime blocks
       `DYLD_*` injection)
 
 Anything that can abuse it already runs as you, and can read the export directly anyway.
+
+GitHub can't enforce a review here: Auto's PRs go out under PJ's account, and an author
+can't approve their own PR. The approval step above covers that. Also, no robot lands a
+PR that touches `light_labs/radar/helper/` (Roll's tiers, #71: T3, PJ by hand).
 
 ### Contacts: no permission
 
@@ -99,11 +111,16 @@ Identity resolution has four steps, in order:
 | per message: who, when, direction, channel, group size | attachments, reactions, edits |
 | with `--with-snippets`: newest 140-char preview per contact | anything from chats you didn't take part in |
 
-- The helper's export holds the same metadata and lives only in `inbox/`.
+- The helper's export holds the same metadata. It lives in `inbox/` until the next sync
+  reads it, then it is deleted.
 - **What leaves the machine:** the shared digest (`weekly-digest.md` in the Google Drive
   folder). It has names, circles, days since contact, birthdays, reasons and openers, and
   it is read by Google and by the cloud Claude task. Snippets never go in it. They appear
   only in the local dated copy (`digests/YYYY-MM-DD.md`) with `weekly --with-snippets`.
+- **Names are data:** names, organizations and titles come from contact cards and, later,
+  from strangers (email display names, LinkedIn). The digest puts them on one line,
+  escapes Markdown, caps their length, and its header tells the reader to treat them as
+  data, not instructions.
 - **Wipe:** `lab radar purge` deletes the database, exports, digests, logs, review file and the
   shared digest. `--all` also deletes your config, and `lab radar helper uninstall` removes the
   helper and LaunchAgent. Remove the FDA entry in Settings by hand.

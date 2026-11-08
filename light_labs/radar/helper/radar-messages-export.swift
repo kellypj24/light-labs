@@ -8,11 +8,13 @@
 // - Writes metadata only (handle, time, direction, chat members, service) to
 //   ~/.relationship-radar/inbox/messages.jsonl, mode 0600, via a temp file and rename.
 //   Message text is compiled in only with -D RADAR_SNIPPETS, truncated to 140 characters.
-// - Refuses to write unless the inbox is a real directory (not a symlink), owned by the
-//   user, and not writable by group or others.
+// - Refuses to write unless ~/.relationship-radar and its inbox are both real
+//   directories (not symlinks), owned by the user, and not writable by group or others;
+//   the file is then created relative to the checked inbox (openat, O_NOFOLLOW).
 // - Built with the hardened runtime, which blocks injected libraries (DYLD_*).
 //
-// The test build (-D RADAR_TEST) takes <chat.db> <inbox> as arguments; it never gets FDA.
+// The test build (-D RADAR_TEST) takes <chat.db> <radar home> as arguments; it never gets
+// FDA. `lab radar helper build` compiles only the copy PJ approved (`helper approve`).
 
 import Foundation
 import SQLite3
@@ -32,27 +34,38 @@ func homeDirectory() -> String {
 }
 
 #if RADAR_TEST
-    guard CommandLine.arguments.count == 3 else { fail("test build: <chat.db> <inbox>", 64) }
+    guard CommandLine.arguments.count == 3 else { fail("test build: <chat.db> <radar home>", 64) }
     let dbPath = CommandLine.arguments[1]
-    let inboxPath = CommandLine.arguments[2]
+    let radarHome = CommandLine.arguments[2]
 #else
     let home = homeDirectory()
     let dbPath = home + "/Library/Messages/chat.db"
-    let inboxPath = home + "/.relationship-radar/inbox"
+    let radarHome = home + "/.relationship-radar"
 #endif
 
 // MARK: - Output directory checks
 
-let dirFD = open(inboxPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
-if dirFD < 0 {
-    fail("\(inboxPath) is missing or a symlink; run `lab radar doctor`")
+/// Open `name` inside `parent` as a directory without following a symlink, and require
+/// that it is ours and not writable by anyone else. Every directory on the way from
+/// the home directory to the inbox goes through this.
+func openPrivateDir(_ parent: Int32, _ name: String) -> Int32 {
+    let fd = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+    if fd < 0 { fail("\(name) is missing or a symlink; run `lab radar doctor`") }
+    var st = stat()
+    guard fstat(fd, &st) == 0 else { fail("cannot stat \(name)") }
+    guard st.st_uid == getuid() else { fail("\(name) is not owned by you") }
+    guard st.st_mode & (S_IWGRP | S_IWOTH) == 0 else {
+        fail("\(name) is writable by group or others")
+    }
+    return fd
 }
-var st = stat()
-guard fstat(dirFD, &st) == 0 else { fail("cannot stat \(inboxPath)") }
-guard st.st_uid == getuid() else { fail("\(inboxPath) is not owned by you") }
-guard st.st_mode & (S_IWGRP | S_IWOTH) == 0 else {
-    fail("\(inboxPath) is writable by group or others")
-}
+
+let base = (radarHome as NSString).deletingLastPathComponent
+let baseFD = open(base, O_RDONLY | O_DIRECTORY)
+guard baseFD >= 0 else { fail("cannot open \(base)") }
+let radarFD = openPrivateDir(baseFD, (radarHome as NSString).lastPathComponent)
+let dirFD = openPrivateDir(radarFD, "inbox")
+let inboxPath = radarHome + "/inbox"
 
 // MARK: - Read chat.db
 
@@ -177,4 +190,6 @@ let written = lines.withUnsafeBytes { buf -> Int in
 guard written == lines.count, fsync(fd) == 0, close(fd) == 0 else { fail("write failed") }
 guard renameat(dirFD, tmpName, dirFD, "messages.jsonl") == 0 else { fail("rename failed") }
 close(dirFD)
+close(radarFD)
+close(baseFD)
 print("radar-messages-export: wrote \(lines.count) bytes, \(members.count) chats")

@@ -9,6 +9,7 @@ newline-delimited JSON with two record types:
 
 `text` is present only in a helper built with snippets. Received messages count for the
 sender; sent messages count for every member of the chat. Watermark: the highest rowid.
+The export is deleted once read: it is a full copy, and the next one replaces it.
 """
 
 from __future__ import annotations
@@ -115,6 +116,11 @@ class IMessageSource:
         added = con.execute("SELECT count(*) FROM interactions").fetchone()[0] - before
         _keep_latest_snippet(con)
         top = con.execute("SELECT max(rowid) FROM msg_raw WHERE type = 'message'").fetchone()[0]
+        con.execute("DROP TABLE msg_raw")
+        # Less at rest: the export is a full copy of the metadata, readable by anything
+        # running as PJ. If this transaction rolls back, the watermark stays put and the
+        # helper's next full export brings everything back.
+        path.unlink()
         new_mark = str(max(top, since)) if top is not None else watermark
         return SourceResult(watermark=new_mark, rows_in=added)
 
