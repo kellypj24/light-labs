@@ -104,25 +104,10 @@ def run(paths: Paths, settings: Settings) -> list[Check]:
                          "lab radar sync"))  # fmt: skip
 
     vcfs = sorted(paths.contacts_dir.glob("*.vcf"))
-    if not vcfs:
-        out.append(
-            Check(
-                "contacts",
-                "warn",
-                f"no .vcf in {paths.contacts_dir}",
-                "Contacts.app: select all, File > Export > Export vCard, save there",
-            )
-        )
-    else:
-        age = min(_age_days(v) for v in vcfs)
-        out.append(
-            Check(
-                "contacts",
-                "ok" if age < 45 else "warn",
-                f"newest export {age:.0f} days old",
-                None if age < 45 else "export Contacts again",
-            )
-        )
+    if vcfs and min(_age_days(v) for v in vcfs) > 90:
+        # vCards are optional (the helper exports Contacts); an old one may be stale.
+        out.append(Check("vcards", "warn", "newest vCard export is over 90 days old",
+                         f"export again into {paths.contacts_dir}, or delete it"))  # fmt: skip
 
     if paths.db.exists():
         con = duckdb.connect(str(paths.db), read_only=True)

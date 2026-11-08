@@ -1,9 +1,10 @@
 """Identity resolution: rebuild `people` and `identities` from source facts and overrides.
 
 Order: exact (a card's own phones and emails) → overrides (merge, split) → PJ's decisions
-in review_matches.csv → fuzzy names. A fuzzy match merges on its own only at or above
-`fuzzy_auto_merge` *and* with a second shared attribute (organization or birthday);
-everything from `fuzzy_review_floor` up goes to review_matches.csv for PJ.
+in review_matches.csv → fuzzy names. A fuzzy match merges on its own at or above
+`fuzzy_auto_merge` with a second shared attribute (organization or birthday), or when
+the names are identical and no organization or birthday disagrees (the same card in two
+accounts). Everything else from `fuzzy_review_floor` up goes to review_matches.csv.
 
 overrides.yaml (see examples/overrides.example.yaml) refers to people by identity
 (phone, email, LinkedIn URL), by `*@domain`, or by a card's exact display name.
@@ -252,7 +253,13 @@ def _fuzzy(
             why = ", ".join(
                 w for w, ok in (("same org", same_org), ("same birthday", same_bday)) if ok
             )
+            conflict = (bool(ca["org"] and cb["org"]) and not same_org) or (
+                bool(ca["birthday"] and cb["birthday"]) and not same_bday
+            )
             if score >= settings.fuzzy_auto_merge and (same_org or same_bday):
+                auto.append((a, b, score))
+            elif score == 1.0 and not conflict:
+                # The same card in two accounts (iCloud and Google) under different ids.
                 auto.append((a, b, score))
             else:
                 review.append((a, b, score, why or "name only"))

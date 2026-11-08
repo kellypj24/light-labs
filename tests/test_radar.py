@@ -125,8 +125,13 @@ class TestPipeline(RadarCase):
             "SELECT kind, value_norm FROM identities WHERE person_id = ? ORDER BY 1", [bob]
         ).fetchall()
         self.assertEqual(idents, [("email", "bob@example.com"), ("phone", "+14155550102")])
-        # Frank Miller / Frank Miler: same org, 0.96 -> merged. Grace: different orgs -> review.
-        self.assertEqual(res.auto_merged, 1)
+        # Frank Miller / Frank Miler: same org, 0.96 -> merged. Hana x2: identical names, no
+        # conflict -> merged. Grace: different orgs, Ivan x2: different birthdays -> review.
+        self.assertEqual(res.auto_merged, 2)
+        hanas = "SELECT count(*) FROM people WHERE display_name = 'Hana Example'"
+        self.assertEqual(self.one(hanas)[0], 1)
+        ivans = "SELECT count(*) FROM people WHERE display_name = 'Ivan Example'"
+        self.assertEqual(self.one(ivans)[0], 2)
         franks = "SELECT count(*) FROM people WHERE display_name LIKE 'Frank%'"
         self.assertEqual(self.one(franks)[0], 1)
         review = self.paths.review_matches.read_text()
@@ -141,7 +146,8 @@ class TestPipeline(RadarCase):
     def test_review_decision_survives_and_applies(self):
         self.sync_all()
         lines = self.paths.review_matches.read_text().splitlines()
-        lines[1] = lines[1].rstrip(",") + ",merge"
+        i = next(i for i, line in enumerate(lines) if "Grace" in line)
+        lines[i] = lines[i].rstrip(",") + ",merge"
         self.paths.review_matches.write_text("\n".join(lines) + "\n")
         self.sync_all()
         graces = "SELECT count(*) FROM people WHERE display_name LIKE 'Grace%'"

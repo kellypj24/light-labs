@@ -15,7 +15,7 @@ from datetime import date
 import duckdb
 
 from light_labs.radar import normalize
-from light_labs.radar.sources.base import SourceResult, SourceSkipped, SyncContext, put_person
+from light_labs.radar.sources.base import SourceResult, SyncContext, put_person
 
 
 @dataclass
@@ -43,7 +43,10 @@ class ContactsSource:
     ) -> SourceResult:
         files = sorted(ctx.paths.contacts_dir.glob("*.vcf"))
         if not files:
-            raise SourceSkipped(f"no .vcf files in {ctx.paths.contacts_dir}")
+            # Optional since the helper exports the Mac's Contacts. No files: no cards.
+            con.execute("DELETE FROM source_identities WHERE source = 'contacts'")
+            con.execute("DELETE FROM source_people WHERE source = 'contacts'")
+            return SourceResult(message="no vCards (optional)")
         # Name, size and mtime of every file: a removed or replaced export changes it too.
         newest = normalize.stable_id(
             *(f"{f.name}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files)
