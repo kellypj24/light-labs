@@ -23,8 +23,10 @@ CREATE TABLE IF NOT EXISTS source_people (
     birthday_has_year BOOLEAN,
     profile_url VARCHAR,
     updated_at TIMESTAMPTZ NOT NULL,
+    is_me BOOLEAN NOT NULL DEFAULT false,   -- PJ's own card: its identities are `me`
     PRIMARY KEY (source, source_key)
 );
+ALTER TABLE source_people ADD COLUMN IF NOT EXISTS is_me BOOLEAN DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS source_identities (
     source VARCHAR NOT NULL,

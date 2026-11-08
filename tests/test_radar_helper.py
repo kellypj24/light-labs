@@ -37,11 +37,26 @@ def build(name: str, flags: list[str]) -> Path:
     return _BUILDS[name]
 
 
-def run(binary: Path, db: Path, home: Path) -> subprocess.CompletedProcess[str]:
-    """The test build takes the radar home; the inbox is <home>/inbox, as in release."""
+def run(
+    binary: Path, db: Path, home: Path, addressbook: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """The test build takes chat.db, the AddressBook dir and the radar home; the inbox is
+    <home>/inbox, as in release. No AddressBook dir: Contacts can't be read."""
+    ab = addressbook or home.parent / "no-addressbook"
     return subprocess.run(
-        [str(binary), str(db), str(home)], check=False, capture_output=True, text=True
+        [str(binary), str(db), str(ab), str(home)], check=False, capture_output=True, text=True
     )
+
+
+def make_addressbook(root: Path) -> Path:
+    """A root Contacts database and one account under Sources/ that repeats Alice."""
+    sql = (FIXTURES / "addressbook.sql").read_text()
+    (root / "Sources" / "acct").mkdir(parents=True)
+    for db in (root / "AddressBook-v22.abcddb", root / "Sources/acct/AddressBook-v22.abcddb"):
+        con = sqlite3.connect(db)
+        con.executescript(sql)
+        con.close()
+    return root
 
 
 @unittest.skipUnless(ON_MAC, "needs macOS and swiftc")
@@ -119,6 +134,32 @@ class TestHelper(RadarCase):
                 self.assertNotEqual(r.returncode, 0)
                 self.assertIn("writable", r.stderr)
                 shutil.rmtree(self.home)
+
+    def test_exports_contacts_without_notes(self):
+        self.make_home()
+        ab = make_addressbook(self.tmp / "AddressBook")
+        r = run(self.plain, self.db, self.home, ab)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("8 contacts from 2 Contacts databases", r.stdout)
+        lines = (self.inbox / "contacts.jsonl").read_text().splitlines()
+        recs = [json.loads(line) for line in lines]
+        self.assertEqual({r["type"] for r in recs}, {"contact"})
+        self.assertEqual(len(recs), 8)  # 4 cards in each of the two databases; no group
+        me = [r for r in recs if r["me"]]
+        self.assertEqual({r["uid"] for r in me}, {"ME:ABPerson"})
+        bob = next(r for r in recs if r["uid"] == "B2:ABPerson")
+        self.assertEqual((bob["emails"], bob["phones"]), (["Bob@Example.com"], ["+1 415 555 0102"]))
+        self.assertNotIn("private note", (self.inbox / "contacts.jsonl").read_text())
+        mode = stat.S_IMODE(os.stat(self.inbox / "contacts.jsonl").st_mode)
+        self.assertEqual(mode, 0o600)
+
+    def test_unreadable_contacts_do_not_stop_messages(self):
+        self.make_home()
+        r = run(self.plain, self.db, self.home)  # no AddressBook dir
+        self.assertEqual(r.returncode, 0, r.stderr)
+        recs = [json.loads(x) for x in (self.inbox / "contacts.jsonl").read_text().splitlines()]
+        self.assertEqual([x["type"] for x in recs], ["error"])
+        self.assertTrue((self.inbox / "messages.jsonl").exists())
 
     def test_unreadable_db_exits_77(self):
         self.make_home()

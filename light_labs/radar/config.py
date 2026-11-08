@@ -34,6 +34,10 @@ class Paths:
         return self.inbox / "messages.jsonl"
 
     @property
+    def contacts_export(self) -> Path:
+        return self.inbox / "contacts.jsonl"
+
+    @property
     def contacts_dir(self) -> Path:
         return self.inbox / "contacts"
 

@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import date
 
 import duckdb
 
 from light_labs.radar import normalize
-from light_labs.radar.sources.base import SourceResult, SourceSkipped, SyncContext
+from light_labs.radar.sources.base import SourceResult, SourceSkipped, SyncContext, put_person
 
 
 @dataclass
@@ -53,7 +53,6 @@ class ContactsSource:
 
         con.execute("DELETE FROM source_identities WHERE source = 'contacts'")
         con.execute("DELETE FROM source_people WHERE source = 'contacts'")
-        now = datetime.now(UTC)
         n = 0
         for card in (c for f in files for c in parse_vcards(f.read_text(errors="replace"))):
             if not card.name:
@@ -65,24 +64,10 @@ class ContactsSource:
             }
             idents |= {("email", e) for raw in card.emails if (e := normalize.email(raw))}
             key = card.uid or normalize.stable_id(card.name, *sorted(v for _, v in idents))
-            con.execute(
-                "INSERT OR REPLACE INTO source_people VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)",
-                [
-                    "contacts",
-                    key,
-                    card.name,
-                    card.org,
-                    card.title,
-                    card.birthday,
-                    card.birthday_has_year if card.birthday else None,
-                    now,
-                ],
-            )
-            for kind, value in idents:
-                con.execute(
-                    "INSERT OR IGNORE INTO source_identities VALUES ('contacts', ?, ?, ?)",
-                    [key, kind, value],
-                )
+            put_person(
+                con, "contacts", key, card.name, idents, org=card.org, title=card.title,
+                birthday=card.birthday, birthday_has_year=card.birthday_has_year,
+            )  # fmt: skip
             n += 1
         return SourceResult(watermark=newest, rows_in=n)
 

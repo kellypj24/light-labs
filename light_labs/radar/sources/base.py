@@ -78,3 +78,34 @@ def run_source(con: duckdb.DuckDBPyConnection, source: Source, ctx: SyncContext)
         ],
     )
     return result
+
+
+def put_person(
+    con: duckdb.DuckDBPyConnection,
+    source: str,
+    key: str,
+    name: str,
+    identities: set[tuple[str, str]],
+    *,
+    org: str | None = None,
+    title: str | None = None,
+    birthday: object = None,
+    birthday_has_year: bool | None = None,
+    profile_url: str | None = None,
+    is_me: bool = False,
+) -> None:
+    """One person as a source sees them, with their phones/emails/profile URLs."""
+    con.execute(
+        """
+        INSERT OR REPLACE INTO source_people (source, source_key, display_name, org, title,
+            birthday, birthday_has_year, profile_url, updated_at, is_me)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, now(), ?)
+        """,
+        [source, key, name, org, title, birthday,
+         birthday_has_year if birthday else None, profile_url, is_me],
+    )  # fmt: skip
+    for kind, value in identities:
+        con.execute(
+            "INSERT OR IGNORE INTO source_identities VALUES (?, ?, ?, ?)",
+            [source, key, kind, value],
+        )
