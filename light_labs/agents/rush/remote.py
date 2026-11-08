@@ -223,8 +223,9 @@ def lab_body(snap):
         + "".join(f"<dt>{k}</dt>{v}" for k, v in rows)
         + "</dl></div>"
     )
-    if snap["busy"]:
-        out.append('<div class="card meta">' + "<br>".join(esc(b) for b in snap["busy"]) + "</div>")
+    if snap["busy"] or snap.get("idle"):
+        shown = snap["busy"] + snap.get("idle", [])
+        out.append('<div class="card meta">' + "<br>".join(esc(b) for b in shown) + "</div>")
     out.append("<h2>Dagster</h2>")
     if snap["dagster"]:
         lines = []

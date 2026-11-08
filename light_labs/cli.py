@@ -77,7 +77,9 @@ def cmd_heavy(args):
               if held else "lock: free")  # fmt: skip
         r = heavy.reading()
         print("machine: " + ", ".join(f"{k}={v}" for k, v in r.items()))
-        procs = heavy.busy_processes()
+        procs, idle = heavy.processes()
+        for line in idle:
+            print(f"idle {heavy.VM_KIND} ({heavy.cpu(line):.0f}% CPU, not blocking): {line}")
         why = heavy.too_busy(r, procs) or heavy.hot(r)
         print(f"start a heavy job: {'no, ' + why if why else 'yes'}")
         return

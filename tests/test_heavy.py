@@ -52,6 +52,17 @@ class ReadingsTest(unittest.TestCase):
               "  4 python -m dagster api grpc --lazy-load-user-code\n")  # fmt: skip
         self.assertEqual([p.split()[0] for p in heavy.busy_processes(ps)], ["2", "3"])
 
+    def test_idle_vm_does_not_block(self):
+        ps = ("  2   0.3 .../com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/x\n"
+              "  5  50.0 /usr/bin/qemu-system-aarch64 -m 4G\n"
+              "  3   0.0 python -m dagster api execute_run {...}\n"
+              "  6   0.1 dbt build --quiet\n")  # fmt: skip
+        busy, idle = heavy.processes(ps)
+        self.assertEqual([p.split()[0] for p in busy], ["5", "3", "6"])
+        self.assertEqual([p.split()[0] for p in idle], ["2"])
+        self.assertEqual(heavy.cpu(idle[0]), 0.3)
+        self.assertEqual(heavy.too_busy(COOL, heavy.busy_processes(ps.splitlines()[0])), "")
+
 
 class LockTest(unittest.TestCase):
     def setUp(self):

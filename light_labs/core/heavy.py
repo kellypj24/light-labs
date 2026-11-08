@@ -2,7 +2,8 @@
 
 A heavy job (a fight, `lab roll keep`, `just check`) holds LOCK. Before taking it,
 `too_busy` refuses a busy machine: high load, memory pressure, a serious thermal state, a
-container VM, a Dagster run. While it runs, `Guard.check` between units of work pauses
+container VM using over VM_BUSY_CPU, a Dagster run. An idle VM (Docker Desktop with nothing
+running) doesn't block: load and memory pressure already count what a VM uses. While it runs, `Guard.check` between units of work pauses
 while the machine is hot (serious thermal state, CPU throttled, battery over 40°C, warn
 memory pressure) and stops the job after MAX_WAIT; a watchdog thread stops it on critical
 thermal state or memory pressure, or swap growth. A stop unloads the local models.
@@ -50,6 +51,9 @@ BUSY_KINDS = (
     ("dbt build", "dbt build"),
 )
 BUSY = re.compile("|".join(re.escape(needle) for needle, _ in BUSY_KINDS))
+VM_KIND = "container VM"
+# A container VM blocks only above this %CPU (100 = one core); an idle one sits under 5.
+VM_BUSY_CPU = 50.0
 
 
 class Busy(RuntimeError):
@@ -89,10 +93,32 @@ def reading():
     return r
 
 
+def cpu(line):
+    """%CPU from a `pid %cpu command` line; None when the line has no such field."""
+    parts = line.split(None, 2)
+    try:
+        return float(parts[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def processes(ps=None):
+    """`ps` lines matching BUSY, split into (blocking, idle VMs). A VM without a %CPU
+    reading counts as blocking."""
+    ps = _run("ps", "-Ao", "pid,%cpu,command") if ps is None else ps
+    busy, idle = [], []
+    for line in ps.splitlines():
+        if not BUSY.search(line):
+            continue
+        pct = cpu(line)
+        quiet = busy_kind(line) == VM_KIND and pct is not None and pct < VM_BUSY_CPU
+        (idle if quiet else busy).append(line.strip()[:120])
+    return busy, idle
+
+
 def busy_processes(ps=None):
-    """Container VMs and Dagster runs: `ps` lines matching BUSY."""
-    ps = _run("ps", "-Ao", "pid,command") if ps is None else ps
-    return [line.strip()[:120] for line in ps.splitlines() if BUSY.search(line)]
+    """The `ps` lines that block a heavy job: busy container VMs, Dagster runs, dbt builds."""
+    return processes(ps)[0]
 
 
 def busy_kind(line):

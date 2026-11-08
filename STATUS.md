@@ -3,7 +3,7 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-10-30._
+_Updated 2026-11-08._
 
 ## Now
 
@@ -22,7 +22,8 @@ _Updated 2026-10-30._
   daily at 08:00 (`hermes cron list`).
 - Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
   `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
-  memory; Dagster's sensors skip while it is held. `lab heavy status` before starting one;
+  memory; Dagster's sensors skip while it is held. A container VM blocks only above 50%
+  CPU, so an idle Docker Desktop doesn't. `lab heavy status` before starting one;
   `lab heavy watch` or Rush's `/lab` page follow one live. Both list loaded Ollama
   models (size, time to unload): a model is wired memory and the usual cause of a pressure
   pause outside any heavy job (Rush's hourly mail triage loads `qwen2.5:14b`).

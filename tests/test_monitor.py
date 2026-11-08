@@ -35,11 +35,12 @@ class SnapshotTest(unittest.TestCase):
         heavy.acquire(job, self.lock, var=str(self.var), swap_start=1000.0, detail=detail)
         self.addCleanup(heavy.release, self.lock)
 
-    def snap(self, procs=(), models=()):
+    def snap(self, procs=(), models=(), idle=()):
         return monitor.snapshot(
             lock=self.lock,
             read=lambda: COOL,
             procs=list(procs),
+            idle=list(idle),
             db=self.root / "none.db",
             models=list(models),
         )
@@ -69,6 +70,13 @@ class SnapshotTest(unittest.TestCase):
         out = json.dumps(snap)
         for leak in ("tax return", "irs@", "token", str(self.var), str(os.getpid())):
             self.assertNotIn(leak, out)
+
+    def test_idle_vm_shows_without_blocking(self):
+        snap = self.snap(idle=["4242   0.3 /usr/bin/qemu-system-aarch64 -drive token=abc"])
+        self.assertTrue(snap["start_ok"])
+        self.assertEqual(snap["idle"], ["container VM idle, 0% CPU, not blocking"])
+        self.assertIn("container VM idle", monitor.text(snap))
+        self.assertNotIn("token", json.dumps(snap))
 
     def test_busy_reason_without_a_lock_names_only_the_kind(self):
         snap = self.snap(procs=["4242 /usr/bin/qemu-system-aarch64 -drive token=abc"])

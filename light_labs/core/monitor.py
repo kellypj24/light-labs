@@ -132,11 +132,19 @@ def models_view(models, now):
     return out
 
 
-def snapshot(lock=None, read=heavy.reading, procs=None, db=None, models=None):
+def idle_view(idle):
+    """Idle VMs as kind and %CPU only, for the phone."""
+    return [f"{heavy.VM_KIND} idle, {heavy.cpu(line):.0f}% CPU, not blocking" for line in idle]
+
+
+def snapshot(lock=None, read=heavy.reading, procs=None, db=None, models=None, idle=None):
     now = datetime.now(UTC)
     r = read()
     models = models_view(heavy.loaded_models() if models is None else models, now)
-    busy = kinds(heavy.busy_processes() if procs is None else procs)  # never the command line
+    if procs is None:
+        procs, found_idle = heavy.processes()
+        idle = found_idle if idle is None else idle
+    busy = kinds(procs)  # never the command line
     held = heavy.holder(lock)
     job = None
     if held:
@@ -165,6 +173,7 @@ def snapshot(lock=None, read=heavy.reading, procs=None, db=None, models=None):
         "start_ok": not why_not,
         "why_not": why_not,
         "busy": busy,
+        "idle": idle_view(idle or []),
         "models": models,
         "dagster": dagster_runs(db),
         "history": history(lock),
@@ -208,6 +217,7 @@ def text(snap):
     if snap["critical"] or snap["hot"]:
         lines.append(f"kill switch: {snap['critical'] or 'pause: ' + snap['hot']}")
     lines.append(f"start a heavy job: {'yes' if snap['start_ok'] else 'no, ' + snap['why_not']}")
+    lines.extend(snap["idle"])
     active = [d for d in snap["dagster"] if d["active"]]
     lines.append("dagster: " + (", ".join(f"{d['job']} {d['status']}" for d in active) or "idle"))
     for h in snap["history"]:
