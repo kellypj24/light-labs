@@ -36,7 +36,7 @@ renamed AS (
         -- The scorer's first check is `ran`; it fails alone when the runner
         -- or the model call broke, which is not the model's fault.
         COALESCE(
-            checks -> '$[0]' ->> 'name' = 'ran'
+            (checks -> '$[0]' ->> 'name') = 'ran'
             AND NOT CAST(checks -> '$[0]' ->> 'passed' AS BOOLEAN),
             FALSE
         ) AS is_harness_error,
