@@ -146,6 +146,21 @@ def answer(brain, f):
             "brain": spec}  # fmt: skip
 
 
+def transient(f):
+    """Why this PR can't be judged yet, or None: CI still running, or GitHub still
+    computing mergeability (it does after every push to main). Not a decision, so nothing
+    is recorded; the next run decides."""
+    if f["checks"] == "pending":
+        return "CI pending"
+    if f["mergeable"] == "UNKNOWN":
+        return "mergeable: UNKNOWN"
+    return None
+
+
+# Holds recorded for a transient state before transient() existed; settle() clears them.
+TRANSIENT_HOLDS = ("CI pending", "mergeable: UNKNOWN")
+
+
 def blocked(f):
     """Why code holds this PR without asking big brother, or None."""
     if f["checks"] != "pass":
@@ -205,6 +220,8 @@ class Chores:
         return out
 
     def decide(self, f):
+        if wait := transient(f):
+            return f["number"], "later", wait
         prompt = state(f)
         roll = None
         if self.roll is not None:
@@ -298,6 +315,9 @@ class Chores:
         for item in self.store.pending():
             target = item.get("target") or {}
             if item.get("kind") != KIND or target.get("repo") != self.name:
+                continue
+            if item.get("escalate") in TRANSIENT_HOLDS:
+                self.store.resolve(item["id"], "rejected", reason="transient hold; decided again")
                 continue
             head = open_heads.get(target["pr"])
             if head == target["head"]:

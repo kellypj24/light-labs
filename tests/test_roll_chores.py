@@ -140,6 +140,25 @@ class ChoresTest(unittest.TestCase):
         self.assertEqual(self.brother.models, [])
         self.assertEqual(self.store.pending()[0]["escalate"], "CI fail")
 
+    def test_transient_states_record_nothing(self):
+        busy = pr(5, "Bump a from 1.0.0 to 1.0.1 in /t", checks=[{"status": "IN_PROGRESS"}])
+        unknown = pr(6, "Bump b from 1.0.0 to 1.0.1 in /u")
+        unknown["mergeable"] = "UNKNOWN"
+        out = self.chores(FakeRepo([busy, unknown])).run()
+        self.assertEqual(out, [(5, "later", "CI pending"), (6, "later", "mergeable: UNKNOWN")])
+        self.assertEqual(self.brother.models, [])
+        self.assertEqual(self.store.pending(), [])
+
+    def test_old_transient_holds_are_cleared_and_decided_again(self):
+        stuck = pr(6, "Bump b from 1.0.0 to 1.0.1 in /u")
+        stuck["mergeable"] = "UNKNOWN"
+        target = {"repo": "pj/de", "pr": 6, "head": "sha6"}
+        self.store.enqueue(chores.KIND, target, "HOLD: mergeable: UNKNOWN", stuck["title"],
+                           escalate="mergeable: UNKNOWN")  # fmt: skip
+        stuck["mergeable"] = "MERGEABLE"
+        self.assertEqual(self.chores(FakeRepo([stuck])).run()[0][1], "merged")
+        self.assertEqual(self.store.pending(), [])
+
     def test_hold_waits_for_pj_and_his_merge_is_the_outcome(self):
         repo = FakeRepo([pr(9, "Bump b from 1.0 to 1.1 in /t")])
         raw = "HOLD: does /t rely on b's old default?\nwhy: default changed\nroll: wrong, notes say so"
