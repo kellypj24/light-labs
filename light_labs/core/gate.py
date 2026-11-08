@@ -7,6 +7,8 @@ var/gate/verdicts.jsonl.
 
 Rollout (PJ, 2026-10-30): `client-repo` denies from day one; every other rule records
 what it would do and lets the call through. A rule enforces once it is in ENFORCED.
+`radar` (2026-11-08) denies from day one too: Relationship Radar's data (who PJ talks to,
+when) never reaches Claude, sanitized or not. A source that carries it declares "radar".
 """
 
 import json
@@ -40,12 +42,13 @@ SOURCES = {
     "evals": set(),
 }
 
-ENFORCED = {"client-repo"}
+ENFORCED = {"client-repo", "radar"}
 
 CLIENT_TEXT = re.compile(
     r"(?:~|/Users/[^/\s]+)/(?:" + "|".join(CLIENT_REPOS) + r")\b"
     r"|kellypj24/(?:" + "|".join(CLIENT_REPOS) + r")\b"
 )
+RADAR_TEXT = re.compile(r"\.relationship-radar\b|\bradar\.duckdb\b")
 PERSONAL_ADDRESS = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
 
 
@@ -91,6 +94,12 @@ def repo_name(cwd):
     return Path(top.stdout.strip()).name if top.returncode == 0 else path.name
 
 
+def _in_radar_home(cwd):
+    home = (Path.home() / ".relationship-radar").resolve()
+    path = Path(cwd).resolve()
+    return path == home or home in path.parents
+
+
 def evaluate(source, text, tools="", cwd=None):
     """The rules hit by one call, without recording or raising."""
     v = Verdict(source)
@@ -98,6 +107,8 @@ def evaluate(source, text, tools="", cwd=None):
     repo = repo_name(cwd) if cwd else None
     if repo in CLIENT_REPOS or CLIENT_TEXT.search(text):
         v.hits["client-repo"] = "deny"
+    if "radar" in tags or RADAR_TEXT.search(text) or (cwd and _in_radar_home(cwd)):
+        v.hits["radar"] = "deny"
     if "memory" in tags or sanitize.PRIVATE.search(text):
         v.hits["memory"] = "deny"
     personal = any(PERSONAL.fullmatch(d.lower()) for d in PERSONAL_ADDRESS.findall(text))

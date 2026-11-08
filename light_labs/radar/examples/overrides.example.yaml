@@ -1,0 +1,8 @@
+# ~/.relationship-radar/overrides.yaml
+# Refer to people by phone, email, LinkedIn URL, *@domain, or a card's exact display name.
+me: []                      # your own phones and emails: never a person
+merge: []                   # [[ "+15555550100", "someone@example.com" ], ...] one person
+split: []                   # [[ "+15555550101" ], ...] these identities are their own person
+ignore: []                  # family you talk to daily, doctors' offices, businesses
+names: {}                   # display-name overrides and nicknames: {"Jonathan Example": "Jon"}
+tags: {}                    # {"Example Person": [college]}

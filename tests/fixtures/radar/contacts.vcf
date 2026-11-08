@@ -1,0 +1,79 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Inner;Alice;;;
+FN:Alice Inner
+TEL;type=CELL;type=VOICE;type=pref:(415) 555-0101
+X-ABUID:A1:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Close;Bob;;;
+FN:Bob Close
+item1.EMAIL;type=INTERNET;type=pref:Bob@Example.com
+item1.X-ABLabel:_$!<Other>!$_
+TEL;type=CELL:+1 415 555 0102
+BDAY;X-APPLE-OMIT-YEAR=1604:1604-11-11
+X-ABUID:B2:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Cooling;Carol;;;
+FN:Carol Cooling
+TEL:415-555-0103
+BDAY:1990-03-15
+ORG:Example Health;
+TITLE:Director of Data
+X-ABUID:C3:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Group;Dan;;;
+FN:Dan Group
+TEL:+14155550104
+X-ABUID:D4:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Former;Erin;;;
+FN:Erin Former
+ORG:SmarterDx;
+TITLE:Staff Engineer at a company with a long name that
+  is folded across lines
+EMAIL:erin@example.org
+X-ABUID:E5:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Frank Miller
+ORG:Acme;
+EMAIL:frank@example.com
+X-ABUID:F6:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Frank Miler
+ORG:Acme;
+TEL:+14155550106
+X-ABUID:F7:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Grace Hopper
+ORG:Navy;
+EMAIL:grace@example.com
+X-ABUID:G8:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Grace Hoper
+ORG:Example Corp;
+EMAIL:ghoper@example.net
+X-ABUID:G9:ABPerson
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Doctor Office
+ORG:Example Clinic;
+TEL:+14155550107
+X-ABUID:H10:ABPerson
+END:VCARD

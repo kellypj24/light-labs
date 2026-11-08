@@ -66,6 +66,18 @@ class GateTest(unittest.TestCase):
             with self.assertRaises(gate.Denied):
                 gate.check("roll/chores", "s", "u", "Read,Grep,Glob", str(repo))
 
+    def test_radar_denied_from_day_one(self):
+        for text in ("cat ~/.relationship-radar/digests/x.md", "open radar.duckdb"):
+            with self.subTest(text=text), self.assertRaises(gate.Denied):
+                gate.check("roll/chores", "s", text)
+        with (
+            mock.patch.dict(gate.SOURCES, {"rush/radar": {"radar"}}),
+            self.assertRaises(gate.Denied),
+        ):
+            gate.check("rush/radar", "s", "who is overdue?")
+        home = Path.home() / ".relationship-radar" / "digests"
+        self.assertIn("radar", gate.evaluate("roll/chores", "u", "Read", str(home)).hits)
+
     def test_other_rules_record_without_blocking(self):
         v = gate.check("rush/auto", "notes", "Dana <dana@gmail.com> asked", "Read", "/tmp")
         self.assertEqual(v.hits, {"personal-mail": "sanitize", "tool-repo": "deny"})

@@ -1,0 +1,264 @@
+"""Relationship Radar: normalization, sources, resolution, metrics, circles, digest, CLI."""
+
+import io
+import logging
+import unittest
+from contextlib import redirect_stdout
+from datetime import UTC, date, datetime
+from unittest import mock
+
+from light_labs.radar import circles, digest, metrics, normalize, resolve
+from light_labs.radar.sources import registry
+from light_labs.radar.sources.base import SourceResult, SyncContext, run_source
+from light_labs.radar.sources.contacts import parse_vcards
+from tests.radar_support import AS_OF, FIXTURES, RadarCase, timeline, write_export
+
+
+class TestNormalize(unittest.TestCase):
+    def test_phone_to_e164(self):
+        self.assertEqual(normalize.phone("(415) 555-0101"), "+14155550101")
+        self.assertEqual(normalize.phone("415.555.0101"), "+14155550101")
+        self.assertIsNone(normalize.phone("(555) 555-0101"))  # no such area code
+        self.assertIsNone(normalize.phone("12345"))
+
+    def test_handle_and_refs(self):
+        self.assertEqual(normalize.handle("Bob@Example.com"), ("email", "bob@example.com"))
+        self.assertIsNone(normalize.handle("urn:biz:123"))
+        self.assertEqual(
+            normalize.identity_ref("https://linkedin.com/in/someone/?x=1"),
+            ("linkedin_url", "https://www.linkedin.com/in/someone"),
+        )
+        self.assertIsNone(normalize.identity_ref("Bob Close"))
+        self.assertEqual(
+            normalize.identity_ref("uk.linkedin.com/in/someone"),
+            ("linkedin_url", "https://www.linkedin.com/in/someone"),
+        )
+        for lookalike in ("https://evil.example/linkedin.com/in/x", "notlinkedin.com/in/x"):
+            self.assertIsNone(normalize.linkedin_url(lookalike))
+
+    def test_apple_time_nanoseconds_and_seconds(self):
+        self.assertEqual(normalize.apple_time(0), datetime(2001, 1, 1, tzinfo=UTC))
+        jan = datetime(2026, 1, 1, tzinfo=UTC)
+        self.assertEqual(normalize.apple_time(788_918_400 * 1_000_000_000), jan)
+        self.assertEqual(normalize.apple_time(788_918_400), jan)
+
+    def test_name_folding(self):
+        self.assertEqual(normalize.name("  José  O'Neil "), "jose o neil")
+
+    def test_vcards(self):
+        cards = {c.name: c for c in parse_vcards((FIXTURES / "contacts.vcf").read_text())}
+        bob = cards["Bob Close"]
+        self.assertEqual(bob.emails, ["Bob@Example.com"])
+        self.assertEqual((bob.birthday, bob.birthday_has_year), (date(1604, 11, 11), False))
+        carol = cards["Carol Cooling"]
+        self.assertEqual((carol.birthday, carol.birthday_has_year), (date(1990, 3, 15), True))
+        self.assertEqual((carol.org, carol.title), ("Example Health", "Director of Data"))
+        self.assertTrue(cards["Erin Former"].title.endswith("name that is folded across lines"))
+        self.assertEqual(cards["Alice Inner"].uid, "A1:ABPerson")
+
+
+class TestPipeline(RadarCase):
+    def sync_all(self, with_snippets=False):
+        ctx = SyncContext(self.paths, self.settings, with_snippets)
+        results = {n: run_source(self.con, s, ctx) for n, s in registry().items()}
+        self.con.begin()
+        res = resolve.resolve(self.con, self.paths, self.settings)
+        self.con.commit()
+        return results, res
+
+    def one(self, sql, params=()):
+        return self.con.execute(sql, list(params)).fetchone()
+
+    def person(self, name):
+        return self.one("SELECT * FROM people WHERE display_name = ?", [name])
+
+    def test_imessage_counts_and_group_expansion(self):
+        results, _ = self.sync_all()
+        self.assertEqual(results["imessage"].status, "ok")
+        n = dict(
+            self.con.execute(
+                "SELECT identity_value, count(*) FROM interactions GROUP BY ALL"
+            ).fetchall()
+        )
+        self.assertEqual(n["+14155550101"], 200)
+        self.assertEqual(n["+14155550108"], 36)  # my group messages count for every member
+        self.assertEqual(n["+14155550104"], 72)
+        self.assertNotIn("12345", n)  # short codes dropped
+        channel = "SELECT DISTINCT channel FROM interactions WHERE identity_value = '+14155550103'"
+        self.assertEqual(self.con.execute(channel).fetchall(), [("sms",)])
+        snippets = "SELECT count(*) FROM interactions WHERE snippet IS NOT NULL"
+        self.assertEqual(self.one(snippets)[0], 0)
+
+    def test_sync_is_idempotent_and_incremental(self):
+        first, _ = self.sync_all()
+        total = self.one("SELECT count(*) FROM interactions")[0]
+        again, _ = self.sync_all()
+        self.assertEqual(again["imessage"].rows_in, 0)
+        self.assertEqual(again["contacts"].message, "unchanged")
+        self.assertEqual(self.one("SELECT count(*) FROM interactions")[0], total)
+        self.assertEqual(again["imessage"].watermark, first["imessage"].watermark)
+
+    def test_new_messages_only_after_watermark(self):
+        self.sync_all()
+        msgs = timeline()
+        alice = next(m for m in reversed(msgs) if m["chat"] == "c_alice")
+        write_export(self.paths.messages_export, [*msgs, dict(alice, rowid=10_000, guid="new")])
+        results, _ = self.sync_all()
+        self.assertEqual((results["imessage"].rows_in, results["imessage"].watermark), (1, "10000"))
+
+    def test_snippets_latest_only_and_truncated(self):
+        self.sync_all(with_snippets=True)
+        rows = self.con.execute(
+            "SELECT identity_value, count(*), max(length(snippet)) FROM interactions "
+            "WHERE snippet IS NOT NULL GROUP BY ALL"
+        ).fetchall()
+        self.assertTrue(rows)
+        self.assertTrue(all(c == 1 and n <= 140 for _, c, n in rows))
+
+    def test_resolution(self):
+        _, res = self.sync_all()
+        bob = self.person("Bob Close")[0]
+        idents = self.con.execute(
+            "SELECT kind, value_norm FROM identities WHERE person_id = ? ORDER BY 1", [bob]
+        ).fetchall()
+        self.assertEqual(idents, [("email", "bob@example.com"), ("phone", "+14155550102")])
+        # Frank Miller / Frank Miler: same org, 0.96 -> merged. Grace: different orgs -> review.
+        self.assertEqual(res.auto_merged, 1)
+        franks = "SELECT count(*) FROM people WHERE display_name LIKE 'Frank%'"
+        self.assertEqual(self.one(franks)[0], 1)
+        review = self.paths.review_matches.read_text()
+        self.assertIn("Grace Hopper", review)
+        self.assertIn("Grace Hoper", review)
+        unknown = self.one(
+            "SELECT p.display_name, d.match_method FROM identities d JOIN people p "
+            "USING (person_id) WHERE value_norm = '+14155550199'"
+        )
+        self.assertEqual(unknown, ("+14155550199", "unmatched"))
+
+    def test_review_decision_survives_and_applies(self):
+        self.sync_all()
+        lines = self.paths.review_matches.read_text().splitlines()
+        lines[1] = lines[1].rstrip(",") + ",merge"
+        self.paths.review_matches.write_text("\n".join(lines) + "\n")
+        self.sync_all()
+        graces = "SELECT count(*) FROM people WHERE display_name LIKE 'Grace%'"
+        self.assertEqual(self.one(graces)[0], 1)
+        self.assertIn(",merge", self.paths.review_matches.read_text())
+
+    def test_overrides(self):
+        self.paths.overrides.write_text(
+            'me: ["+1 415 555 0199"]\n'
+            'ignore: ["*@example.org", "Doctor Office"]\n'
+            'names: {"Alice Inner": "Ali"}\n'
+            'merge: [["+14155550104", "Carol Cooling"]]\n'
+            'tags: {"bob@example.com": [college]}\n'
+        )
+        self.sync_all()
+        me = "SELECT count(*) FROM identities WHERE value_norm = '+14155550199'"
+        self.assertEqual(self.one(me)[0], 0)
+        self.assertIs(self.person("Erin Former")[6], True)
+        self.assertIs(self.person("Doctor Office")[6], True)
+        self.assertIsNotNone(self.person("Ali"))
+        carol = self.person("Carol Cooling")[0]
+        dan = "SELECT person_id FROM identities WHERE value_norm = '+14155550104'"
+        self.assertEqual(self.one(dan)[0], carol)
+        self.assertEqual(self.con.execute("SELECT tag FROM tags").fetchall(), [("college",)])
+
+    def test_metrics_and_bootstrap(self):
+        self.sync_all()
+        by = {m.display_name: m for m in metrics.compute(self.con, AS_OF)}
+        self.assertEqual(by["Alice Inner"].last_two_way, date(2026, 10, 17))
+        self.assertEqual(by["Carol Cooling"].trend, "cooling")
+        self.assertEqual(circles.propose(by["Alice Inner"])[0], "inner")
+        self.assertEqual(circles.propose(by["Bob Close"])[0], "close")
+        self.assertEqual(circles.propose(by["Dan Group"])[0], "dormant")  # group-only weighs less
+        counts = circles.write_proposal(self.paths.circles_proposed, list(by.values()), AS_OF)
+        self.assertIn('"Alice Inner": inner  # active', self.paths.circles_proposed.read_text())
+        self.assertGreaterEqual(counts["dormant"], 1)
+        self.assertTrue(circles.load(self.con, self.paths.circles_proposed))  # valid circles.yaml
+
+    def test_digest(self):
+        self.sync_all(with_snippets=True)
+        assigned = circles.load(self.con, self.paths.circles)
+        self.assertEqual({a.circle for a in assigned.values()}, {"inner", "close", "friends"})
+        m = metrics.compute(self.con, AS_OF)
+        employers = self.settings.former_employers
+        shared = digest.render(self.con, m, assigned, employers, AS_OF)
+        top = shared.split("## Birthdays")[0]
+        self.assertLess(top.index("Bob Close"), top.index("Carol Cooling"))
+        self.assertLess(top.index("Carol Cooling"), top.index("Alice Inner"))
+        self.assertIn("birthday in 5 days", top)
+        self.assertIn("quiet 69 days after", top)
+        self.assertNotIn("Dan Group", top)
+        self.assertIn("- Wed Nov 11: Bob Close\n", shared)
+        self.assertIn("**Erin Former** (Staff Engineer", shared)  # former SmarterDx colleague
+        self.assertNotIn("xxxx", shared)  # no snippet text in the shared copy
+        self.assertNotIn("snippet", shared)
+        local = digest.render(
+            self.con, m, assigned, employers, AS_OF, snippets=digest.latest_snippets(self.con)
+        )
+        self.assertIn("Last message (snippet)", local)
+
+    def test_broken_source_is_isolated(self):
+        class Broken:
+            name = "broken"
+
+            def sync(self, con, ctx, watermark) -> SourceResult:
+                con.execute(
+                    "INSERT INTO source_people VALUES "
+                    "('broken', 'k', 'X', NULL, NULL, NULL, NULL, NULL, now())"
+                )
+                raise ValueError("format changed")
+
+        ctx = SyncContext(self.paths, self.settings)
+        with self.assertLogs("radar", "WARNING"):
+            r = run_source(self.con, Broken(), ctx)
+        self.assertEqual(r.status, "failed")
+        self.assertIn("format changed", r.message)
+        self.assertEqual(self.one("SELECT count(*) FROM source_people")[0], 0)  # rolled back
+        self.assertEqual(run_source(self.con, registry()["imessage"], ctx).status, "ok")
+
+    def test_missing_export_is_skipped(self):
+        self.paths.messages_export.unlink()
+        with self.assertLogs("radar", "WARNING"):
+            r = run_source(self.con, registry()["imessage"], SyncContext(self.paths, self.settings))
+        self.assertEqual(r.status, "skipped")
+
+
+class TestCli(RadarCase):
+    def lab(self, *args):
+        from light_labs.cli import main
+
+        out = io.StringIO()
+        with (
+            mock.patch.dict("os.environ", {"RADAR_HOME": str(self.paths.home)}),
+            redirect_stdout(out),
+            self.assertRaises(SystemExit) as exit_,
+        ):
+            main(["radar", *args])
+        self.assertEqual(exit_.exception.code, 0, out.getvalue())
+        return out.getvalue()
+
+    def test_end_to_end(self):
+        self.con.close()  # the CLI opens its own connection
+        day = AS_OF.date().isoformat()
+        self.lab("init")
+        self.assertTrue(self.paths.overrides.exists())
+        out = self.lab("sync", "--no-kick")
+        self.assertIn("imessage: ok", out)
+        self.assertIn("contacts: ok", out)
+        self.assertIn("inner:", self.lab("bootstrap", "--as-of", day))
+        self.lab("weekly", "--as-of", day)
+        self.assertTrue((self.tmp / "drive" / "weekly-digest.md").exists())
+        self.assertTrue((self.paths.digests / "2026-11-06.md").exists())
+        self.assertIn("email: bob@example.com [exact]", self.lab("person", "Bob"))
+        self.lab("purge", "--yes")
+        for h in list(logging.getLogger("radar").handlers):
+            h.close()
+        self.assertFalse(self.paths.db.exists())
+        self.assertFalse((self.tmp / "drive" / "weekly-digest.md").exists())
+        self.assertTrue(self.paths.circles.exists())  # PJ's edits stay without --all
+
+
+if __name__ == "__main__":
+    unittest.main()

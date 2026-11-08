@@ -1,0 +1,12 @@
+# ~/.relationship-radar/circles.yaml
+# Cadence in days per circle; null = never suggested.
+circles:
+  inner: 14
+  close: 30
+  friends: 90
+  network: 182
+  dormant: null
+# People by display name, phone, email, LinkedIn URL or person id (p_...).
+people:
+  "Example Person": close
+  "+15555550100": {circle: inner, cadence_days: 7}

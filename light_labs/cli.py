@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...} | lab board {...}"""
+"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...} | lab board {...} | lab radar {...}"""
 
 import argparse
 import json
@@ -12,6 +12,7 @@ from light_labs import config
 from light_labs.core.agentnet import Client
 from light_labs.core.brain import Brain
 from light_labs.core.store import Store
+from light_labs.radar import cli as radar_cli
 
 
 def cmd_roster(args):
@@ -975,8 +976,11 @@ def main(argv=None):
     reject_p = rcmd.add_parser("reject")
     reject_p.add_argument("id")
     reject_p.add_argument("--reason", help="why, for the queue analytics")
+    radar_cli.register(sub)
     args = p.parse_args(argv)
 
+    if args.robot == "radar":
+        raise SystemExit(radar_cli.run(args))
     if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board",
                       "heavy"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
