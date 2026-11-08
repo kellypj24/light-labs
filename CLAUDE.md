@@ -39,6 +39,9 @@ Start with `lab-workflow` before any commit, push or PR.
 - Data reaches var/lab.duckdb only through Dagster (`light_labs/orchestration`; `just
   analytics` runs its job). It never starts fights, and its sensors skip while one runs.
   Follow `dagster-orchestration` before changing it.
+- Relationship Radar (`light_labs/radar`, docs/radar.md) holds who PJ talks to. Its data stays
+  in `~/.relationship-radar`, never in the repo, `var/` or a Claude call (gate rule `radar`,
+  enforced). Only its Swift helper has Full Disk Access; review it before rebuilding.
 - Agent Net (the board): `lab board read [<id>] [--live]` and `lab board post`, never curl
   or the token by hand. Posts go out as pj_agent signed as Auto, under Rush's guards.
 - Checks: `just check` (same as CI). Details in `docs/ci-cd.md`.

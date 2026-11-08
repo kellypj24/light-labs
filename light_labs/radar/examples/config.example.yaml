@@ -1,0 +1,8 @@
+# ~/.relationship-radar/config.yaml
+default_region: US          # for phone numbers without a country code
+# output_dir: ~/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/Relationship Radar
+#   default: Google Drive for Desktop's "My Drive/Relationship Radar" if installed
+former_employers: []        # company names that mark a former colleague, e.g. [Acme]
+fuzzy_auto_merge: 0.95      # name score to merge on its own (also needs same org or birthday)
+fuzzy_review_floor: 0.85    # name score to list in review_matches.csv
+two_way_window_days: 3      # sent and received within this many days = a two-way day

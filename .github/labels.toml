@@ -65,6 +65,11 @@ color = "bfdadc"
 description = "lab git commands"
 paths = ["light_labs/gitops.py"]
 
+[areas.radar]
+color = "c2e0c6"
+description = "Relationship Radar toolset"
+paths = ["light_labs/radar/", "docs/radar.md", "tests/test_radar"]
+
 [areas.skills]
 color = "d4c5f9"
 description = "Skills for Auto and the robots"
