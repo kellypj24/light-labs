@@ -1,4 +1,4 @@
-"""`lab radar`: sync, bootstrap, weekly, person, doctor, purge, helper.
+"""`lab radar`: sync, bootstrap, weekly, person, doctor, purge, helper, schedule.
 
 Parsers only at import time; the handlers import Radar's modules, which need the `radar`
 dependency group (`uv run --group radar lab radar ...`).
@@ -42,6 +42,8 @@ def register(sub) -> None:
     hb.add_argument("--snippets", action="store_true", help="compile in 140-char previews")
     hcmd.add_parser("install", help="LaunchAgent: daily 06:20 and on `lab radar sync`")
     hcmd.add_parser("uninstall", help="remove the LaunchAgent and binary")
+    sc = cmd.add_parser("schedule", help="LaunchAgents: sync daily 06:30, weekly Fri 15:00")
+    sc.add_argument("action", choices=["install", "uninstall"])
 
 
 def run(args) -> int:
@@ -54,6 +56,7 @@ def run(args) -> int:
         "doctor": doctor_cmd,
         "purge": purge,
         "helper": helper_cmd,
+        "schedule": schedule_cmd,
     }[args.cmd]
     return handler(args) or 0
 
@@ -134,7 +137,10 @@ def bootstrap(args) -> None:
         paths.circles_proposed, metrics.compute(con, when, settings.two_way_window_days), when
     )
     print(", ".join(f"{c}: {n}" for c, n in counts.items()))
-    print(f"review {paths.circles_proposed}, then copy into {paths.circles}")
+    if circles.apply_if_empty(paths.circles_proposed, paths.circles):
+        print(f"applied to {paths.circles} (it had no people); edit it to correct any circle")
+    else:
+        print(f"review {paths.circles_proposed}; copy what you agree with into {paths.circles}")
 
 
 def weekly(args) -> None:
@@ -246,7 +252,10 @@ def purge(args) -> int:
         h.close()
     for t in existing:
         shutil.rmtree(t) if t.is_dir() else t.unlink()
-    print("purged. The helper binary and LaunchAgent stay: `lab radar helper uninstall`.")
+    print(
+        "purged. The helper and the schedule stay: "
+        "`lab radar helper uninstall`, `lab radar schedule uninstall`."
+    )
     return 0
 
 
@@ -270,4 +279,17 @@ def helper_cmd(args) -> int:
     except helper.NotApproved as e:
         print(e)
         return 1
+    return 0
+
+
+def schedule_cmd(args) -> int:
+    from light_labs.radar import schedule
+
+    paths, _ = _setup()
+    if args.action == "install":
+        for p in schedule.install(paths):
+            print(f"installed {p}")
+    else:
+        schedule.uninstall()
+        print("removed the sync and weekly LaunchAgents")
     return 0

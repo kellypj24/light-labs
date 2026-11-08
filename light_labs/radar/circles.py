@@ -129,3 +129,19 @@ def write_proposal(path: Path, metrics: list[PersonMetrics], as_of: datetime) ->
     path.write_text("\n".join(lines) + "\n")
     path.chmod(0o600)
     return counts
+
+
+def apply_if_empty(proposed: Path, circles_path: Path) -> bool:
+    """First bootstrap: with no people in circles.yaml yet, the proposal becomes it.
+
+    After that PJ's file wins: later bootstraps only write circles.proposed.yaml."""
+    current = (yaml.safe_load(circles_path.read_text()) or {}) if circles_path.exists() else {}
+    if current.get("people"):
+        return False
+    text = proposed.read_text().replace(
+        "# copy what you agree with into circles.yaml. Nothing here is applied.",
+        "# applied because circles.yaml had no people. Edit freely: yours wins from now on.",
+    )
+    circles_path.write_text(text)
+    circles_path.chmod(0o600)
+    return True

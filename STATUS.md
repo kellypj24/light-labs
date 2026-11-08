@@ -36,10 +36,11 @@ _Updated 2026-11-08._
   2026-11-13, read the verdicts and enforce the remaining rules. Step 2a (calibration
   maps per brain and question, `mart_calibration`) in review; first real map, Roll's
   `deps` on `llama3.1:8b`, stays identity (raw p already calibrated). 2b replays mail-keep.
-- Relationship Radar slice 1 (`light_labs/radar`, `lab radar`, docs/radar.md): Messages
-  (through a Swift helper, the only code with Full Disk Access) and Contacts (vCard export)
-  → `~/.relationship-radar/radar.duckdb` → weekly digest. Not yet run on real data: the
-  helper isn't built, granted FDA or installed. Gate rule `radar` denies its data to Claude.
+- Relationship Radar (`light_labs/radar`, `lab radar`, docs/radar.md) live on real data
+  since 2026-11-08: a Swift helper (the only code with Full Disk Access, built only from
+  source PJ approved) exports Messages and the Mac's Contacts at 06:20; `sync` 06:30
+  daily, `weekly` Friday 15:00 (LaunchAgents) → `~/.relationship-radar`. First sync:
+  39.5k interactions, 160 people. Gate rule `radar` denies its data to Claude.
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
@@ -54,11 +55,9 @@ _Updated 2026-11-08._
 2. `dependabot-merge` fight (mega-man, proto-14b, bass) once the backlog is through and
    the stage is re-generated; bar 0.95 and zero false yeses, per tier, patch first.
 3. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
-4. Radar: PJ approves and builds the helper, grants it FDA, installs it, exports Contacts; then
-   `lab radar sync` and `bootstrap` on real data. Slice 2 LinkedIn export, slice 3 Gmail
-   (`gmail.metadata`) and Calendar (`calendar.readonly`), asked before requesting scopes;
-   then the sync/weekly LaunchAgents (06:30 daily, Friday 15:00). Rush delivering the weekly
-   picks is the first robot tie-in.
+4. Radar: Rush delivers the weekly picks (Telegram), the first robot tie-in. Slice 2
+   LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
+   asked before requesting scopes.
 
 ## Open decisions
 

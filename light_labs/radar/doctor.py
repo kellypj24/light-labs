@@ -64,6 +64,12 @@ def helper_checks(paths: Paths) -> list[Check]:
     else:
         out.append(Check("helper", "fail", "not signed with the hardened runtime",
                          "lab radar helper build"))  # fmt: skip
+    from light_labs.radar import schedule
+
+    for job in schedule.JOBS:
+        if not schedule.loaded(job):
+            out.append(Check(f"schedule {job}", "warn", "LaunchAgent not installed",
+                             "lab radar schedule install"))  # fmt: skip
     if helper.is_loaded():
         out.append(Check("helper agent", "ok", f"{helper.LABEL} loaded"))
     else:

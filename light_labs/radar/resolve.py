@@ -26,7 +26,7 @@ from rapidfuzz import fuzz, process
 from light_labs.radar import normalize
 from light_labs.radar.config import Paths, Settings
 
-SOURCE_PRIORITY = {"contacts": 0, "linkedin": 1, "gmail": 2, "calendar": 3}
+SOURCE_PRIORITY = {"addressbook": 0, "contacts": 1, "linkedin": 2, "gmail": 3, "calendar": 4}
 REVIEW_FIELDS = ["left", "right", "left_name", "right_name", "score", "why", "decision"]
 
 
@@ -97,10 +97,11 @@ def resolve(con: duckdb.DuckDBPyConnection, paths: Paths, settings: Settings) ->
             "title": title,
             "birthday": bday,
             "has_year": has_year,
+            "is_me": bool(is_me),
         }
-        for src, key, name, org, title, bday, has_year in con.execute(
-            "SELECT source, source_key, display_name, org, title, birthday, birthday_has_year "
-            "FROM source_people"
+        for src, key, name, org, title, bday, has_year, is_me in con.execute(
+            "SELECT source, source_key, display_name, org, title, birthday, birthday_has_year, "
+            "is_me FROM source_people"
         ).fetchall()
     }
     card_idents = con.execute(
@@ -127,6 +128,11 @@ def resolve(con: duckdb.DuckDBPyConnection, paths: Paths, settings: Settings) ->
         return {n for n, c in cards.items() if c["name"] and normalize.name(c["name"]) == folded}
 
     me = set().union(*(nodes_for(r) for r in ov.me)) if ov.me else set()
+    # PJ's own card ("My Card" in Contacts): its identities are `me`, and it is no person.
+    my_cards = {n for n, c in cards.items() if c["is_me"]}
+    me |= {ident_node(k, v) for s, key, k, v in card_idents if f"sp:{s}:{key}" in my_cards}
+    cards = {n: c for n, c in cards.items() if n not in my_cards}
+    card_idents = [r for r in card_idents if f"sp:{r[0]}:{r[1]}" not in my_cards]
     split_nodes = set().union(*(nodes_for(r) for g in ov.split for r in g)) if ov.split else set()
     method: dict[str, tuple[str, float]] = {}
 

@@ -20,21 +20,25 @@ lab radar helper build         # compile the approved copy and sign it
 #   grant it Full Disk Access (below), then:
 lab radar helper install       # LaunchAgent: daily 06:20 and on `lab radar sync`
 lab radar sync
-lab radar bootstrap            # writes circles.proposed.yaml; copy what you agree with
-lab radar weekly
+lab radar bootstrap            # proposes circles; the first one fills an empty circles.yaml
+lab radar schedule install     # LaunchAgents: sync daily 06:30, weekly Friday 15:00
 lab radar doctor               # checks every permission and freshness, with fixes
 ```
 
+After that nothing is manual: the helper exports at 06:20, sync runs at 06:30, and the
+digest is written on Fridays at 15:00. Logs: `~/.relationship-radar/logs/`.
+
 `lab radar person "<name>"` shows one person's identities and timeline.
-`lab radar sync --source contacts` runs one source.
+`lab radar sync --source addressbook` runs one source.
 
 ## Permissions
 
-### Messages: Full Disk Access for the helper only
+### Messages and Contacts: Full Disk Access for the helper only
 
 macOS gates `~/Library/Messages/chat.db` behind Full Disk Access (FDA), and there is no
-narrower permission. Only `light_labs/radar/helper/radar-messages-export.swift` gets it: not your terminal,
-not Python.
+narrower permission. Only `light_labs/radar/helper/radar-messages-export.swift` gets it:
+not your terminal, not Python. FDA also covers the Contacts databases, so the same
+helper exports contact cards, with no export step for you.
 
 1. `lab radar helper approve` shows the source (later, only the diff since your last
    approval) and asks you to type `approve`. It refuses without a terminal, so no robot
@@ -63,10 +67,12 @@ The file is short. Check that it:
 
 - [ ] takes no arguments, reads no environment variables or config (outside the
       `RADAR_TEST` build, which never gets FDA)
-- [ ] opens only `chat.db`, with `SQLITE_OPEN_READONLY`
-- [ ] runs only the two fixed `SELECT`s, with no input interpolated
+- [ ] opens only `chat.db` and the Contacts databases (`AddressBook-v22.abcddb`, the root
+      one and `Sources/*/`), each with `SQLITE_OPEN_READONLY`
+- [ ] runs only fixed `SELECT`s, with no input interpolated: two on Messages, three on
+      Contacts (cards, phones, emails), no notes, addresses, photos or relations
 - [ ] reads `m.text` only under `#if RADAR_SNIPPETS`, truncated to 140 characters
-- [ ] writes only `messages.jsonl` (via `.tmp` and rename, mode 0600), creating it
+- [ ] writes only `messages.jsonl` and `contacts.jsonl` (via `.tmp` and rename, mode 0600), creating them
       relative to directories it has checked one by one: `~/.relationship-radar`, then
       `inbox`, each opened with `O_NOFOLLOW`, owned by you, not group or other writable
 - [ ] is built by `lab radar helper build` with `--options runtime` (hardened runtime blocks
@@ -78,12 +84,15 @@ GitHub can't enforce a review here: Auto's PRs go out under PJ's account, and an
 can't approve their own PR. The approval step above covers that. Also, no robot lands a
 PR that touches `light_labs/radar/helper/` (Roll's tiers, #71: T3, PJ by hand).
 
-### Contacts: no permission
+### Contacts
 
-Contacts.app → select all → File → Export → Export vCard, saved into
-`~/.relationship-radar/inbox/contacts/`. Or export from the iPhone (Contacts → Lists →
-long-press All Contacts → Export) and AirDrop it there. If the Mac's Contacts lag the
-phone, iCloud Contacts sync on both fixes it at the source.
+The helper reads the Mac's Contacts (every account under `Sources/`) daily. Your own card
+("My Card") marks your phones and emails as `me`, so they never become a person. If the
+Mac's Contacts lag the phone, turn on iCloud Contacts on both, once.
+
+Optional: a vCard export (from the iPhone: Contacts → Lists → long-press All Contacts →
+Export) dropped into `~/.relationship-radar/inbox/contacts/` is read too, for contacts
+that live only on another device.
 
 ## Configuration (`~/.relationship-radar/`, never in the repo)
 
@@ -111,8 +120,8 @@ Identity resolution has four steps, in order:
 | per message: who, when, direction, channel, group size | attachments, reactions, edits |
 | with `--with-snippets`: newest 140-char preview per contact | anything from chats you didn't take part in |
 
-- The helper's export holds the same metadata. It lives in `inbox/` until the next sync
-  reads it, then it is deleted.
+- The helper's exports hold the same metadata. They live in `inbox/` until the next sync
+  reads them, then they are deleted.
 - **What leaves the machine:** the shared digest (`weekly-digest.md` in the Google Drive
   folder). It has names, circles, days since contact, birthdays, reasons and openers, and
   it is read by Google and by the cloud Claude task. Snippets never go in it. They appear
@@ -122,8 +131,8 @@ Identity resolution has four steps, in order:
   escapes Markdown, caps their length, and its header tells the reader to treat them as
   data, not instructions.
 - **Wipe:** `lab radar purge` deletes the database, exports, digests, logs, review file and the
-  shared digest. `--all` also deletes your config, and `lab radar helper uninstall` removes the
-  helper and LaunchAgent. Remove the FDA entry in Settings by hand.
+  shared digest. `--all` also deletes your config; `lab radar helper uninstall` and
+  `lab radar schedule uninstall` remove the helper and the LaunchAgents. Remove the FDA entry in Settings by hand.
 
 ## Adding a source
 
