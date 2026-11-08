@@ -179,8 +179,21 @@ class ChoresTest(unittest.TestCase):
             pr(2, "Bump b from 1.0.0 to 1.0.1 in /t"),
             pr(3, "Bump c from 1.0.0 to 1.0.1 in /u"),
         ])  # fmt: skip
-        actions = [a for _, a, _ in self.chores(repo, cap=1).run()]
-        self.assertEqual(actions, ["merged", "later", "hold"])
+        out = self.chores(repo, cap=1).run()
+        self.assertEqual([a for _, a, _ in out], ["merged", "later", "later"])
+        self.assertEqual(out[2][2], "daily merge cap 1 reached")
+        self.assertEqual(self.brother.models, ["haiku"])  # the capped PR costs no review
+        self.assertEqual(self.store.pending(), [])
+
+    def test_old_cap_hold_is_cleared_and_gives_no_fixture(self):
+        capped = pr(4, "Bump d from 1.0.0 to 1.0.1 in /v")
+        target = {"repo": "pj/de", "pr": 4, "head": "sha4"}
+        self.store.enqueue(chores.KIND, target, "HOLD: daily merge cap 10 reached", capped["title"],
+                           escalate="daily merge cap 10 reached",
+                           big_brother={"model": "opus", "verdict": "HOLD", "why": "fine"})  # fmt: skip
+        self.chores(FakeRepo([capped]), apply=False).run()
+        self.assertEqual(self.store.pending(), [])
+        self.assertEqual(chores.fixtures(self.store, lambda r, n: ""), [])
 
     def test_fixtures_label_by_pj_over_claude_one_per_pr(self):
         held = "HOLD: ok?\nwhy: unsure\nroll: wrong"

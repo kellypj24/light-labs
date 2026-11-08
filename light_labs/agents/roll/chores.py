@@ -157,8 +157,10 @@ def transient(f):
     return None
 
 
-# Holds recorded for a transient state before transient() existed; settle() clears them.
-TRANSIENT_HOLDS = ("CI pending", "mergeable: UNKNOWN")
+# Holds recorded for a transient state (or the daily cap) before these were `later`;
+# settle() clears them and outcome() gives them no label.
+TRANSIENT_HOLDS = ("CI pending", "mergeable: UNKNOWN", "daily merge cap")
+TRANSIENT_REASON = "transient hold; decided again"
 
 
 def blocked(f):
@@ -222,6 +224,12 @@ class Chores:
     def decide(self, f):
         if wait := transient(f):
             return f["number"], "later", wait
+        why = blocked(f) or self.stale(f)
+        if why and why.startswith("main changed") and self.apply:
+            self.repo.gh("pr", "comment", str(f["number"]), "--body", "@dependabot rebase")
+        if not why and self.apply and self.merged_today() >= self.cap:
+            # Before Roll and Claude: a capped PR is decided on a later day, not held.
+            return f["number"], "later", f"daily merge cap {self.cap} reached"
         prompt = state(f)
         roll = None
         if self.roll is not None:
@@ -229,9 +237,6 @@ class Chores:
                 roll = answer(self.roll, f)
             except (OSError, RuntimeError) as e:
                 self.store.journal(f"Roll could not answer on #{f['number']}: {e}")
-        why = blocked(f) or self.stale(f)
-        if why and why.startswith("main changed") and self.apply:
-            self.repo.gh("pr", "comment", str(f["number"]), "--body", "@dependabot rebase")
         model = critique = question = None
         if why:
             call, question = "HOLD", why
@@ -246,8 +251,6 @@ class Chores:
         action = "hold"
         if call == "MERGE":
             action = "merge" if self.apply else "would merge"
-            if self.apply and self.merged_today() >= self.cap:
-                call, action, question = "HOLD", "hold", f"daily merge cap {self.cap} reached"
         if not self.apply:
             return f["number"], action, self._note(f, roll, model, question, why)
         item = self.store.enqueue(
@@ -316,8 +319,8 @@ class Chores:
             target = item.get("target") or {}
             if item.get("kind") != KIND or target.get("repo") != self.name:
                 continue
-            if item.get("escalate") in TRANSIENT_HOLDS:
-                self.store.resolve(item["id"], "rejected", reason="transient hold; decided again")
+            if str(item.get("escalate") or "").startswith(TRANSIENT_HOLDS):
+                self.store.resolve(item["id"], "rejected", reason=TRANSIENT_REASON)
                 continue
             head = open_heads.get(target["pr"])
             if head == target["head"]:
@@ -385,7 +388,7 @@ def outcome(item):
     brother's verdict. A close says nothing (Dependabot closes PRs it supersedes). None
     when code held it and Claude never saw it."""
     bb = item.get("big_brother") or {}
-    if not bb.get("model"):
+    if not bb.get("model") or item.get("reason") == TRANSIENT_REASON:
         return None
     reason = item.get("reason") or ""
     if reason.startswith("merged by") and reason != "merged by roll":
