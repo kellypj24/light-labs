@@ -6,6 +6,7 @@ import hashlib
 import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 import phonenumbers
 
@@ -39,8 +40,9 @@ def handle(raw: str, region: str = "US") -> tuple[str, str] | None:
 def identity_ref(raw: str, region: str = "US") -> tuple[str, str] | None:
     """Parse a reference typed by PJ in overrides/circles: email, phone or LinkedIn URL."""
     raw = raw.strip()
-    if "linkedin.com/" in raw:
-        return ("linkedin_url", linkedin_url(raw))
+    url = linkedin_url(raw)
+    if url:
+        return ("linkedin_url", url)
     if "@" in raw:
         e = email(raw)
         return ("email", e) if e else None
@@ -50,9 +52,17 @@ def identity_ref(raw: str, region: str = "US") -> tuple[str, str] | None:
     return None
 
 
-def linkedin_url(raw: str) -> str:
-    v = raw.strip().lower().split("?")[0].rstrip("/")
-    return re.sub(r"^https?://(www\.)?", "https://www.", v)
+def linkedin_url(raw: str) -> str | None:
+    """Canonical profile URL, or None unless the host is linkedin.com or a subdomain."""
+    v = raw.strip().lower()
+    parts = urlsplit(v if "://" in v else f"https://{v}")
+    host = parts.hostname or ""
+    if parts.scheme not in ("http", "https") or not (
+        host == "linkedin.com" or host.endswith(".linkedin.com")
+    ):
+        return None
+    path = parts.path.rstrip("/")
+    return f"https://www.linkedin.com{path}" if path else None
 
 
 def name(raw: str) -> str:

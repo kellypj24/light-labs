@@ -29,6 +29,12 @@ class TestNormalize(unittest.TestCase):
             ("linkedin_url", "https://www.linkedin.com/in/someone"),
         )
         self.assertIsNone(normalize.identity_ref("Bob Close"))
+        self.assertEqual(
+            normalize.identity_ref("uk.linkedin.com/in/someone"),
+            ("linkedin_url", "https://www.linkedin.com/in/someone"),
+        )
+        for lookalike in ("https://evil.example/linkedin.com/in/x", "notlinkedin.com/in/x"):
+            self.assertIsNone(normalize.linkedin_url(lookalike))
 
     def test_apple_time_nanoseconds_and_seconds(self):
         self.assertEqual(normalize.apple_time(0), datetime(2001, 1, 1, tzinfo=UTC))
