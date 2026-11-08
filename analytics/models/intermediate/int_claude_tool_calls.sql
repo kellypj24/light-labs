@@ -117,7 +117,7 @@ parted AS (
                     REGEXP_REPLACE(raw_command, '(?s)<<-?\s*[''"]?\w+[''"]?.*$', ''),
                     '\s*(&&|\|\||;|\||\n)\s*'
                 ),
-                part -> REGEXP_REPLACE(
+                LAMBDA part: REGEXP_REPLACE(
                     REGEXP_REPLACE(
                         TRIM(part),
                         '^((do|then|else|time|env|sudo|exec|!)\s+'
@@ -128,7 +128,7 @@ parted AS (
                     ''
                 )
             ),
-            part -> part <> ''
+            LAMBDA part: part <> ''
         ) AS parts
     FROM calls
     WHERE call_number = 1
@@ -142,7 +142,7 @@ ranked AS (
         *,
         LIST_MAX(
             LIST_TRANSFORM(
-                parts, part -> {{ claude_shell_task('part', 'writes_files') }} || '|' || part
+                parts, LAMBDA part: {{ claude_shell_task('part', 'writes_files') }} || '|' || part
             )
         ) AS main_part
     FROM parted
