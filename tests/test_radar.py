@@ -91,7 +91,9 @@ class TestPipeline(RadarCase):
 
     def test_sync_is_idempotent_and_incremental(self):
         first, _ = self.sync_all()
+        self.assertFalse(self.paths.messages_export.exists())  # deleted once read
         total = self.one("SELECT count(*) FROM interactions")[0]
+        write_export(self.paths.messages_export, timeline())  # the helper's next full export
         again, _ = self.sync_all()
         self.assertEqual(again["imessage"].rows_in, 0)
         self.assertEqual(again["contacts"].message, "unchanged")

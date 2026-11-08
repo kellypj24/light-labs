@@ -54,7 +54,7 @@ _Updated 2026-11-08._
 2. `dependabot-merge` fight (mega-man, proto-14b, bass) once the backlog is through and
    the stage is re-generated; bar 0.95 and zero false yeses, per tier, patch first.
 3. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
-4. Radar: PJ builds the helper, grants it FDA, installs it, exports Contacts; then
+4. Radar: PJ approves and builds the helper, grants it FDA, installs it, exports Contacts; then
    `lab radar sync` and `bootstrap` on real data. Slice 2 LinkedIn export, slice 3 Gmail
    (`gmail.metadata`) and Calendar (`calendar.readonly`), asked before requesting scopes;
    then the sync/weekly LaunchAgents (06:30 daily, Friday 15:00). Rush delivering the weekly
