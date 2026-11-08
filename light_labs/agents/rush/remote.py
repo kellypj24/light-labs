@@ -23,7 +23,7 @@ import traceback
 from argparse import Namespace
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from light_labs.agents.rush.heartbeat import post
 from light_labs.core.agentnet import Client
@@ -71,6 +71,20 @@ def request_host(value):
     if sep and head and port.isdigit():
         value = head
     return value.rstrip(".")
+
+
+# Ids from the URL path: queue ids, and board task and message ids from the edge. They go
+# into Store paths and Agent Net API paths, so nothing that could change the path
+# (`/`, `%`, a bare `..`) gets through.
+ID = re.compile(r"(?=[^.]*[A-Za-z0-9])[A-Za-z0-9_.:-]{1,200}")
+
+
+def path_parts(raw_path):
+    """The path's segments, or None when a second segment isn't a plain id."""
+    parts = urlparse(raw_path).path.strip("/").split("/")
+    if len(parts) > 1 and not all(ID.fullmatch(p) for p in parts[1:]):
+        return None
+    return parts
 
 
 def esc(text, clip=None):
@@ -515,7 +529,9 @@ def handler(remote):
         def do_GET(self):
             if not self._allowed():
                 return
-            parts = urlparse(self.path).path.strip("/").split("/")
+            parts = path_parts(self.path)
+            if parts is None:
+                return self._send(404, page("Not found", "<p>Not found.</p>"))
             flash = parse_qs(urlparse(self.path).query).get("done", [None])[0]
             try:
                 if parts == [""]:
@@ -559,7 +575,9 @@ def handler(remote):
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}
             if not secrets.compare_digest(form.get("token", ""), remote.token):
                 return self._send(403, page("Stale page", "<p>Reload and try again.</p>"))
-            parts = urlparse(self.path).path.strip("/").split("/")
+            parts = path_parts(self.path)
+            if parts is None:
+                return self._send(404, page("Not found", "<p>Not found.</p>"))
             text = form.get("text", "")
             try:
                 if parts == ["tick"]:
@@ -583,7 +601,7 @@ def handler(remote):
                 return self._send(404, page("Gone", "<p>Already handled.</p>"))
             except OSError as e:
                 return self._send(502, page("Edge unreachable", f"<p>{esc(str(e))}</p>"))
-            self._send(303, "", location=f"{back}?done={done.replace(' ', '+')}")
+            self._send(303, "", location=f"{back}?done={quote(done, safe='')}")
 
     return Handler
 

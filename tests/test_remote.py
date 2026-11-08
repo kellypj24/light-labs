@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from light_labs.agents.rush import remote as remote_mod
 from light_labs.agents.rush.remote import (
     Remote,
     board_view,
@@ -167,6 +168,29 @@ class RemoteTest(unittest.TestCase):
     def test_comment_is_signed_as_pj(self):
         self.call("/comment/t1", {"text": "On it.", "token": self.remote.token})
         self.assertEqual(self.edge.posted, [("comment", "t1", "On it.\n\n— PJ (via pj_agent)")])
+
+    def test_ids_that_could_change_a_path_are_refused(self):
+        for bad in ("..", "%2e%2e", "a%2Fb", "%0d%0aX"):
+            with self.subTest(bad=bad):
+                code, _ = self.call(f"/comment/{bad}", {"text": "x", "token": self.remote.token})
+                self.assertEqual(code, 404)
+                self.assertEqual(self.call(f"/task/{bad}")[0], 404)
+        self.assertEqual(self.edge.posted, [])
+        self.assertTrue(remote_mod.ID.fullmatch("1a2b3c4d"))
+        self.assertTrue(remote_mod.ID.fullmatch("msg_01.Ab-c:9"))
+        self.assertFalse(remote_mod.ID.fullmatch("..."))
+
+    def test_redirect_location_is_quoted(self):
+        item = self.store.enqueue("reply", {"to": ["muse"]}, "d", "ctx")
+        req = urllib.request.Request(
+            f"{self.base}/reject/{item['id']}",
+            data=urllib.parse.urlencode({"token": self.remote.token}).encode(),
+        )
+        req.add_header("Tailscale-User-Login", PJ)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.build_opener(NoRedirect).open(req)
+        self.assertEqual(e.exception.headers["Location"], f"/?done=Rejected%20{item['id']}")
+        e.exception.close()
 
     def test_tick_runs_in_the_background(self):
         self.assertEqual(self.call("/tick", {"token": self.remote.token})[0], 303)
