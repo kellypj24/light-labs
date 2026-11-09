@@ -113,6 +113,20 @@ def calibration(context: AssetExecutionContext):
     yield MaterializeResult(asset_key=["raw", "calibration_maps"], metadata={"fitted": fitted})
 
 
+@asset(
+    key=AssetKey(["raw", "strong_sets"]),
+    group_name="landing",
+    retry_policy=LOCKED,
+    description="Strong's export, shared to Rush on Telegram, from var/training/strong/ "
+    "(`lab training ingest-strong`). Snapshot replace from the newest export.",
+)
+def strong_sets(context: AssetExecutionContext) -> None:
+    from light_labs.training import strong
+
+    path, n = strong.ingest(var=config.VAR)
+    context.add_output_metadata({"rows": n, "file": str(path) if path else ""})
+
+
 class Translator(DagsterDbtTranslator):
     """dbt models grouped by layer: staging, intermediate, marts."""
 
@@ -127,5 +141,5 @@ def analytics(context: AssetExecutionContext, dbt: DbtCliResource):
     yield from dbt.cli(["build"], context=context).stream()
 
 
-LANDING = [eval_samples, eval_run_health, queue_items, claude_records, calibration]
+LANDING = [eval_samples, eval_run_health, queue_items, claude_records, calibration, strong_sets]
 ALL_ASSETS = [*LANDING, analytics]

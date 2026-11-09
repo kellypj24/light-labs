@@ -230,6 +230,7 @@ def prepare():
     """Path to the cached database: synthetic raw data plus the built project."""
     from light_labs.core import calibration_results, claude_results, queue_results
     from light_labs.evals import results
+    from light_labs.training import strong
 
     CACHE.mkdir(parents=True, exist_ok=True)
     # Always named lab.duckdb: DuckDB names the catalog after the file, and dbt-duckdb's
@@ -251,6 +252,8 @@ def prepare():
             claude_results.ingest([Path(tmp) / "no-transcripts"], db=building)
             # ...and calibration; empty, and never exported over the robots' maps.
             calibration_results.ingest(Path(tmp) / "no-pairs", db=building, export=False)
+            # ...and Strong's training logs; no export, an empty table.
+            strong.ingest(var=Path(tmp) / "no-strong", db=building)
             res = dbt(copy_project(Path(tmp) / "project"), building, "build")
             if not res.success:
                 failed = [

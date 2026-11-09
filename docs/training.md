@@ -1,0 +1,40 @@
+# Training
+
+Strong (lifting) logs land in `var/lab.duckdb` as `raw.strong_sets`, then
+`staging.stg_strong_sets`. Build plan: `docs/plans/training.md`.
+
+## Weekly Strong drop
+
+On the phone, Sunday after the last session:
+
+1. Strong → export data (CSV).
+2. In the share sheet, pick Telegram → Rush.
+
+Rush replies `Got N sets, <first> to <last>. Saved strong-<yyyy-mm-dd>.csv.` No reply
+means the Mac was off or asleep for more than a day (Telegram drops undelivered updates
+after 24 hours): send it again. A second drop the same day replaces the first; each export
+holds the full history.
+
+Rush refuses a file that isn't Strong's layout (`Not a Strong export: ...`). That usually
+means Strong changed its export; the header is pinned in `light_labs/training/strong.py`.
+
+Reminder: a Shortcuts personal automation, Sunday 18:00, "Show notification: Strong
+export to Rush".
+
+## On the Mac
+
+| Step | Where |
+|---|---|
+| Rush checks the CSV and saves it | `var/training/strong/inbox/` |
+| Dagster sensor `strong_dropped` (every minute, skipped during a fight or heavy job) runs `strong_job` | |
+| The importer moves inbox files to the archive and reloads the table from the newest | `var/training/strong/` |
+
+By hand: `lab training ingest-strong [<csv>]`.
+
+What the parser assumes:
+
+- Weights are lb (`UNIT`); the export has no unit column. Bodyweight sets log 0.
+- Rest-timer rows are not sets and are dropped.
+- A letter in Set Order (W, D, F) replaces the set's number; `set_number` is the set's
+  position within its exercise, `set_type` the letter's meaning.
+- RPE is empty in PJ's export so far.

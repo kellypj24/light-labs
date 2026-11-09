@@ -1,5 +1,5 @@
-"""Sensors: rebuild the analytics when a fight ends or a queue changes, and Claude Code's
-usage once a day.
+"""Sensors: rebuild the analytics when a fight ends, a queue changes or a Strong export
+lands, and Claude Code's usage once a day.
 
 All are on by default and tick in the Dagster daemon (`just dagster-install`). They only
 launch the landing + dbt jobs, never a fight, and skip while a fight is on or any heavy job
@@ -16,7 +16,7 @@ from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, Sk
 from light_labs import config
 from light_labs.core.heavy import holder
 from light_labs.evals.fights import live_fight, run_records
-from light_labs.orchestration.jobs import claude_job, evals_job, queue_job
+from light_labs.orchestration.jobs import claude_job, evals_job, queue_job, strong_job
 
 # `just eval` loads its own results when a fight ends; let that finish first.
 SETTLE = timedelta(minutes=2)
@@ -88,6 +88,40 @@ def queue_changed(context: SensorEvaluationContext):
     return RunRequest(run_key=f"queues:{fingerprint}")
 
 
+def drop_fingerprint(var_dir):
+    """The Strong exports waiting in var/training/strong/inbox/, or None when it's empty.
+    Ingest moves them out, so an emptied inbox never asks for a run."""
+    box = Path(var_dir) / "training" / "strong" / "inbox"
+    paths = sorted(box.glob("*.csv")) if box.exists() else []
+    if not paths:
+        return None
+    h = hashlib.sha256()
+    for path in paths:
+        st = path.stat()
+        h.update(f"{path.name}:{st.st_mtime_ns}:{st.st_size}\n".encode())
+    return h.hexdigest()[:16]
+
+
+@sensor(
+    job=strong_job,
+    minimum_interval_seconds=60,
+    default_status=DefaultSensorStatus.RUNNING,
+    description="Lands a Strong export when Rush drops one in var/training/strong/inbox/.",
+)
+def strong_dropped(context: SensorEvaluationContext):
+    if run_id := live_fight(config.VAR / "evals"):
+        return SkipReason(f"fight {run_id} is running")
+    if held := holder():
+        return SkipReason(f"heavy job {held['job']} is running")
+    fingerprint = drop_fingerprint(config.VAR)
+    if fingerprint is None:
+        return SkipReason("inbox empty")
+    if fingerprint == context.cursor:
+        return SkipReason("drop already requested")
+    context.update_cursor(fingerprint)
+    return RunRequest(run_key=f"strong:{fingerprint}")
+
+
 def claude_due(cursor, now=None):
     """The UTC day to load Claude Code's usage for, or None when today's is done."""
     today = (now or datetime.now(UTC)).date().isoformat()
@@ -117,4 +151,4 @@ def claude_daily(context: SensorEvaluationContext):
     return RunRequest(run_key=f"claude:{day}")
 
 
-ALL_SENSORS = [fight_finished, queue_changed, claude_daily]
+ALL_SENSORS = [fight_finished, queue_changed, claude_daily, strong_dropped]

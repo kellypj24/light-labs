@@ -1,4 +1,4 @@
-"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...} | lab board {...} | lab radar {...}"""
+"""lab roster | lab skills | lab deploy | lab evals {...} | lab queue {...} | lab claude {...} | lab git {...} | lab rush {...} | lab board {...} | lab radar {...} | lab training {...}"""
 
 import argparse
 import json
@@ -129,6 +129,18 @@ def queue_ingest(args):
 
     for robot, n in queue_results.ingest(args.root).items():
         print(f"loaded {robot} ({n} queue items)")
+    print(f"db: {results.DB}")
+
+
+def training_ingest_strong(args):
+    from light_labs.evals import results
+    from light_labs.training import strong
+
+    try:
+        path, n = strong.ingest(args.csv)
+    except strong.NotStrong as e:
+        raise SystemExit(f"not a Strong export: {e}") from None
+    print(f"loaded {n} sets from {path}" if path else "no Strong export yet")
     print(f"db: {results.DB}")
 
 
@@ -836,6 +848,11 @@ def main(argv=None):
     calcmd.add_parser(
         "ingest", help="refit maps; land raw.shadow_pairs, raw.calibration_maps"
     ).add_argument("--root", help="var/ directory holding the pairs (default: var/)")
+    training_p = sub.add_parser("training", help="training logs in DuckDB")
+    tcmd = training_p.add_subparsers(dest="cmd", required=True)
+    tcmd.add_parser(
+        "ingest-strong", help="reload raw.strong_sets from the newest Strong export"
+    ).add_argument("csv", nargs="?", help="an export to load (default: newest drop)")
     claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
     ccmd = claude_p.add_subparsers(dest="cmd", required=True)
     cingest = ccmd.add_parser(
@@ -985,8 +1002,8 @@ def main(argv=None):
                       "heavy"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
-    if args.robot in ("evals", "queue", "claude", "calibration"):
-        globals()[f"{args.robot}_{args.cmd}"](args)
+    if args.robot in ("evals", "queue", "claude", "calibration", "training"):
+        globals()[f"{args.robot}_{args.cmd.replace('-', '_')}"](args)
         return
     from light_labs.agents import rush
 

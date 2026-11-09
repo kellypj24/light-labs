@@ -615,7 +615,13 @@ def serve(store, rush, host="127.0.0.1", port=8787, allowed=None, tick=None):
         from light_labs.agents.rush.telegram import Telegram
 
         try:
-            tg = Telegram.from_keychain(rush.TELEGRAM_CHAT, store.root / "telegram.json")
+            from light_labs.config import VAR
+
+            tg = Telegram.from_keychain(
+                rush.TELEGRAM_CHAT,
+                store.root / "telegram.json",
+                drops=VAR / "training" / "strong" / "inbox",
+            )
         except subprocess.CalledProcessError:
             print("Telegram: no token in Keychain; page only")
         else:

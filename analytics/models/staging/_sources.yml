@@ -84,3 +84,20 @@ sources:
               - accepted_values:
                   arguments:
                     values: ["platt", "isotonic", "identity"]
+      - name: strong_sets
+        description: >
+          Every set in PJ's newest Strong export, reloaded in full by `lab training
+          ingest-strong` (each export holds the whole history). Rest-timer rows are
+          dropped; set_number is the set's position within its exercise, because Strong
+          writes a letter (W, D, F) in place of the number for warm-up, drop and failure
+          sets. Weights are in `unit` (lb); the export has no unit column.
+        columns:
+          - name: set_id
+            tests:
+              - unique
+              - not_null
+          - name: set_type
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ["normal", "warmup", "drop", "failure"]

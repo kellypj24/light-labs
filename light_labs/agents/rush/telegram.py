@@ -4,23 +4,28 @@ Rush is a bot PJ created with @BotFather; the token lives in Keychain
 (`light-labs-rush-telegram`) and the bot talks to one chat only, RUSH_TELEGRAM_CHAT
 (`lab rush telegram-link` finds it after PJ sends the bot /start). Drafts arrive with
 Send and Reject buttons; replying to a draft with text sends PJ's version, or rejects it
-when the reply starts with "no". /queue lists what waits, /tick checks the board now.
+when the reply starts with "no". /queue lists what waits, /tick checks the board now. A CSV PJ shares to the bot (the
+Strong export) is checked by `training.strong.parse` and lands in `drops` for Dagster to ingest.
 
 Outgoing texts come from the tick (phone.py decides when). Incoming updates are read by
 a long-poll thread in the remote's process, so they are handled while the Mac is awake;
 Telegram keeps them for a day otherwise. Message contents pass through Telegram's servers.
 """
 
+import csv
 import json
 import re
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 
 from light_labs.core.agentnet import keychain_token
 
 KEYCHAIN = "light-labs-rush-telegram"
 API = "https://api.telegram.org/bot{token}/{method}"
+FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
+MAX_FILE = 20 * 1024 * 1024  # Bot API getFile limit
 POLL_SECONDS = 50
 KEEP_MESSAGES = 200
 # A reply that rejects: "no", "No.", "no: wrong thread", "no - not ours". Not "nope, send it".
@@ -29,18 +34,19 @@ HELP = (
     "I'm Rush. I text you when a draft waits on you.\n"
     "Tap Send or Reject under a draft, or reply to it: your text goes out instead, "
     'and "no <reason>" rejects it.\n'
-    "/queue lists what's waiting. /tick checks the board now."
+    "/queue lists what's waiting. /tick checks the board now.\n"
+    "Share a Strong export (CSV) and I'll save it for the lab."
 )
 
 
 class Telegram:
-    def __init__(self, token, chat_id, state_path, opener=urllib.request.urlopen):
+    def __init__(self, token, chat_id, state_path, opener=urllib.request.urlopen, drops=None):
         self.token, self.chat_id = token, str(chat_id)
-        self.state_path, self.opener = state_path, opener
+        self.state_path, self.opener, self.drops = state_path, opener, drops
 
     @classmethod
-    def from_keychain(cls, chat_id, state_path):
-        return cls(keychain_token(KEYCHAIN), chat_id, state_path)
+    def from_keychain(cls, chat_id, state_path, drops=None):
+        return cls(keychain_token(KEYCHAIN), chat_id, state_path, drops=drops)
 
     # --- wire
     def call(self, method, wait=30, **params):
@@ -54,6 +60,12 @@ class Telegram:
         if not body.get("ok"):
             raise OSError(f"telegram {method}: {body.get('description')}")
         return body["result"]
+
+    def download(self, file_id):
+        path = self.call("getFile", file_id=file_id)["file_path"]
+        req = urllib.request.Request(FILE_API.format(token=self.token, path=path))
+        with self.opener(req, timeout=60) as r:
+            return r.read()
 
     def _state(self):
         if self.state_path.exists():
@@ -119,6 +131,8 @@ class Telegram:
         msg = update.get("message") or {}
         if not self._from_pj(msg.get("chat", {})):
             return None
+        if "document" in msg:
+            return self._drop(msg)
         text = (msg.get("text") or "").strip()
         replied = msg.get("reply_to_message")
         if replied:
@@ -131,6 +145,32 @@ class Telegram:
             started = remote.start_tick()
             return self.text(None, "Checking the board." if started else "Already checking.")
         return self.text(None, HELP)
+
+    def _drop(self, msg):
+        """Save a shared CSV as drops/strong-<yyyy-mm-dd>.csv (the message's local date).
+        A second drop the same day replaces the first: each export is a full snapshot."""
+        doc = msg["document"]
+        name = doc.get("file_name") or ""
+        if self.drops is None:
+            return self.text(None, "I can't take files here.")
+        if not name.lower().endswith(".csv"):
+            return self.text(None, f"Not a CSV: {name or 'unnamed file'}. Share the Strong export.")
+        if doc.get("file_size", 0) > MAX_FILE:
+            return self.text(None, f"{name} is over 20 MB; Telegram won't hand it to me.")
+        from light_labs.training import strong
+
+        data = self.download(doc["file_id"])
+        try:
+            sets = strong.parse(data)
+        except (strong.NotStrong, UnicodeDecodeError, csv.Error) as e:
+            return self.text(None, f"Not a Strong export: {e}")
+        day = datetime.fromtimestamp(msg.get("date") or time.time()).date().isoformat()
+        out = self.drops / f"strong-{day}.csv"
+        self.drops.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(out)  # the sensor never sees half a file
+        return self.text(None, f"Got {strong.summary(sets)}. Saved {out.name}.")
 
     def _answer(self, item_id, text, remote):
         try:

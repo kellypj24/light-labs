@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_strong_sets
+    description: One row per set logged in Strong, rest timers excluded.
+    columns:
+      - name: set_id
+        description: Hash of workout time, workout, exercise and set position; stable across exports
+        tests:
+          - unique
+          - not_null
+      - name: workout_id
+        description: Hash of workout time and name; one per logged workout
+        tests:
+          - not_null
+      - name: set_number
+        description: Position within the exercise in that workout, from 1
+      - name: is_bodyweight
+        description: Weight is 0 or missing (pull ups, dips)
+      - name: tonnage
+        description: weight × reps in `unit`; 0 for bodyweight sets

@@ -14,14 +14,20 @@ class Wire:
     """Stands in for urlopen: records each Bot API call, answers with canned results."""
 
     def __init__(self):
-        self.calls, self.updates, self.next_id = [], [], 100
+        self.calls, self.updates, self.next_id, self.files = [], [], 100, {}
 
     def __call__(self, req, timeout=None):
+        if "/file/bot" in req.full_url:  # a download: raw bytes, not a JSON envelope
+            path = req.full_url.split("/file/botTOKEN/", 1)[1]
+            self.calls.append(("download", {"path": path}))
+            return io.BytesIO(self.files[path])
         method = req.full_url.rsplit("/", 1)[1]
         params = json.loads(req.data)
         self.calls.append((method, params))
         if method == "getUpdates":
             result, self.updates = self.updates, []
+        elif method == "getFile":
+            result = {"file_path": f"documents/{params['file_id']}.csv"}
         elif method == "sendMessage":
             self.next_id += 1
             result = {"message_id": self.next_id}
@@ -135,3 +141,78 @@ class TelegramTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+STRONG = (
+    b"Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,"
+    b"Notes,Workout Notes,RPE\n"
+    b'2026-11-07 06:00:00,"Push",40m,"Bench Press (Barbell)",1,135.0,8.0,0,0.0,"","",\n'
+    b'2026-11-07 06:00:00,"Push",40m,"Bench Press (Barbell)",Rest Timer,0,0.0,0,120.0,,,\n'
+    b'2026-11-08 06:00:00,"Push",40m,"Bench Press (Barbell)",2,135.0,8.0,0,0.0,,,\n'
+)
+
+
+class DropTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.wire = Wire()
+        self.drops = self.root / "inbox"
+        self.tg = Telegram(
+            "TOKEN", PJ_CHAT, self.root / "telegram.json", opener=self.wire, drops=self.drops
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def doc(self, name="strong.csv", data=STRONG, chat=PJ_CHAT, size=None):
+        self.wire.files["documents/f1.csv"] = data
+        return {
+            "message": {
+                "chat": {"id": chat},
+                "date": 1762600000,
+                "document": {"file_id": "f1", "file_name": name, "file_size": size or len(data)},
+            }
+        }
+
+    def test_csv_from_pj_lands_in_drops(self):
+        self.tg.handle(self.doc(), None)
+        (out,) = self.drops.glob("strong-*.csv")
+        self.assertEqual(out.read_bytes(), STRONG)
+        self.assertEqual(list(self.drops.glob("*.part")), [])
+        self.assertEqual(
+            self.wire.sent()[-1]["text"],
+            f"Got 2 sets, 2026-11-07 to 2026-11-08. Saved {out.name}.",
+        )
+
+    def test_csv_that_isnt_strong_is_refused(self):
+        self.tg.handle(self.doc(data=b"a,b\n1,2\n"), None)
+        self.assertFalse(self.drops.exists())
+        self.assertIn("Not a Strong export: header differs", self.wire.sent()[-1]["text"])
+
+    def test_same_day_drop_replaces(self):
+        self.tg.handle(self.doc(), None)
+        more = STRONG + b'2026-11-08 07:00:00,"Pull",30m,"Pull Up",1,0,5.0,0,0.0,,,\n'
+        self.tg.handle(self.doc(data=more), None)
+        (out,) = self.drops.glob("strong-*.csv")
+        self.assertIn(b"Pull Up", out.read_bytes())
+
+    def test_not_a_csv_is_refused_without_download(self):
+        self.tg.handle(self.doc(name="photo.jpg"), None)
+        self.assertFalse(self.drops.exists())
+        self.assertNotIn("getFile", [m for m, _ in self.wire.calls])
+        self.assertIn("Not a CSV", self.wire.sent()[-1]["text"])
+
+    def test_too_big_is_refused(self):
+        self.tg.handle(self.doc(size=21 * 1024 * 1024), None)
+        self.assertFalse(self.drops.exists())
+        self.assertIn("20 MB", self.wire.sent()[-1]["text"])
+
+    def test_other_chats_are_ignored(self):
+        self.assertIsNone(self.tg.handle(self.doc(chat=7), None))
+        self.assertEqual(self.wire.calls, [])
+
+    def test_no_drops_dir_says_so(self):
+        self.tg.drops = None
+        self.tg.handle(self.doc(), None)
+        self.assertIn("can't take files", self.wire.sent()[-1]["text"])
