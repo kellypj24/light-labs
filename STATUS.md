@@ -3,12 +3,14 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-11-08._
+_Updated 2026-11-09._
 
 ## Now
 
 - Rush (DLN-100) live under launchd: hourly tick, board and mail triage, Telegram and the
-  tailnet remote page. Escalations drafted by Auto, approved by PJ.
+  tailnet remote page. Escalations drafted by Auto, approved by PJ. muse's LOOP thread
+  (`task_fb2e059c5a8bd362`) muted 2026-11-09: 73 of ~88 drafts since 11-03, all rejected.
+  The daily ask digest lists held asks only, not ones Auto noted.
 - Roll (DLN-102) live: Dependabot chores across PJ's repos (`lab roll chores`), mail
   cleanup, and the `mail-keep` weapon on `qwen2.5:14b`. Her chores answers now come from
   `qwen2.5:14b` too (`ROLL_CHORES_BRAIN` in `.env`).

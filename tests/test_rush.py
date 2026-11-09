@@ -584,6 +584,32 @@ class AskDigestTest(unittest.TestCase):
                 phone.ask_digest(store, "pj", None, send, "0-8", morning)
             )  # today's went
 
+    def test_noted_asks_are_not_listed(self):
+        from datetime import datetime
+
+        from light_labs.agents.rush import phone
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp))
+            path = store.root / "asks.jsonl"
+            noted = {"outcome": "noted", "id": "i1", "where": "task_1", "who": "muse",
+                     "ask": "review the REFINE pass", "at": "2026-10-20T01:00:00+00:00"}  # fmt: skip
+            path.write_text(json.dumps(noted) + "\n")
+            texts = []
+            send = lambda to, text: texts.append(text)
+            morning = datetime(2026, 10, 20, 9)
+            self.assertFalse(phone.ask_digest(store, "pj", None, send, "0-8", morning))
+            self.assertEqual(texts, [])
+            self.assertTrue(path.exists())  # kept until a digest goes out
+            held = dict(noted, outcome="held", id="i2", ask="decide on the demo")
+            with path.open("a") as f:
+                f.write(json.dumps(held) + "\n")
+            self.assertTrue(phone.ask_digest(store, "pj", None, send, "0-8", morning))
+            self.assertIn("1 ask for you", texts[0])
+            self.assertIn("- decide on the demo", texts[0])
+            self.assertNotIn("REFINE", texts[0])
+            self.assertFalse(path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
