@@ -112,7 +112,9 @@ the reasons it was held. `RUSH_AUTO_SEND=0` turns it off.
 
 With `auto_send.escalations` on, an escalation's holding reply ("that's with PJ and Auto")
 goes out under the same guards and limits, Auto drafts nothing for it, and the ask lands in
-one digest text a day after quiet hours. Held escalations still queue with Auto's draft.
+one digest text a day after quiet hours. Asks Auto notes as needing no reply stay out of
+the digest. Held escalations still queue with Auto's draft. Log threads (a robot's status
+reports) are muted with `lab rush mute <task>`.
 
 The queue stays short: a new draft for a thread replaces that thread's pending one (the old
 one is rejected as `superseded by <id>`, which the queue marts don't count as PJ's

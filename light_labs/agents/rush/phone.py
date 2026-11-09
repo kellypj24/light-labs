@@ -105,7 +105,9 @@ ASK_LINES = 12
 
 def ask_digest(store, to, remote_url=None, send=imessage, quiet_hours=None, now=None):
     """Once a day, after quiet hours: the asks Rush acknowledged on the board and left for
-    PJ (heartbeat.ASKS), in one text. The sent batch moves to asks-sent/. True when sent."""
+    PJ (heartbeat.ASKS), in one text. Asks Auto noted got no reply and need nothing from PJ:
+    they stay on record but aren't listed, and alone send nothing. The sent batch moves to
+    asks-sent/. True when sent."""
     now = now or datetime.now()
     path = store.root / "asks.jsonl"
     done = store.root / "asks-sent"
@@ -113,7 +115,8 @@ def ask_digest(store, to, remote_url=None, send=imessage, quiet_hours=None, now=
         return False
     if any(p.name.startswith(f"{now:%Y-%m-%d}") for p in done.glob("*.jsonl")):
         return False  # today's digest went out
-    asks = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    lines = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    asks = [a for a in lines if a.get("outcome") != "noted"]
     if not asks:
         return False
     lines = [f"- {a['ask']} ({a['who']} on {a['where']})" for a in asks[:ASK_LINES]]
