@@ -70,6 +70,11 @@ color = "c2e0c6"
 description = "Relationship Radar toolset"
 paths = ["light_labs/radar/", "docs/radar.md", "tests/test_radar"]
 
+[areas.training]
+color = "fbca04"
+description = "Training logs and the weekly workout planner"
+paths = ["light_labs/training/", "docs/training.md", "docs/plans/training.md", "tests/test_training"]
+
 [areas.skills]
 color = "d4c5f9"
 description = "Skills for Auto and the robots"

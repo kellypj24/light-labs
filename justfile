@@ -75,6 +75,7 @@ analytics-check:
     LAB_VAR="$tmp" uv run --locked lab queue ingest --root analytics/fixtures/queue
     LAB_VAR="$tmp" uv run --locked lab claude ingest --projects analytics/fixtures/claude/projects
     LAB_VAR="$tmp" uv run --locked --group analytics lab calibration ingest --root analytics/fixtures/calibration
+    LAB_VAR="$tmp" uv run --locked lab training ingest-strong analytics/fixtures/strong/strong-2026-11-01.csv
     cd analytics
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet

@@ -58,6 +58,10 @@ _Updated 2026-11-08._
 4. Radar: Rush delivers the weekly picks (Telegram), the first robot tie-in. Slice 2
    LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
    asked before requesting scopes.
+5. Training planner (`docs/plans/training.md`): step 1 in review (Strong export shared
+   to Rush on Telegram, landed by the `strong_dropped` sensor into `raw.strong_sets`;
+   setup in `docs/training.md`). Next, step 2 Strava. The Claude desktop task keeps
+   planning until two lab plans in a row pass review.
 
 ## Open decisions
 

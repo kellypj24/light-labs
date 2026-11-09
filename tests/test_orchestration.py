@@ -32,8 +32,9 @@ def setUpModule():
 
 
 def fixture_var(root):
-    """The CI fixtures laid out like var/: evals/, rush/queue/, roll/pairs/, and the Claude
-    Code transcripts as the archive copy in claude/projects/."""
+    """The CI fixtures laid out like var/: evals/, rush/queue/, roll/pairs/, the Claude
+    Code transcripts as the archive copy in claude/projects/, and a Strong drop in
+    training/strong/inbox/."""
     evals = Path(root) / "evals"
     evals.mkdir()
     for path in ANALYTICS.glob("fixtures/*.json*"):
@@ -41,6 +42,7 @@ def fixture_var(root):
     shutil.copytree(ANALYTICS / "fixtures/queue/rush", Path(root) / "rush")
     shutil.copytree(ANALYTICS / "fixtures/claude/projects", Path(root) / "claude/projects")
     shutil.copytree(ANALYTICS / "fixtures/calibration/roll", Path(root) / "roll")
+    shutil.copytree(ANALYTICS / "fixtures/strong", Path(root) / "training/strong/inbox")
     return Path(root)
 
 
@@ -100,6 +102,8 @@ class DefinitionsTest(unittest.TestCase):
 
         parents = self.graph.get(AssetKey(["staging", "stg_queue_items"])).parent_keys
         self.assertEqual(parents, {AssetKey(["raw", "queue_items"])})
+        parents = self.graph.get(AssetKey(["staging", "stg_strong_sets"])).parent_keys
+        self.assertEqual(parents, {AssetKey(["raw", "strong_sets"])})
 
 
 @unittest.skipUnless(HAS_DAGSTER, "needs the orchestration dependency group")
@@ -157,7 +161,7 @@ class SensorLogicTest(unittest.TestCase):
 
         record(self.evals, "live", "running")
         with mock.patch.object(sensors.config, "VAR", self.var):
-            for s in (sensors.fight_finished, sensors.queue_changed, sensors.claude_daily):
+            for s in sensors.ALL_SENSORS:
                 result = s(build_sensor_context(cursor="2026-01-01T00:00:00+00:00"))
                 self.assertIsInstance(result, SkipReason)
                 self.assertIn("live is running", result.skip_message)
@@ -176,6 +180,34 @@ class SensorLogicTest(unittest.TestCase):
                 request = sensors.fight_finished(build_sensor_context(cursor=context.cursor))
         self.assertIsInstance(request, RunRequest)
         self.assertEqual(request.tags["lab/runs"], "new")
+
+    def test_drop_fingerprint_is_none_until_a_drop_and_moves_with_it(self):
+        from light_labs.orchestration.sensors import drop_fingerprint
+
+        self.assertIsNone(drop_fingerprint(self.var))
+        box = self.var / "training/strong/inbox"
+        box.mkdir(parents=True)
+        self.assertIsNone(drop_fingerprint(self.var))
+        (box / "strong-2026-11-08.csv").write_text("a")
+        first = drop_fingerprint(self.var)
+        self.assertIsNotNone(first)
+        (box / "strong-2026-11-08.csv").write_text("ab")  # same-day resend replaces it
+        self.assertNotEqual(drop_fingerprint(self.var), first)
+
+    def test_strong_dropped_requests_once_per_drop(self):
+        from dagster import RunRequest, SkipReason, build_sensor_context
+
+        from light_labs.orchestration import sensors
+
+        with mock.patch.object(sensors.config, "VAR", self.var):
+            self.assertIsInstance(sensors.strong_dropped(build_sensor_context()), SkipReason)
+            box = self.var / "training/strong/inbox"
+            box.mkdir(parents=True)
+            (box / "strong-2026-11-08.csv").write_text("a")
+            context = build_sensor_context()
+            self.assertIsInstance(sensors.strong_dropped(context), RunRequest)
+            again = sensors.strong_dropped(build_sensor_context(cursor=context.cursor))
+            self.assertIsInstance(again, SkipReason)
 
     def test_claude_daily_runs_once_per_utc_day(self):
         from light_labs.orchestration.sensors import claude_due
@@ -226,6 +258,9 @@ class FullRunTest(unittest.TestCase):
                 ):
                     n = con.execute(f"SELECT count(*) FROM marts.{table}").fetchone()[0]
                     self.assertGreater(n, 0, table)
+                n = con.execute("SELECT count(*) FROM staging.stg_strong_sets").fetchone()[0]
+                self.assertEqual(n, 15)
+            self.assertEqual(list((var / "training/strong/inbox").iterdir()), [])
 
 
 if __name__ == "__main__":
