@@ -40,6 +40,9 @@ SOURCES = {
     "roll/chores": set(),
     "roll/calibrate": set(),
     "evals": set(),
+    # Weekly plan: PJ's training logs, goals.md, free windows (no event titles) and the
+    # forecast. Allowed and recorded (docs/plans/training.md, decided 2026-11-08).
+    "training/plan": set(),
 }
 
 ENFORCED = {"client-repo", "radar"}

@@ -1,6 +1,6 @@
 # Plan: training logs and weekly workout planning
 
-Status: agreed 2026-11-08. Steps 1 (#110), 2 (#112, #113) and 3 (#114) done; step 4 in review. Written 2026-11-08.
+Status: agreed 2026-11-08. Steps 1–4 done (#110, #112–#115); step 5 in review. Written 2026-11-08.
 
 Moves the exercise-planning task from Claude desktop into the lab. Strong (lifting) and
 Strava (cardio, through Apple Health) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
@@ -76,8 +76,9 @@ or skipped week costs nothing.
      horizontal/vertical push and pull, power, arms, shoulders, calves) and
      `is_bodyweight_lift`. A `not_null` test on `int_training_sets.movement_pattern`
      fails when Strong logs an exercise the seed lacks.
-   - `int_training_sets`: pattern, added weight, tonnage, Epley e1RM. Dumbbell weights are
-     both hands, as logged. A bodyweight lift logged at 100 lb or more logged PJ's
+   - `int_training_sets`: pattern, added weight, tonnage, Epley e1RM. Strong logs dumbbells
+     per hand; the seed's `implements` (2 for most dumbbell lifts) makes tonnage count
+     both. A bodyweight lift logged at 100 lb or more logged PJ's
      bodyweight: 0 added weight, no tonnage, progress on reps. e1RM only from loaded,
      non-bodyweight sets of 1–10 reps.
    - `int_training_sessions`: Strong workouts and counted Health workouts (not strength
@@ -117,19 +118,26 @@ or skipped week costs nothing.
    Files: `light_labs/core/google.py`, `light_labs/training/{calendar,weather,context}.py`,
    `light_labs/cli.py`, `tests/test_training_context.py`.
 
-5. **Planner.** `lab training plan [--week <n>]`: reads the marts, the context from
-   step 4 and `var/training/goals.md`, then writes `var/training/plans/<yyyy>-W<ww>.md` (sessions by day, exercises
-   with target sets × reps × load, cardio targets, one line of rationale per change from
-   last week). The progression rules (load increase on hitting the rep target, deload
-   after N weeks or when acute:chronic is above 1.3) are plain Python. The model only
-   writes the plan around them. Week number and deload come from `goals.md` (week 1 =
-   2026-11-09, every 4th a deload), not from the model. Progression starts from what
-   Strong logged, not from what last week's plan prescribed. Validation before delivery
-   (the desktop task's checks, in code): exactly 5 training days, no session overlapping
-   a busy window, every outdoor run on an `outdoor_ok` day, and the correct week number
-   and deload. A failed check means one retry with the failures, then the plan is sent
-   with the failures listed.
-   Files: `light_labs/training/plan.py`, `light_labs/cli.py`, `tests/test_training_plan.py`.
+5. **Planner.** `lab training plan [--week]` (default: next week) writes
+   `var/training/plans/<yyyy>-W<ww>.md` and the model's JSON beside it.
+   - Code owns the numbers: week number and deload from `goals.md` (week 1 = 2026-11-09,
+     every 4th a deload) or acute:chronic above 1.3; every lift's load and reps. A lift
+     keeps the rep scheme PJ trains (the more reps of its last two weekly top sets);
+     reaching it adds 5 lb (barbell) or 2.5 lb per hand (dumbbell), falling short repeats
+     the load, bodyweight lifts add a rep, a deload takes 90%. Lifts not trained in 12
+     weeks are left out.
+   - Claude (`claude:sonnet`, gate source `training/plan`, recorded, not denied) gets
+     goals.md, the step 4 context, the progression table, six weeks of load and the last
+     plan, and returns JSON: days, slots, sessions, items, one line of why.
+   - Checks in code: all 7 dates, exactly 5 training days, every slot inside a free
+     window, every outdoor run inside that day's outdoor hours, table lifts at the
+     table's load and reps. One retry with the failures, then the plan is written with
+     them listed.
+   - Until the work calendar is shared into `TRAINING_CALENDARS`, weekdays 08:00–17:00
+     count as busy (`TRAINING_ASSUME_WORK`; empty turns it off).
+   - First run (2026-W47): passed every check on the first reply, ~30 s.
+   Files: `light_labs/training/plan.py`, `light_labs/core/gate.py`, `light_labs/cli.py`,
+   `tests/test_training_plan.py`, seed `implements`, `int_training_sets`.
 
 6. **Delivery.** Rush sends the plan to Telegram on the planning day. Calendar events
    come later and need a `calendar.events` scope, asked first. The desktop task keeps

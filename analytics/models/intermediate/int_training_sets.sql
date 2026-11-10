@@ -2,7 +2,9 @@
     One row per Strong set with its movement pattern (seed `strong_exercises`), the
     weight that counts as load, tonnage and an Epley e1RM.
 
-    Dumbbell weights are the total of both hands, as logged. A bodyweight lift (pull up,
+    Strong logs dumbbell weight per hand. `implements` (seed) is how many are lifted, 2
+    for most dumbbell lifts, so tonnage counts both; added_weight and e1RM stay per hand,
+    the number PJ sets the PowerBlocks to. A bodyweight lift (pull up,
     dip) logged at or above `training_bodyweight_threshold_lb` logged PJ's bodyweight:
     its added weight is 0, so it adds no tonnage and progresses on reps. e1RM comes only
     from loaded, non-bodyweight sets of 1 to `training_e1rm_max_reps` reps.
@@ -39,7 +41,8 @@ joined AS (
         sets.reps,
         exercises.movement_pattern,
         CAST(DATE_TRUNC('week', sets.workout_date) AS DATE) AS workout_week,
-        COALESCE(exercises.is_bodyweight_lift, FALSE) AS is_bodyweight_lift
+        COALESCE(exercises.is_bodyweight_lift, FALSE) AS is_bodyweight_lift,
+        COALESCE(exercises.implements, 1) AS implements
     FROM sets
     LEFT JOIN exercises
         ON sets.exercise = exercises.exercise
@@ -69,7 +72,7 @@ SELECT
     *,
     CASE
         WHEN is_warmup THEN 0
-        ELSE added_weight * COALESCE(reps, 0)
+        ELSE added_weight * implements * COALESCE(reps, 0)
     END AS tonnage,
     CASE
         WHEN

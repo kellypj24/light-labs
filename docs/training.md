@@ -79,7 +79,8 @@ Telegram. Strong has no Shortcuts actions, so its export always starts in the ap
 | `marts.mart_lift_progress` | Exercise × week trained | Best e1RM and change, best reps, last session's top set; `is_latest_week` |
 
 A new exercise in Strong needs a row in `analytics/seeds/strong_exercises.csv`;
-`dbt build` fails until it has one. Dumbbell weights are both hands. A pull up or dip
+`dbt build` fails until it has one. Strong logs dumbbells per hand; the seed's
+`implements` column (2 for most dumbbell lifts) makes tonnage count both. A pull up or dip
 logged at 100 lb or more is read as bodyweight (`training_bodyweight_threshold_lb`).
 
 ## Planning context
@@ -97,3 +98,14 @@ One-time setup:
    `TRAINING_CALENDARS=primary,Kelly family calendar`.
 3. `lab google check training --account <address>` lists the calendars it can see.
 4. `var/training/goals.md` has a `- Location: <lat>, <lon>` line for the forecast.
+
+## Weekly plan
+
+`lab training plan [--week 2026-W47]` (default: next week) refreshes the context, then
+writes `var/training/plans/<week>.md`. Code sets the week number, deload and every lift's
+load and reps; Claude (Sonnet) places the sessions in free windows and writes them up.
+Failed checks (5 training days, slots inside free windows, outdoor runs in outdoor hours,
+loads from the table) get one retry, then are listed at the bottom of the plan.
+
+Until the work calendar is in `TRAINING_CALENDARS`, weekdays 08:00–17:00 count as busy;
+set `TRAINING_ASSUME_WORK=` (empty) in `.env` once it is.
