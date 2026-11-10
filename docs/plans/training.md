@@ -1,6 +1,6 @@
 # Plan: training logs and weekly workout planning
 
-Status: agreed 2026-11-08. Steps 1 (#110) and 2 (#112, #113) done; step 3 in review. Written 2026-11-08.
+Status: agreed 2026-11-08. Steps 1 (#110), 2 (#112, #113) and 3 (#114) done; step 4 in review. Written 2026-11-08.
 
 Moves the exercise-planning task from Claude desktop into the lab. Strong (lifting) and
 Strava (cardio, through Apple Health) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
@@ -96,20 +96,26 @@ or skipped week costs nothing.
    Files: `analytics/seeds/strong_exercises.csv`, `analytics/models/{intermediate,marts}/*training*`,
    `analytics/models/marts/mart_lift_progress.*`, `analytics/dbt_project.yml`.
 
-4. **Context: calendar, weather, history.** Each pulled locally; the planner sees only
-   the derived view.
-   - Calendar: PJ's primary Google calendar through `light_labs/core/google.py`
-     (`calendar.readonly`, shared with Radar slice 3), plus the iCloud family calendar by its
-     webcal URL (in `.env`). Both reduce to free/busy windows per morning (e.g. "Tue
-     05:30–07:15 free; busy from 07:30"). Event titles never leave the Mac: family events
-     are other people's data, so the same reasoning as Radar applies.
-   - Weather: 7-day forecast from api.weather.gov (no key) for the location in
-     `goals.md`. It reduces to a per-day low, wind chill, precipitation and an
-     `outdoor_ok` flag (the rule in `goals.md`, computed in Python).
-   - History: a one-time import of the desktop task's `[training] … week N` notes from
-     the Drive folder, so week 1+ progression has a baseline before Strong data covers
-     it.
-   Files: `light_labs/training/{calendar,weather,history}.py`, `tests/test_training_context.py`.
+4. **Context: calendar, weather, history.** Computed when the planner runs and written
+   to `var/training/context/<yyyy>-W<ww>.json` (`lab training context [--week]`), never
+   stored in DuckDB.
+   - Calendar: one Google free/busy query over the calendars named in
+     `TRAINING_CALENDARS` (`.env`; `primary` plus "Kelly family calendar", the iCloud
+     family calendar PJ already subscribes to in Google Calendar). The `training`
+     sign-in has `calendar.freebusy` and `calendar.calendarlist.readonly` only: busy
+     blocks and calendar names, never an event's title, so other people's events reach
+     the lab only as busy time. Google refreshes a subscribed calendar every 8–24 h,
+     which is enough for a week ahead. Free windows are gaps of 45 min or more between
+     05:00 and 21:00 local.
+   - Weather: api.weather.gov grid data for the `- Location:` line in `goals.md`. Per
+     day: daytime (07–19) minimum and maximum, wind chill and precipitation chance, the
+     low, and `outdoor_windows`: the daytime hours with air ≥ 38°F, wind chill ≥ 32°F
+     and not ≥ 50% precip at ≤ 34°F (PJ's limits in `goals.md`). `outdoor_ok` when
+     there is at least one. Days past the forecast are null.
+   - History: the desktop task's only note, week 1, copied once from Drive ("Claude task
+     log") to `var/training/history/2026-W46.md`. No code.
+   Files: `light_labs/core/google.py`, `light_labs/training/{calendar,weather,context}.py`,
+   `light_labs/cli.py`, `tests/test_training_context.py`.
 
 5. **Planner.** `lab training plan [--week <n>]`: reads the marts, the context from
    step 4 and `var/training/goals.md`, then writes `var/training/plans/<yyyy>-W<ww>.md` (sessions by day, exercises

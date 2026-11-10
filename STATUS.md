@@ -60,12 +60,11 @@ _Updated 2026-11-09._
 4. Radar: Rush delivers the weekly picks (Telegram), the first robot tie-in. Slice 2
    LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
    asked before requesting scopes.
-5. Training planner (`docs/plans/training.md`): steps 1–2 live. Strong CSV shared to
-   Rush on Telegram → `raw.strong_sets`; Health workouts posted nightly at 19:00 by
-   PJ's Shortcut to Rush's `/drop/health` → `raw.health_workouts`. Step 3 in review:
-   `mart_training_weekly` (+ breakdown, acute:chronic on minutes) and
-   `mart_lift_progress`, with the exercise → movement-pattern seed. Next, step 4
-   (calendar, weather, history). The Claude desktop task keeps planning until two lab
+5. Training planner (`docs/plans/training.md`): steps 1–3 live (Strong and Health
+   landing, `mart_training_weekly` and `mart_lift_progress`). Step 4 in review: `lab
+   training context` writes free windows (Google free/busy over primary and the Kelly
+   family calendar, no titles) and weather per day; PJ runs `lab google auth training`
+   once. Next, step 5, the planner. The Claude desktop task keeps planning until two lab
    plans in a row pass review.
 
 ## Open decisions
