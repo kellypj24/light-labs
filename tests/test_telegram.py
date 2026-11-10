@@ -157,7 +157,8 @@ class DropTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.wire = Wire()
-        self.drops = self.root / "inbox"
+        self.drops = self.root / "training"
+        self.strong = self.drops / "strong" / "inbox"
         self.tg = Telegram(
             "TOKEN", PJ_CHAT, self.root / "telegram.json", opener=self.wire, drops=self.drops
         )
@@ -166,7 +167,7 @@ class DropTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def doc(self, name="strong.csv", data=STRONG, chat=PJ_CHAT, size=None):
-        self.wire.files["documents/f1.csv"] = data
+        self.wire.files["documents/f1.csv"] = data  # Wire names every download .csv
         return {
             "message": {
                 "chat": {"id": chat},
@@ -177,9 +178,9 @@ class DropTest(unittest.TestCase):
 
     def test_csv_from_pj_lands_in_drops(self):
         self.tg.handle(self.doc(), None)
-        (out,) = self.drops.glob("strong-*.csv")
+        (out,) = self.strong.glob("strong-*.csv")
         self.assertEqual(out.read_bytes(), STRONG)
-        self.assertEqual(list(self.drops.glob("*.part")), [])
+        self.assertEqual(list(self.strong.glob("*.part")), [])
         self.assertEqual(
             self.wire.sent()[-1]["text"],
             f"Got 2 sets, 2026-11-07 to 2026-11-08. Saved {out.name}.",
@@ -194,14 +195,14 @@ class DropTest(unittest.TestCase):
         self.tg.handle(self.doc(), None)
         more = STRONG + b'2026-11-08 07:00:00,"Pull",30m,"Pull Up",1,0,5.0,0,0.0,,,\n'
         self.tg.handle(self.doc(data=more), None)
-        (out,) = self.drops.glob("strong-*.csv")
+        (out,) = self.strong.glob("strong-*.csv")
         self.assertIn(b"Pull Up", out.read_bytes())
 
     def test_not_a_csv_is_refused_without_download(self):
         self.tg.handle(self.doc(name="photo.jpg"), None)
         self.assertFalse(self.drops.exists())
         self.assertNotIn("getFile", [m for m, _ in self.wire.calls])
-        self.assertIn("Not a CSV", self.wire.sent()[-1]["text"])
+        self.assertIn("Not a CSV or JSON", self.wire.sent()[-1]["text"])
 
     def test_too_big_is_refused(self):
         self.tg.handle(self.doc(size=21 * 1024 * 1024), None)
@@ -216,3 +217,33 @@ class DropTest(unittest.TestCase):
         self.tg.drops = None
         self.tg.handle(self.doc(), None)
         self.assertIn("can't take files", self.wire.sent()[-1]["text"])
+
+
+HEALTH = (
+    Path(__file__).resolve().parents[1] / "analytics/fixtures/health/health-2026-11-02-210000.json"
+).read_bytes()
+
+
+class HealthDropTest(DropTest):
+    def test_json_file_lands_in_health_inbox(self):
+        self.tg.handle(self.doc(name="workouts.json", data=HEALTH), None)
+        (out,) = (self.drops / "health" / "inbox").glob("health-*.json")
+        self.assertEqual(out.read_bytes(), HEALTH)
+        self.assertIn("Got 1 workouts (running), 2026-11-01", self.wire.sent()[-1]["text"])
+
+    def test_json_text_lands_too_and_drops_are_kept(self):
+        msg = {"message": {"chat": {"id": PJ_CHAT}, "date": 1762600000, "text": HEALTH.decode()}}
+        self.tg.handle(msg, None)
+        msg["message"]["date"] += 60
+        self.tg.handle(msg, None)
+        self.assertEqual(len(list((self.drops / "health" / "inbox").glob("*.json"))), 2)
+
+    def test_other_json_is_refused(self):
+        self.tg.handle(self.doc(name="x.json", data=b'{"a": 1}'), None)
+        self.assertFalse((self.drops / "health").exists())
+        self.assertIn("no `workouts` list", self.wire.sent()[-1]["text"])
+
+    def test_bad_json_is_refused(self):
+        self.tg.handle(self.doc(name="workouts.json", data=b"{nope"), None)
+        self.assertFalse((self.drops / "health").exists())
+        self.assertIn("Not a Health workouts export: not JSON", self.wire.sent()[-1]["text"])

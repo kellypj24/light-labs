@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: stg_health_workouts
+    description: One row per Apple Health workout, flagged for fragments, duplicates and broken durations.
+    columns:
+      - name: workout_uuid
+        description: HealthKit's id for the workout
+        tests:
+          - unique
+          - not_null
+      - name: source_app
+        description: The app that wrote it to Health (Strava)
+      - name: is_fragment
+        description: Under 3 minutes; an accidental start
+      - name: is_implausible_pace
+        description: Slower than 20 min/km; the recording ran past the activity's end
+      - name: is_duplicate
+        description: The same activity recorded again within 10 minutes; the other record is kept
+      - name: is_counted
+        description: Not a fragment, duplicate or implausible; what marts count
+        tests:
+          - not_null

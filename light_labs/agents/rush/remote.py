@@ -620,7 +620,7 @@ def serve(store, rush, host="127.0.0.1", port=8787, allowed=None, tick=None):
             tg = Telegram.from_keychain(
                 rush.TELEGRAM_CHAT,
                 store.root / "telegram.json",
-                drops=VAR / "training" / "strong" / "inbox",
+                drops=VAR / "training",
             )
         except subprocess.CalledProcessError:
             print("Telegram: no token in Keychain; page only")

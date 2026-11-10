@@ -144,6 +144,18 @@ def training_ingest_strong(args):
     print(f"db: {results.DB}")
 
 
+def training_ingest_health(args):
+    from light_labs.evals import results
+    from light_labs.training import health
+
+    try:
+        files, upserted, total = health.ingest(args.json or None)
+    except health.NotHealth as e:
+        raise SystemExit(f"not a Health workouts export: {e}") from None
+    print(f"loaded {upserted} workouts from {files} file(s); {total} in raw.health_workouts")
+    print(f"db: {results.DB}")
+
+
 def calibration_ingest(args):
     from light_labs.core import calibration_results
     from light_labs.evals import results
@@ -853,6 +865,9 @@ def main(argv=None):
     tcmd.add_parser(
         "ingest-strong", help="reload raw.strong_sets from the newest Strong export"
     ).add_argument("csv", nargs="?", help="an export to load (default: newest drop)")
+    tcmd.add_parser(
+        "ingest-health", help="upsert Health workouts exports into raw.health_workouts"
+    ).add_argument("json", nargs="*", help="exports to load (default: the inbox's drops)")
     claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
     ccmd = claude_p.add_subparsers(dest="cmd", required=True)
     cingest = ccmd.add_parser(

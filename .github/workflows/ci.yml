@@ -173,6 +173,7 @@ jobs:
           uv run lab claude ingest --projects analytics/fixtures/claude/projects
           uv run lab calibration ingest --root analytics/fixtures/calibration
           uv run lab training ingest-strong analytics/fixtures/strong/strong-2026-11-01.csv
+          uv run lab training ingest-health analytics/fixtures/health/*.json
       - name: dbt build
         working-directory: analytics
         run: uv run dbt build
