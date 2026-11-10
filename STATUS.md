@@ -61,12 +61,12 @@ _Updated 2026-11-09._
    LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
    asked before requesting scopes.
 5. Training planner (`docs/plans/training.md`): steps 1–2 live. Strong CSV shared to
-   Rush on Telegram → `raw.strong_sets` (4,587 sets); Health workouts (Strava writes to
-   Health) → `raw.health_workouts` (11 runs, 9 counted). In review: `POST /drop/<kind>`
-   on Rush's remote page, so the nightly 21:00 Shortcut can post Health JSON over the
-   tailnet (Telegram's Shortcuts action can't message a bot). Then PJ sets up the
-   automation (`docs/training.md`) and step 3, the marts. The Claude desktop task keeps
-   planning until two lab plans in a row pass review.
+   Rush on Telegram → `raw.strong_sets`; Health workouts posted nightly at 19:00 by
+   PJ's Shortcut to Rush's `/drop/health` → `raw.health_workouts`. Step 3 in review:
+   `mart_training_weekly` (+ breakdown, acute:chronic on minutes) and
+   `mart_lift_progress`, with the exercise → movement-pattern seed. Next, step 4
+   (calendar, weather, history). The Claude desktop task keeps planning until two lab
+   plans in a row pass review.
 
 ## Open decisions
 
