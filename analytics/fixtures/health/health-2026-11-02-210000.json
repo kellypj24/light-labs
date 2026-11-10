@@ -1,0 +1,8 @@
+{
+  "exportInfo" : {"activityTypes" : ["running"], "appVersion" : "1.7.0", "buildNumber" : "5", "endDate" : "2026-11-02", "exportDate" : "2026-11-03T02:00:00Z", "startDate" : "2026-10-31", "workoutCount" : 1},
+  "workouts" : [
+    {"activityType" : "running", "duration" : 2100, "endDate" : "2026-11-01T19:35:00Z", "events" : [], "indoor" : false, "source" : "Strava", "startDate" : "2026-11-01T19:00:00Z",
+     "statistics" : {"HKQuantityTypeIdentifierActiveEnergyBurned" : {"sum" : 560, "unit" : "kcal"}, "HKQuantityTypeIdentifierDistanceWalkingRunning" : {"sum" : 7000, "unit" : "m"}},
+     "uuid" : "00000000-0000-4000-8000-000000000006"}
+  ]
+}

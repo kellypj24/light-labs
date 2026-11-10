@@ -1,5 +1,5 @@
 """Sensors: rebuild the analytics when a fight ends, a queue changes or a Strong export
-lands, and Claude Code's usage once a day.
+or Health workouts drop lands, and Claude Code's usage once a day.
 
 All are on by default and tick in the Dagster daemon (`just dagster-install`). They only
 launch the landing + dbt jobs, never a fight, and skip while a fight is on or any heavy job
@@ -16,7 +16,13 @@ from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, Sk
 from light_labs import config
 from light_labs.core.heavy import holder
 from light_labs.evals.fights import live_fight, run_records
-from light_labs.orchestration.jobs import claude_job, evals_job, queue_job, strong_job
+from light_labs.orchestration.jobs import (
+    claude_job,
+    evals_job,
+    health_job,
+    queue_job,
+    strong_job,
+)
 
 # `just eval` loads its own results when a fight ends; let that finish first.
 SETTLE = timedelta(minutes=2)
@@ -88,11 +94,13 @@ def queue_changed(context: SensorEvaluationContext):
     return RunRequest(run_key=f"queues:{fingerprint}")
 
 
-def drop_fingerprint(var_dir):
-    """The Strong exports waiting in var/training/strong/inbox/, or None when it's empty.
-    Ingest moves them out, so an emptied inbox never asks for a run."""
-    box = Path(var_dir) / "training" / "strong" / "inbox"
-    paths = sorted(box.glob("*.csv")) if box.exists() else []
+def drop_fingerprint(var_dir, kind="strong"):
+    """The drops waiting in var/training/<kind>/inbox/, or None when it's empty. Ingest
+    moves them out, so an emptied inbox never asks for a run."""
+    box = Path(var_dir) / "training" / kind / "inbox"
+    paths = (
+        sorted(p for p in box.iterdir() if p.suffix in (".csv", ".json")) if box.exists() else []
+    )
     if not paths:
         return None
     h = hashlib.sha256()
@@ -120,6 +128,26 @@ def strong_dropped(context: SensorEvaluationContext):
         return SkipReason("drop already requested")
     context.update_cursor(fingerprint)
     return RunRequest(run_key=f"strong:{fingerprint}")
+
+
+@sensor(
+    job=health_job,
+    minimum_interval_seconds=60,
+    default_status=DefaultSensorStatus.RUNNING,
+    description="Upserts Health workouts when Rush drops an export in var/training/health/inbox/.",
+)
+def health_dropped(context: SensorEvaluationContext):
+    if run_id := live_fight(config.VAR / "evals"):
+        return SkipReason(f"fight {run_id} is running")
+    if held := holder():
+        return SkipReason(f"heavy job {held['job']} is running")
+    fingerprint = drop_fingerprint(config.VAR, "health")
+    if fingerprint is None:
+        return SkipReason("inbox empty")
+    if fingerprint == context.cursor:
+        return SkipReason("drop already requested")
+    context.update_cursor(fingerprint)
+    return RunRequest(run_key=f"health:{fingerprint}")
 
 
 def claude_due(cursor, now=None):
@@ -151,4 +179,4 @@ def claude_daily(context: SensorEvaluationContext):
     return RunRequest(run_key=f"claude:{day}")
 
 
-ALL_SENSORS = [fight_finished, queue_changed, claude_daily, strong_dropped]
+ALL_SENSORS = [fight_finished, queue_changed, claude_daily, strong_dropped, health_dropped]

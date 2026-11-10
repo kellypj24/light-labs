@@ -101,3 +101,18 @@ sources:
               - accepted_values:
                   arguments:
                     values: ["normal", "warmup", "drop", "failure"]
+      - name: health_workouts
+        description: >
+          Apple Health workouts (Strava writes rides and runs to Health), upserted by
+          HealthKit uuid by `lab training ingest-health` from the exports PJ's Shortcut
+          sends to Rush. Every record is kept, including accidental starts and the same
+          run recorded twice; staging flags those. `statistics` holds every statistic
+          as exported; the named columns are the ones the marts use.
+        columns:
+          - name: workout_uuid
+            tests:
+              - unique
+              - not_null
+          - name: activity_type
+            tests:
+              - not_null

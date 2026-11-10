@@ -1,7 +1,8 @@
 # Training
 
 Strong (lifting) logs land in `var/lab.duckdb` as `raw.strong_sets`, then
-`staging.stg_strong_sets`. Build plan: `docs/plans/training.md`.
+`staging.stg_strong_sets`. Cardio comes from Apple Health (Strava writes runs and rides
+there) as `raw.health_workouts`, then `staging.stg_health_workouts`. Build plan: `docs/plans/training.md`.
 
 ## Weekly Strong drop
 
@@ -38,3 +39,22 @@ What the parser assumes:
 - A letter in Set Order (W, D, F) replaces the set's number; `set_number` is the set's
   position within its exercise, `set_type` the letter's meaning.
 - RPE is empty in PJ's export so far.
+
+## Daily Health workouts
+
+Strava → Settings → Applications, Services, and Devices → Health: on. Then a Shortcut,
+"Send Cardio to Lab":
+
+1. **Export Workouts** (Health Exporter & Shortcuts): last 2 days, all activity types.
+2. **Get Text from Input** (the exported JSON).
+3. **Send Message** (Telegram) → Rush, message: the text.
+
+Shortcuts → Automation → Time of Day 21:00, Daily, Run Immediately → the shortcut.
+
+Rush replies `Got N workouts (<types>), <first> to <last>. Saved health-<...>.json`.
+Exports overlap and that's intended: the table is keyed by HealthKit uuid. A JSON file
+shared to Rush by hand works the same way (`lab training ingest-health [<json>...]`).
+
+`stg_health_workouts` keeps every record and flags what marts skip: `is_fragment` (under
+3 min), `is_implausible_pace` (slower than 20 min/km), `is_duplicate` (same type within
+10 min of a better record). `is_counted` is the rest.

@@ -1,9 +1,9 @@
 # Plan: training logs and weekly workout planning
 
-Status: agreed 2026-11-08, step 1 in review. Written 2026-11-08.
+Status: agreed 2026-11-08. Step 1 done (#110); step 2 in review. Written 2026-11-08.
 
 Moves the exercise-planning task from Claude desktop into the lab. Strong (lifting) and
-Strava (cardio) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
+Strava (cardio, through Apple Health) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
 progress; a planner drafts next week's sessions from the marts and PJ's goals. Each step
 is its own PR. Each step lists the files it touches; a change to those files on `main`
 before the step starts means re-reading the step.
@@ -13,7 +13,7 @@ before the step starts means re-reading the step.
 | Source | Access | Effort | Data |
 |---|---|---|---|
 | Strong | No API, and no Shortcuts actions (checked 2026-11-08). CSV export from the app, shared to Rush on Telegram | ~5 taps a week | Every set: exercise, weight, reps, RPE, notes |
-| Strava | OAuth API, `activity:read_all`; 100 req/15 min, 1000/day | None | Activities: type, start, duration, distance, HR, elevation |
+| Strava → Apple Health | Strava writes runs and rides to Health; the Health Exporter & Shortcuts app ($2.99) exports workouts as JSON in a Shortcut, sent to Rush on Telegram. Strava's API is subscriber-only (checked 2026-11-09) | None once the automation runs | Workouts: type, start, end, duration, indoor, source, distance, calories, HR when the Watch recorded it |
 
 Strong exports the full history every time, so each drop is a complete snapshot: the
 newest file replaces `raw.strong_sets`, and older files are archived, not merged. A lost
@@ -49,20 +49,29 @@ or skipped week costs nothing.
    `light_labs/cli.py`, `analytics/models/staging/{_sources.yml,stg_strong_sets.{sql,yml}}`,
    `tests/test_training_strong.py`, `tests/test_telegram.py`, `tests/test_orchestration.py`, `docs/training.md`.
 
-2. **Strava landing.**
-   - PJ creates a Strava API application (callback `localhost`).
-     `lab training strava-auth` runs the OAuth code flow once and writes the refresh
-     token to `.env`.
-   - `light_labs/training/strava.py`: incremental pull by `after=<max start_date>`,
-     then a full backfill the first time; upserts `raw.strava_activities` by
-     activity id. Detailed streams (per-second HR, pace) are out of scope.
-   - Dagster: `raw/strava_activities` asset on a daily schedule (UTC).
-   - dbt: `stg_strava__activities`.
-   Files: `light_labs/training/strava.py`, `light_labs/orchestration/{assets,jobs}.py`,
-   `light_labs/cli.py`, `analytics/models/staging/*strava*`, `tests/test_training_strava.py`.
+2. **Health workouts landing.**
+   - Phone: a Shortcut runs Health Exporter & Shortcuts' Export Workouts for the last 2
+     days and sends the JSON to Rush (Telegram Send Message, as text), daily at 21:00 by
+     personal automation. Setup in `docs/training.md`.
+   - Rush: a JSON file or JSON text from PJ is checked by `training.health.parse` and
+     saved to `var/training/health/inbox/health-<yyyy-mm-dd-hhmmss>.json`; every drop is
+     kept, since each covers a window.
+   - `light_labs/training/health.py`: moves drops to `var/training/health/` and upserts
+     `raw.health_workouts` by HealthKit uuid. Statistics are kept whole as JSON beside
+     distance (metres), calories and heart rate.
+   - Dagster: `raw/health_workouts` asset, sensor `health_dropped` on the inbox.
+   - dbt: `stg_health_workouts`, with `is_fragment` (under 3 min), `is_implausible_pace`
+     (slower than 20 min/km: a recording that ran on for a day), `is_duplicate` (same
+     type within 10 min; keep the record with HR, then plausible pace, then shorter) and
+     `is_counted`. All three occur in PJ's first 30 days of runs.
+   - CLI: `lab training ingest-health [<json>...]`.
+   Files: `light_labs/training/health.py`, `light_labs/agents/rush/telegram.py`,
+   `light_labs/orchestration/{assets,jobs,sensors}.py`, `light_labs/cli.py`,
+   `analytics/models/staging/*health*`, `tests/test_training_health.py`.
 
 3. **Marts.**
-   - `int_training__sessions`: Strong workouts and Strava activities as one session
+   - `int_training__sessions`: Strong workouts and counted Health workouts (not
+     `traditionalStrengthTraining`, which Strong covers) as one session
      grain (date, source, kind, duration).
    - `mart_training_weekly`: per ISO week, lifting volume (sets, tonnage) by movement
      pattern and cardio time and distance by type. Also acute:chronic load (7-day vs
@@ -119,15 +128,17 @@ or skipped week costs nothing.
   only as free/busy.
 - A module (`light_labs/training`), not a robot. Rush delivers. A robot comes when a local
   model earns the planner weapon (`add-robot`).
-- IC4 rides are logged on Strava (`VirtualRide`/`Ride`, indoor). Bag rounds are to be
+- IC4 rides are logged on Strava, which writes them to Health. No ride yet (2026-11-09):
+  the first one shows its `activityType` and `indoor`, and the plan adapts then. Bag rounds are to be
   logged in Strong as custom exercises (duration, rounds); none are in the 2026-11-08
   export, which has no timed sets at all. The seed in step 3 maps those to
   `conditioning`.
 - Strong export reminder Sunday 18:00. The plan is generated when the drop lands, with a
   fallback at Sunday 20:00 without it.
-- Strava: full backfill once, then incremental.
-- Apple Health / Watch: out of scope. Strong writes only session-level workouts to
-  Health (no sets); revisit after step 3 as a no-tap fallback signal.
+- Cardio comes from Apple Health, not Strava's API (subscriber-only). Health Auto Export
+  or a personal HealthKit app only if HR or other detail turns out to matter.
+- Apple Health is the cardio source (step 2). Strong also writes its sessions there
+  (no sets); lifting still comes from Strong's CSV.
 - Strong drop goes to Rush on Telegram, not iCloud Drive.
 
 ## Open decisions

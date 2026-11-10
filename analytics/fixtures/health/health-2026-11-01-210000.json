@@ -1,0 +1,20 @@
+{
+  "exportInfo" : {"activityTypes" : ["running", "cycling"], "appVersion" : "1.7.0", "buildNumber" : "5", "endDate" : "2026-11-01", "exportDate" : "2026-11-02T02:00:00Z", "startDate" : "2026-10-25", "workoutCount" : 5},
+  "workouts" : [
+    {"activityType" : "running", "duration" : 1800, "endDate" : "2026-10-26T19:30:00Z", "events" : [], "indoor" : false, "source" : "Strava", "startDate" : "2026-10-26T19:00:00Z",
+     "statistics" : {"HKQuantityTypeIdentifierActiveEnergyBurned" : {"sum" : 480, "unit" : "kcal"}, "HKQuantityTypeIdentifierDistanceWalkingRunning" : {"sum" : 6000, "unit" : "m"}},
+     "uuid" : "00000000-0000-4000-8000-000000000001"},
+    {"activityType" : "running", "duration" : 70, "endDate" : "2026-10-28T19:01:10Z", "events" : [{"type" : "motionPaused"}], "indoor" : false, "source" : "Strava", "startDate" : "2026-10-28T19:00:00Z",
+     "statistics" : {"HKQuantityTypeIdentifierActiveEnergyBurned" : {"sum" : 1, "unit" : "kcal"}},
+     "uuid" : "00000000-0000-4000-8000-000000000002"},
+    {"activityType" : "running", "duration" : 1650, "endDate" : "2026-10-28T19:32:30Z", "events" : [{"type" : "pause"}, {"type" : "resume"}], "indoor" : false, "source" : "Strava", "startDate" : "2026-10-28T19:05:00Z",
+     "statistics" : {"HKQuantityTypeIdentifierActiveEnergyBurned" : {"sum" : 430, "unit" : "kcal"}, "HKQuantityTypeIdentifierDistanceWalkingRunning" : {"sum" : 5800, "unit" : "m"}, "HKQuantityTypeIdentifierHeartRate" : {"average" : 160, "max" : 178, "min" : 120, "unit" : "count/min"}},
+     "uuid" : "00000000-0000-4000-8000-000000000003"},
+    {"activityType" : "running", "duration" : 85000, "endDate" : "2026-10-29T18:41:40Z", "events" : [], "indoor" : false, "source" : "Strava", "startDate" : "2026-10-28T19:05:05Z",
+     "statistics" : {"HKQuantityTypeIdentifierActiveEnergyBurned" : {"sum" : 470, "unit" : "kcal"}, "HKQuantityTypeIdentifierDistanceWalkingRunning" : {"sum" : 5790, "unit" : "m"}},
+     "uuid" : "00000000-0000-4000-8000-000000000004"},
+    {"activityType" : "cycling", "duration" : 2700, "endDate" : "2026-10-30T11:45:00Z", "events" : [], "indoor" : true, "source" : "Strava", "startDate" : "2026-10-30T11:00:00Z",
+     "statistics" : {"HKQuantityTypeIdentifierActiveEnergyBurned" : {"sum" : 400, "unit" : "kcal"}, "HKQuantityTypeIdentifierDistanceCycling" : {"sum" : 12.5, "unit" : "mi"}},
+     "uuid" : "00000000-0000-4000-8000-000000000005"}
+  ]
+}

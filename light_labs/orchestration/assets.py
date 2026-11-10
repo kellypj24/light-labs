@@ -127,6 +127,20 @@ def strong_sets(context: AssetExecutionContext) -> None:
     context.add_output_metadata({"rows": n, "file": str(path) if path else ""})
 
 
+@asset(
+    key=AssetKey(["raw", "health_workouts"]),
+    group_name="landing",
+    retry_policy=LOCKED,
+    description="Apple Health workouts (Strava's runs and rides), shared to Rush on "
+    "Telegram, from var/training/health/inbox/ (`lab training ingest-health`). Upsert by uuid.",
+)
+def health_workouts(context: AssetExecutionContext) -> None:
+    from light_labs.training import health
+
+    files, upserted, total = health.ingest(var=config.VAR)
+    context.add_output_metadata({"files": files, "upserted": upserted, "rows": total})
+
+
 class Translator(DagsterDbtTranslator):
     """dbt models grouped by layer: staging, intermediate, marts."""
 
@@ -141,5 +155,13 @@ def analytics(context: AssetExecutionContext, dbt: DbtCliResource):
     yield from dbt.cli(["build"], context=context).stream()
 
 
-LANDING = [eval_samples, eval_run_health, queue_items, claude_records, calibration, strong_sets]
+LANDING = [
+    eval_samples,
+    eval_run_health,
+    queue_items,
+    claude_records,
+    calibration,
+    strong_sets,
+    health_workouts,
+]
 ALL_ASSETS = [*LANDING, analytics]

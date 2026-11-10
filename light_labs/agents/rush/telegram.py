@@ -5,7 +5,8 @@ Rush is a bot PJ created with @BotFather; the token lives in Keychain
 (`lab rush telegram-link` finds it after PJ sends the bot /start). Drafts arrive with
 Send and Reject buttons; replying to a draft with text sends PJ's version, or rejects it
 when the reply starts with "no". /queue lists what waits, /tick checks the board now. A CSV PJ shares to the bot (the
-Strong export) is checked by `training.strong.parse` and lands in `drops` for Dagster to ingest.
+Strong export) is checked by `training.strong.parse` and lands in `drops`/strong/inbox/; a JSON file or
+JSON text (the Health workouts export) lands in `drops`/health/inbox/. Dagster ingests both.
 
 Outgoing texts come from the tick (phone.py decides when). Incoming updates are read by
 a long-poll thread in the remote's process, so they are handled while the Mac is awake;
@@ -134,6 +135,8 @@ class Telegram:
         if "document" in msg:
             return self._drop(msg)
         text = (msg.get("text") or "").strip()
+        if text[:1] in ("{", "["):
+            return self._health(text.encode(), msg)
         replied = msg.get("reply_to_message")
         if replied:
             item_id = self._state()["messages"].get(str(replied["message_id"]))
@@ -146,30 +149,61 @@ class Telegram:
             return self.text(None, "Checking the board." if started else "Already checking.")
         return self.text(None, HELP)
 
+    @staticmethod
+    def _write(out, data):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(out)  # the sensor never sees half a file
+
     def _drop(self, msg):
-        """Save a shared CSV as drops/strong-<yyyy-mm-dd>.csv (the message's local date).
-        A second drop the same day replaces the first: each export is a full snapshot."""
+        """A shared file: a Strong CSV or a Health workouts JSON."""
         doc = msg["document"]
         name = doc.get("file_name") or ""
         if self.drops is None:
             return self.text(None, "I can't take files here.")
-        if not name.lower().endswith(".csv"):
-            return self.text(None, f"Not a CSV: {name or 'unnamed file'}. Share the Strong export.")
+        kind = name.lower().rsplit(".", 1)[-1] if "." in name else ""
+        if kind not in ("csv", "json"):
+            return self.text(
+                None,
+                f"Not a CSV or JSON: {name or 'unnamed file'}. Share a Strong or Health export.",
+            )
         if doc.get("file_size", 0) > MAX_FILE:
             return self.text(None, f"{name} is over 20 MB; Telegram won't hand it to me.")
+        data = self.download(doc["file_id"])
+        if kind == "json":
+            return self._health(data, msg)
+        return self._strong(data, msg)
+
+    def _health(self, data, msg):
+        """Check and save Health workouts JSON as drops/health/inbox/health-<yyyy-mm-dd>-<hhmmss>.json.
+        Each export covers a window, not the whole history, so every drop is kept."""
+        if self.drops is None:
+            return self.text(None, "I can't take files here.")
+        from light_labs.training import health
+
+        try:
+            _, workouts = health.parse(data)
+        except (health.NotHealth, UnicodeDecodeError) as e:
+            return self.text(None, f"Not a Health workouts export: {e}")
+        at = datetime.fromtimestamp(msg.get("date") or time.time())
+        out = self.drops / "health" / "inbox" / f"health-{at:%Y-%m-%d-%H%M%S}.json"
+        self._write(out, data)
+        return self.text(None, f"Got {health.summary(workouts)}. Saved {out.name}.")
+
+    def _strong(self, data, msg):
+        """Save a Strong CSV as drops/strong/inbox/strong-<yyyy-mm-dd>.csv (the message's
+        local date). A second drop the same day replaces the first: each export is a full
+        snapshot."""
         from light_labs.training import strong
 
-        data = self.download(doc["file_id"])
         try:
             sets = strong.parse(data)
         except (strong.NotStrong, UnicodeDecodeError, csv.Error) as e:
             return self.text(None, f"Not a Strong export: {e}")
         day = datetime.fromtimestamp(msg.get("date") or time.time()).date().isoformat()
-        out = self.drops / f"strong-{day}.csv"
-        self.drops.mkdir(parents=True, exist_ok=True)
-        tmp = out.with_suffix(".part")
-        tmp.write_bytes(data)
-        tmp.replace(out)  # the sensor never sees half a file
+        out = self.drops / "strong" / "inbox" / f"strong-{day}.csv"
+        self._write(out, data)
         return self.text(None, f"Got {strong.summary(sets)}. Saved {out.name}.")
 
     def _answer(self, item_id, text, remote):

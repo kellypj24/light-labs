@@ -33,8 +33,8 @@ def setUpModule():
 
 def fixture_var(root):
     """The CI fixtures laid out like var/: evals/, rush/queue/, roll/pairs/, the Claude
-    Code transcripts as the archive copy in claude/projects/, and a Strong drop in
-    training/strong/inbox/."""
+    Code transcripts as the archive copy in claude/projects/, and Strong and Health drops
+    in training/<kind>/inbox/."""
     evals = Path(root) / "evals"
     evals.mkdir()
     for path in ANALYTICS.glob("fixtures/*.json*"):
@@ -43,6 +43,7 @@ def fixture_var(root):
     shutil.copytree(ANALYTICS / "fixtures/claude/projects", Path(root) / "claude/projects")
     shutil.copytree(ANALYTICS / "fixtures/calibration/roll", Path(root) / "roll")
     shutil.copytree(ANALYTICS / "fixtures/strong", Path(root) / "training/strong/inbox")
+    shutil.copytree(ANALYTICS / "fixtures/health", Path(root) / "training/health/inbox")
     return Path(root)
 
 
@@ -104,6 +105,8 @@ class DefinitionsTest(unittest.TestCase):
         self.assertEqual(parents, {AssetKey(["raw", "queue_items"])})
         parents = self.graph.get(AssetKey(["staging", "stg_strong_sets"])).parent_keys
         self.assertEqual(parents, {AssetKey(["raw", "strong_sets"])})
+        parents = self.graph.get(AssetKey(["staging", "stg_health_workouts"])).parent_keys
+        self.assertEqual(parents, {AssetKey(["raw", "health_workouts"])})
 
 
 @unittest.skipUnless(HAS_DAGSTER, "needs the orchestration dependency group")
@@ -194,6 +197,15 @@ class SensorLogicTest(unittest.TestCase):
         (box / "strong-2026-11-08.csv").write_text("ab")  # same-day resend replaces it
         self.assertNotEqual(drop_fingerprint(self.var), first)
 
+    def test_drop_fingerprints_are_per_kind(self):
+        from light_labs.orchestration.sensors import drop_fingerprint
+
+        box = self.var / "training/health/inbox"
+        box.mkdir(parents=True)
+        (box / "health-2026-11-09-194822.json").write_text("{}")
+        self.assertIsNotNone(drop_fingerprint(self.var, "health"))
+        self.assertIsNone(drop_fingerprint(self.var, "strong"))
+
     def test_strong_dropped_requests_once_per_drop(self):
         from dagster import RunRequest, SkipReason, build_sensor_context
 
@@ -260,6 +272,22 @@ class FullRunTest(unittest.TestCase):
                     self.assertGreater(n, 0, table)
                 n = con.execute("SELECT count(*) FROM staging.stg_strong_sets").fetchone()[0]
                 self.assertEqual(n, 15)
+                flags = con.execute(
+                    "SELECT right(workout_uuid, 1), is_fragment, is_duplicate, "
+                    "is_implausible_pace, is_counted FROM staging.stg_health_workouts "
+                    "ORDER BY 1"
+                ).fetchall()
+                self.assertEqual(
+                    flags,
+                    [
+                        ("1", False, False, False, True),
+                        ("2", True, False, False, False),  # 70 s accidental start
+                        ("3", False, False, False, True),  # has heart rate: kept
+                        ("4", False, True, True, False),  # same run, 23 h long
+                        ("5", False, False, False, True),  # indoor ride
+                        ("6", False, False, False, True),  # from the second drop
+                    ],
+                )
             self.assertEqual(list((var / "training/strong/inbox").iterdir()), [])
 
 
