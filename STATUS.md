@@ -60,12 +60,13 @@ _Updated 2026-11-09._
 4. Radar: Rush delivers the weekly picks (Telegram), the first robot tie-in. Slice 2
    LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
    asked before requesting scopes.
-5. Training planner (`docs/plans/training.md`): step 1 live (Strong CSV shared to Rush
-   on Telegram → `strong_dropped` → `raw.strong_sets`, 4,587 sets). Step 2 in review:
-   Health workouts JSON (Strava writes to Health; Health Exporter & Shortcuts exports)
-   sent to Rush → `health_dropped` → `raw.health_workouts`; PJ then sets the daily 21:00
-   automation. Setup in `docs/training.md`. The Claude desktop task keeps planning until
-   two lab plans in a row pass review.
+5. Training planner (`docs/plans/training.md`): steps 1–2 live. Strong CSV shared to
+   Rush on Telegram → `raw.strong_sets` (4,587 sets); Health workouts (Strava writes to
+   Health) → `raw.health_workouts` (11 runs, 9 counted). In review: `POST /drop/<kind>`
+   on Rush's remote page, so the nightly 21:00 Shortcut can post Health JSON over the
+   tailnet (Telegram's Shortcuts action can't message a bot). Then PJ sets up the
+   automation (`docs/training.md`) and step 3, the marts. The Claude desktop task keeps
+   planning until two lab plans in a row pass review.
 
 ## Open decisions
 

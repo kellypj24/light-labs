@@ -1,6 +1,6 @@
 # Plan: training logs and weekly workout planning
 
-Status: agreed 2026-11-08. Step 1 done (#110); step 2 in review. Written 2026-11-08.
+Status: agreed 2026-11-08. Steps 1 (#110) and 2 (#112) done; tailnet drop in review. Written 2026-11-08.
 
 Moves the exercise-planning task from Claude desktop into the lab. Strong (lifting) and
 Strava (cardio, through Apple Health) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
@@ -50,12 +50,14 @@ or skipped week costs nothing.
    `tests/test_training_strong.py`, `tests/test_telegram.py`, `tests/test_orchestration.py`, `docs/training.md`.
 
 2. **Health workouts landing.**
-   - Phone: a Shortcut runs Health Exporter & Shortcuts' Export Workouts for the last 2
-     days and sends the JSON to Rush (Telegram Send Message, as text), daily at 21:00 by
-     personal automation. Setup in `docs/training.md`.
-   - Rush: a JSON file or JSON text from PJ is checked by `training.health.parse` and
-     saved to `var/training/health/inbox/health-<yyyy-mm-dd-hhmmss>.json`; every drop is
-     kept, since each covers a window.
+   - Phone: a Shortcut runs Health Exporter & Shortcuts' Export Workouts (last 7 days;
+     the action offers 7 or 30) and posts the JSON to Rush's remote page,
+     `POST /drop/health` over the tailnet, daily at 21:00 by personal automation.
+     Telegram's Shortcuts action can't message a bot. Setup in `docs/training.md`.
+   - Rush: `training.drops.land` checks the data with `training.health.parse` and saves
+     it to `var/training/health/inbox/health-<yyyy-mm-dd-hhmmss>.json`; every drop is
+     kept, since each covers a window. The same function serves Telegram drops and
+     `POST /drop/strong`.
    - `light_labs/training/health.py`: moves drops to `var/training/health/` and upserts
      `raw.health_workouts` by HealthKit uuid. Statistics are kept whole as JSON beside
      distance (metres), calories and heart rate.

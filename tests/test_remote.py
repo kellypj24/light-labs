@@ -265,6 +265,69 @@ class RemoteTest(unittest.TestCase):
         self.assertIn("For Rush: a trial", self.call("/board")[1])
 
 
+class DropTest(unittest.TestCase):
+    """POST /drop/<kind>: the phone's Shortcut lands a training export over the tailnet."""
+
+    FIXTURES = Path(__file__).resolve().parents[1] / "analytics/fixtures"
+    tearDown = RemoteTest.tearDown
+    call = RemoteTest.call
+
+    def setUp(self):
+        RemoteTest.setUp(self)
+        patch = mock.patch("light_labs.config.VAR", Path(self.tmp.name))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def drop(self, kind, data, header="1", login=PJ):
+        req = urllib.request.Request(self.base + f"/drop/{kind}", data=data, method="POST")
+        if header:
+            req.add_header("X-Lab-Drop", header)
+        if login:
+            req.add_header("Tailscale-User-Login", login)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.read().decode()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode()
+
+    def inbox(self, kind):
+        box = Path(self.tmp.name) / "training" / kind / "inbox"
+        return sorted(p.name for p in box.iterdir()) if box.exists() else []
+
+    def test_health_json_lands(self):
+        data = (self.FIXTURES / "health/health-2026-11-02-210000.json").read_bytes()
+        code, body = self.drop("health", data)
+        self.assertEqual(code, 200, body)
+        self.assertTrue(body.startswith("Got 1 workouts (running)"))
+        self.assertEqual(len(self.inbox("health")), 1)
+
+    def test_strong_csv_lands(self):
+        data = (self.FIXTURES / "strong/strong-2026-11-01.csv").read_bytes()
+        code, body = self.drop("strong", data)
+        self.assertEqual(code, 200, body)
+        self.assertIn("15 sets", body)
+        self.assertEqual(len(self.inbox("strong")), 1)
+
+    def test_wrong_content_is_refused(self):
+        code, body = self.drop("health", b"Date,Workout Name\n")
+        self.assertEqual(code, 422)
+        self.assertIn("Not a Health workouts export", body)
+        self.assertEqual(self.inbox("health"), [])
+
+    def test_unknown_kind_and_empty_body(self):
+        self.assertEqual(self.drop("garmin", b"{}")[0], 422)
+        self.assertEqual(self.drop("health", b"")[0], 413)
+
+    def test_needs_the_header_and_the_login(self):
+        data = (self.FIXTURES / "health/health-2026-11-02-210000.json").read_bytes()
+        self.assertEqual(self.drop("health", data, header=None)[0], 400)
+        self.assertEqual(self.drop("health", data, login=None)[0], 403)
+        self.assertEqual(self.inbox("health"), [])
+
+    def test_other_posts_still_need_the_form_token(self):
+        self.assertEqual(self.call("/tick", form={"token": "wrong"})[0], 403)
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
