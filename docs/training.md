@@ -42,18 +42,29 @@ What the parser assumes:
 
 ## Daily Health workouts
 
-Strava → Settings → Applications, Services, and Devices → Health: on. Then a Shortcut,
-"Send Cardio to Lab":
+Strava → Settings → Applications, Services, and Devices → Health: on. Telegram's Shortcuts
+action can't message a bot, so the Shortcut posts to Rush's remote page over the tailnet
+instead (`POST /drop/health`, the same check and inbox as Telegram).
 
-1. **Export Workouts** (Health Exporter & Shortcuts): last 2 days, all activity types.
-2. **Get Text from Input** (the exported JSON).
-3. **Send Message** (Telegram) → Rush, message: the text.
+Shortcut "Send Cardio to Lab":
 
-Shortcuts → Automation → Time of Day 21:00, Daily, Run Immediately → the shortcut.
+1. **Export Workouts** (Health Exporter & Shortcuts): Last 7 days, all activity types.
+2. **Get Contents of URL**: `http://<mac>.<tailnet>.ts.net/drop/health` (the address
+   `tailscale serve status` prints). Show More: Method POST; Headers `X-Lab-Drop` = `1`;
+   Request Body File → the Workouts output from step 1.
+3. **Show Result** (only while testing): Rush's reply, e.g. `Got 4 workouts (running), …`.
 
-Rush replies `Got N workouts (<types>), <first> to <last>. Saved health-<...>.json`.
-Exports overlap and that's intended: the table is keyed by HealthKit uuid. A JSON file
-shared to Rush by hand works the same way (`lab training ingest-health [<json>...]`).
+Shortcuts → Automation → Time of Day 21:00, Daily, Run Immediately → the shortcut. Tailscale
+on the phone needs VPN On Demand so it's connected at 21:00, and the Mac must be awake; a
+missed night is covered by the next one, since exports overlap and the table is keyed by
+HealthKit uuid.
+
+A JSON file shared to Rush on Telegram by hand still works, and so does
+`lab training ingest-health [<json>...]`.
+
+The endpoint takes `POST /drop/strong` too: a share-sheet Shortcut (Receive Files from
+Share Sheet → Get Contents of URL, as above) sends Strong's export without opening
+Telegram. Strong has no Shortcuts actions, so its export always starts in the app.
 
 `stg_health_workouts` keeps every record and flags what marts skip: `is_fragment` (under
 3 min), `is_implausible_pace` (slower than 20 min/km), `is_duplicate` (same type within

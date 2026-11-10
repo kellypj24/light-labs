@@ -13,7 +13,6 @@ a long-poll thread in the remote's process, so they are handled while the Mac is
 Telegram keeps them for a day otherwise. Message contents pass through Telegram's servers.
 """
 
-import csv
 import json
 import re
 import time
@@ -149,13 +148,6 @@ class Telegram:
             return self.text(None, "Checking the board." if started else "Already checking.")
         return self.text(None, HELP)
 
-    @staticmethod
-    def _write(out, data):
-        out.parent.mkdir(parents=True, exist_ok=True)
-        tmp = out.with_suffix(".part")
-        tmp.write_bytes(data)
-        tmp.replace(out)  # the sensor never sees half a file
-
     def _drop(self, msg):
         """A shared file: a Strong CSV or a Health workouts JSON."""
         doc = msg["document"]
@@ -171,40 +163,22 @@ class Telegram:
         if doc.get("file_size", 0) > MAX_FILE:
             return self.text(None, f"{name} is over 20 MB; Telegram won't hand it to me.")
         data = self.download(doc["file_id"])
-        if kind == "json":
-            return self._health(data, msg)
-        return self._strong(data, msg)
+        return self._land("health" if kind == "json" else "strong", data, msg)
 
     def _health(self, data, msg):
-        """Check and save Health workouts JSON as drops/health/inbox/health-<yyyy-mm-dd>-<hhmmss>.json.
-        Each export covers a window, not the whole history, so every drop is kept."""
         if self.drops is None:
             return self.text(None, "I can't take files here.")
-        from light_labs.training import health
+        return self._land("health", data, msg)
 
-        try:
-            _, workouts = health.parse(data)
-        except (health.NotHealth, UnicodeDecodeError) as e:
-            return self.text(None, f"Not a Health workouts export: {e}")
+    def _land(self, kind, data, msg):
+        """Check and save through `training.drops`, dated by the message."""
+        from light_labs.training import drops
+
         at = datetime.fromtimestamp(msg.get("date") or time.time())
-        out = self.drops / "health" / "inbox" / f"health-{at:%Y-%m-%d-%H%M%S}.json"
-        self._write(out, data)
-        return self.text(None, f"Got {health.summary(workouts)}. Saved {out.name}.")
-
-    def _strong(self, data, msg):
-        """Save a Strong CSV as drops/strong/inbox/strong-<yyyy-mm-dd>.csv (the message's
-        local date). A second drop the same day replaces the first: each export is a full
-        snapshot."""
-        from light_labs.training import strong
-
         try:
-            sets = strong.parse(data)
-        except (strong.NotStrong, UnicodeDecodeError, csv.Error) as e:
-            return self.text(None, f"Not a Strong export: {e}")
-        day = datetime.fromtimestamp(msg.get("date") or time.time()).date().isoformat()
-        out = self.drops / "strong" / "inbox" / f"strong-{day}.csv"
-        self._write(out, data)
-        return self.text(None, f"Got {strong.summary(sets)}. Saved {out.name}.")
+            return self.text(None, drops.land(kind, data, at, self.drops))
+        except drops.Refused as e:
+            return self.text(None, str(e))
 
     def _answer(self, item_id, text, remote):
         try:

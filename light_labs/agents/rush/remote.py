@@ -568,9 +568,32 @@ def handler(remote):
                 body = body.replace("<main>", f'<main><div class="flash">{esc(flash)}</div>', 1)
             self._send(200, body)
 
+        def _drop(self, kind):
+            """POST /drop/<kind> from the phone's Shortcut: a training export in the body.
+            The X-Lab-Drop header makes a browser preflight the request, which this server
+            never answers, so a page in PJ's browser can't post here on his tailnet login."""
+            from light_labs import config
+            from light_labs.training import drops
+
+            if self.headers.get("X-Lab-Drop") != "1":
+                return self._send(400, "X-Lab-Drop: 1 required\n", ctype="text/plain")
+            length = int(self.headers.get("Content-Length") or 0)
+            if not length or length > drops.MAX_BYTES:
+                return self._send(413, "empty or over 20 MB\n", ctype="text/plain")
+            data = self.rfile.read(length)
+            try:
+                reply = drops.land(kind, data, root=config.VAR / "training")
+            except drops.Refused as e:
+                return self._send(422, f"{e}\n", ctype="text/plain")
+            print(f"{now()} drop {kind}: {reply}")
+            self._send(200, f"{reply}\n", ctype="text/plain")
+
         def do_POST(self):
             if not self._allowed():
                 return
+            parts = path_parts(self.path)
+            if parts and len(parts) == 2 and parts[0] == "drop":
+                return self._drop(parts[1])
             length = int(self.headers.get("Content-Length") or 0)
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}
             if not secrets.compare_digest(form.get("token", ""), remote.token):
