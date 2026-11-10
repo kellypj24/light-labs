@@ -15,6 +15,7 @@ Telegram keeps them for a day otherwise. Message contents pass through Telegram'
 
 import json
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -35,14 +36,19 @@ HELP = (
     "Tap Send or Reject under a draft, or reply to it: your text goes out instead, "
     'and "no <reason>" rejects it.\n'
     "/queue lists what's waiting. /tick checks the board now.\n"
-    "Share a Strong export (CSV) and I'll save it for the lab."
+    "Share a Strong export (CSV) or Health workouts (JSON) and I'll save it for the lab.\n"
+    "/replan redoes this week's training plan from today."
 )
+# How long a requested drop waits for Dagster to load it before the plan refreshes anyway.
+LOAD_WAIT_S, LOAD_POLL_S = 180, 10
 
 
 class Telegram:
     def __init__(self, token, chat_id, state_path, opener=urllib.request.urlopen, drops=None):
         self.token, self.chat_id = token, str(chat_id)
         self.state_path, self.opener, self.drops = state_path, opener, drops
+        # Planning calls Claude for ~30 s: run it off the polling thread.
+        self.spawn = lambda fn: threading.Thread(target=fn, daemon=True).start()
 
     @classmethod
     def from_keychain(cls, chat_id, state_path, drops=None):
@@ -146,6 +152,11 @@ class Telegram:
         if text in ("/tick", "tick"):
             started = remote.start_tick()
             return self.text(None, "Checking the board." if started else "Already checking.")
+        if text in ("/replan", "replan") and self.drops is not None:
+            from light_labs.training import deliver
+
+            self.spawn(lambda: deliver.replan(self.text, var=self.drops.parent))
+            return self.text(None, "Replanning; about a minute.")
         return self.text(None, HELP)
 
     def _drop(self, msg):
@@ -176,9 +187,29 @@ class Telegram:
 
         at = datetime.fromtimestamp(msg.get("date") or time.time())
         try:
-            return self.text(None, drops.land(kind, data, at, self.drops))
+            reply = self.text(None, drops.land(kind, data, at, self.drops))
         except drops.Refused as e:
             return self.text(None, str(e))
+        self._after_drop(kind)
+        return reply
+
+    def _after_drop(self, kind, sleep=time.sleep):
+        """A file Rush asked for refreshes the plan once Dagster has loaded it."""
+        from light_labs.training import deliver
+
+        var = self.drops.parent
+        if kind not in deliver.requested(var):
+            return
+
+        def go():
+            for _ in range(LOAD_WAIT_S // LOAD_POLL_S):
+                if deliver.loaded(kind, var):
+                    break
+                sleep(LOAD_POLL_S)
+            deliver.tick(self.text, var=var)
+
+        self.text(None, "That's the one I asked for. Updating the plan once it's loaded.")
+        self.spawn(go)
 
     def _answer(self, item_id, text, remote):
         try:

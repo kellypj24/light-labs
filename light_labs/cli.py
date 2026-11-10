@@ -156,6 +156,23 @@ def training_ingest_health(args):
     print(f"db: {results.DB}")
 
 
+def training_send(args):
+    from light_labs.agents import rush
+    from light_labs.training import deliver
+
+    _, send, _ = _phone(Store(rush.HOME), rush)
+    print(f"sent {deliver.send_week(args.week, send)}")
+
+
+def training_tick(args):
+    from light_labs.agents import rush
+    from light_labs.training import deliver
+
+    _, send, _ = _phone(Store(rush.HOME), rush)
+    for line in deliver.tick(send) or ["nothing to do"]:
+        print(line)
+
+
 def training_plan(args):
     from light_labs.training import plan
 
@@ -226,6 +243,7 @@ def rush_tick(args, store, rush):
         ok, detail = phone.schedule_wake(rush.WAKE_MINUTES)
         if not ok:
             store.journal(f"could not schedule the next wake: {detail}")
+    _training(store, rush)  # before the board: an unreachable edge must not hold the plan
     client = Client()
     if not phone.wait_for_edge(lambda: client.inbox(rush.ACTOR)):
         store.journal("edge unreachable after waiting; tick skipped")
@@ -238,6 +256,20 @@ def rush_tick(args, store, rush):
         _text_pj(store, rush, ok)
         if rush.MAIL_ACCOUNTS and (rush.TELEGRAM_CHAT or rush.NOTIFY_TO):
             _mail(store, rush)
+
+
+def _training(store, rush):
+    """The weekly plan and its file requests (training/deliver.py), over Telegram."""
+    if not rush.TELEGRAM_CHAT:
+        return
+    try:
+        from light_labs.training import deliver
+
+        _, send, _ = _phone(store, rush)
+        for line in deliver.tick(send):
+            store.journal(f"training: {line}")
+    except Exception as e:  # noqa: BLE001 - the board and mail still run
+        store.journal(f"training skipped: {e}")
 
 
 def _mail(store, rush):
@@ -901,6 +933,10 @@ def main(argv=None):
     tcmd.add_parser(
         "plan", help="plan a week with Claude around code-set loads -> var/training/plans/"
     ).add_argument("--week", help="ISO week, e.g. 2026-W47 (default: next week)")
+    tcmd.add_parser("send", help="text a week's plan to PJ on Telegram").add_argument(
+        "--week", help="ISO week, e.g. 2026-W47 (default: next week)"
+    )
+    tcmd.add_parser("tick", help="what Rush's hourly tick runs: plan, send, ask for files")
     tcmd.add_parser(
         "ingest-health", help="upsert Health workouts exports into raw.health_workouts"
     ).add_argument("json", nargs="*", help="exports to load (default: the inbox's drops)")

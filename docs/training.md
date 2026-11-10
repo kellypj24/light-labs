@@ -109,3 +109,16 @@ loads from the table) get one retry, then are listed at the bottom of the plan.
 
 Until the work calendar is in `TRAINING_CALENDARS`, weekdays 08:00–17:00 count as busy;
 set `TRAINING_ASSUME_WORK=` (empty) in `.env` once it is.
+
+## Delivery
+
+Rush's hourly tick runs `lab training tick`'s logic:
+
+| When | What Rush does |
+|---|---|
+| Sunday 18:00–23:00 | Asks for any stale input (Strong over 6 days, Health over 36 h); sends next week's plan once a Strong export lands that day, or at 20:00 regardless |
+| Daily from 21:00 | Asks for Health if the nightly Shortcut hasn't landed in 36 h |
+| A file he asked for arrives | Refreshes the plan once Dagster loads it: next week whole, or this week's remaining days |
+| `/replan` in chat | Same refresh, now |
+
+`lab training send [--week]` texts an existing plan. State: `var/training/deliver.json`.

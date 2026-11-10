@@ -247,3 +247,28 @@ class HealthDropTest(DropTest):
         self.tg.handle(self.doc(name="workouts.json", data=b"{nope"), None)
         self.assertFalse((self.drops / "health").exists())
         self.assertIn("Not a Health workouts export: not JSON", self.wire.sent()[-1]["text"])
+
+
+class TrainingCommandsTest(DropTest):
+    """`/replan` and a requested drop each start a plan refresh, off the polling thread."""
+
+    def setUp(self):
+        super().setUp()
+        self.spawned = []
+        self.tg.spawn = self.spawned.append
+
+    def test_replan_spawns_a_refresh(self):
+        msg = {"message": {"chat": {"id": PJ_CHAT}, "date": 1762600000, "text": "/replan"}}
+        self.tg.handle(msg, None)
+        self.assertEqual(len(self.spawned), 1)
+        self.assertIn("Replanning", self.wire.sent()[-1]["text"])
+
+    def test_only_a_requested_kind_triggers_a_refresh(self):
+        self.tg.handle(self.doc(), None)  # nothing requested
+        self.assertEqual(self.spawned, [])
+        (self.drops / "deliver.json").write_text(
+            json.dumps({"requested": {"strong": "2026-11-08T20:00"}})
+        )
+        self.tg.handle(self.doc(), None)
+        self.assertEqual(len(self.spawned), 1)
+        self.assertIn("the one I asked for", self.wire.sent()[-1]["text"])
