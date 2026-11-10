@@ -26,9 +26,9 @@ holds them for a day), and message contents pass through Telegram's servers.
 
 ## Pausing
 
-`just pause` stops Rush's hourly tick; `just resume` starts it again and ticks once
-right away to catch up. Both take job names (`rush`, `rush-remote`, `dagster`) or `all`;
-`just bots` shows which are running.
+`just pause` stops Rush's hourly tick; `just resume` starts it again and ticks once right
+away to catch up. Both take job names (`rush`, `rush-remote`, `dagster`, `hermes`,
+`radar`) or `all` (`scripts/bots.sh`); `just bots` shows which are running.
 
 ## Setup
 
