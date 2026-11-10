@@ -114,6 +114,19 @@ dagster-install: _dagster-home
 dagster-restart:
     launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.dagster
 
+# Pause scheduled jobs: rush (hourly tick, default), rush-remote (phone page), dagster,
+# hermes (gateway and its crons, e.g. morning-brief), radar (Messages export, sync,
+# weekly), or all. Nothing is lost: each catches up on its next run. `just resume`
+# starts them again; `just bots` shows which run.
+pause +jobs="rush":
+    @scripts/bots.sh pause {{ jobs }}
+
+resume +jobs="rush":
+    @scripts/bots.sh resume {{ jobs }}
+
+bots:
+    @scripts/bots.sh status all
+
 _dagster-home:
     mkdir -p var/dagster && cp ops/orchestration/dagster.yaml var/dagster/
 

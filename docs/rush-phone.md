@@ -24,6 +24,12 @@ holds them for a day), and message contents pass through Telegram's servers.
 3. Send the bot `/start`, then `lab rush telegram-link` prints the chat id.
 4. `.env`: `RUSH_TELEGRAM_CHAT=<chat id>`, then `just rush-install` to restart the remote.
 
+## Pausing
+
+`just pause` stops Rush's hourly tick; `just resume` starts it again and ticks once right
+away to catch up. Both take job names (`rush`, `rush-remote`, `dagster`, `hermes`,
+`radar`) or `all` (`scripts/bots.sh`); `just bots` shows which are running.
+
 ## Setup
 
 1. `.env` (git-ignored):
