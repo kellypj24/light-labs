@@ -129,6 +129,12 @@ class WakeTest(unittest.TestCase):
             schedule_wake(60, Runner(), datetime(2026, 10, 17, 23, 0, 4)), (True, "wake at 00:00")
         )
 
+    def test_an_offset_moves_the_slot_past_the_hour(self):
+        at = datetime(2026, 10, 17, 15, 3)
+        self.assertEqual(schedule_wake(60, Runner(), at, offset=7), (True, "wake at 15:07"))
+        at = datetime(2026, 10, 17, 23, 7)
+        self.assertEqual(schedule_wake(60, Runner(), at, offset=7), (True, "wake at 00:07"))
+
     def test_schedules_without_prompting(self):
         run = Runner()
         schedule_wake(60, run, NOW)

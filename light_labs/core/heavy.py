@@ -1,6 +1,7 @@
 """One heavy job at a time on PJ's laptop, and kill switches before it overheats.
 
-A heavy job (a fight, `lab roll keep`, `just check`) holds LOCK. Before taking it,
+A heavy job (a fight, `lab roll keep`, `just check`) holds LOCK. Only `just check` starts
+in PJ's work hours (core/workhours.py) without --force. Before taking it,
 `too_busy` refuses a busy machine: high load, memory pressure, a serious thermal state, a
 container VM using over VM_BUSY_CPU, a Dagster run. An idle VM (Docker Desktop with nothing
 running) doesn't block: load and memory pressure already count what a VM uses. While it runs, `Guard.check` between units of work pauses
@@ -27,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from light_labs import config
+from light_labs.core import workhours
 
 # Machine-wide, not per checkout: worktrees each have their own var/.
 LOCK = Path(os.environ.get("LAB_HEAVY_LOCK", Path.home() / ".cache" / "light-labs" / "heavy.lock"))
@@ -56,6 +58,8 @@ BUSY_KINDS = (
 )
 # A container VM blocks only above this %CPU (100 = one core); an idle one sits under 5.
 VM_BUSY_CPU = 50.0
+# Jobs that may start in PJ's work hours (core/workhours.py) without --force.
+WORK_HOURS_OK = ("check",)
 
 
 class Busy(RuntimeError):
@@ -340,7 +344,10 @@ def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY
         yield guard
         return
     r = read()
-    if why := too_busy(r, busy_processes()):
+    why = too_busy(r, busy_processes())
+    if not why and name not in WORK_HOURS_OK and workhours.working():
+        why = "work hours (LAB_WORK_HOURS)"
+    if why:
         if not force:
             raise Busy(f"{why}; wait, or pass --force <reason>")
         print(f"heavy: starting {name} anyway ({why}): {force}", flush=True)

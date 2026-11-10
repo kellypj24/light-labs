@@ -125,9 +125,24 @@ class JobTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.lock = Path(tmp.name) / "heavy.lock"
-        patcher = mock.patch.object(heavy, "busy_processes", return_value=[])
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for patcher in (
+            mock.patch.object(heavy, "busy_processes", return_value=[]),
+            mock.patch.object(heavy.workhours, "working", return_value=False),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_work_hours_refuse_all_but_check_unless_forced(self):
+        with mock.patch.object(heavy.workhours, "working", return_value=True):
+            with (
+                self.assertRaisesRegex(heavy.Busy, "work hours"),
+                heavy.job("fight", read=lambda: COOL, lock=self.lock),
+            ):
+                pass
+            with heavy.job("check", read=lambda: COOL, lock=self.lock):
+                self.assertEqual(heavy.holder(self.lock)["job"], "check")
+            with heavy.job("fight", force="PJ said so", read=lambda: COOL, lock=self.lock):
+                self.assertEqual(heavy.holder(self.lock)["job"], "fight")
 
     def test_refuses_a_busy_machine_unless_forced(self):
         busy = heavy.job("fight", read=lambda: at(load_1=14.0), lock=self.lock)
@@ -173,9 +188,12 @@ class HistoryTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.lock = Path(tmp.name) / "heavy.lock"
-        patcher = mock.patch.object(heavy, "busy_processes", return_value=[])
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for patcher in (
+            mock.patch.object(heavy, "busy_processes", return_value=[]),
+            mock.patch.object(heavy.workhours, "working", return_value=False),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def ends(self):
         lines = heavy.history_path(self.lock).read_text().splitlines()

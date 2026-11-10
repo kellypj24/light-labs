@@ -352,11 +352,15 @@ def big_brother(repo_path):
 
 
 def roll_brain(spec):
-    """Roll's local brain, or None while a fight has the laptop."""
+    """Roll's brain, or None while a fight has the laptop or, for a local one, in PJ's
+    work hours (core/workhours.py). Big brother still decides without her."""
     from light_labs import config
+    from light_labs.core import workhours
     from light_labs.evals.fights import live_fight
 
     if not spec or live_fight(config.VAR / "evals"):
+        return None
+    if spec.startswith("ollama:") and workhours.working():
         return None
     return brain_for(spec, source="roll/chores")
 

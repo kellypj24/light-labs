@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from light_labs import config
+from light_labs.core import workhours
 from light_labs.core.agentnet import Client
 from light_labs.core.brain import Brain
 from light_labs.core.store import Store
@@ -240,7 +241,7 @@ def rush_tick(args, store, rush):
     from light_labs.agents.rush import phone
 
     if rush.WAKE_MINUTES:  # first, so a failed tick still wakes the Mac for the next one
-        ok, detail = phone.schedule_wake(rush.WAKE_MINUTES)
+        ok, detail = phone.schedule_wake(rush.WAKE_MINUTES, offset=rush.TICK_MINUTE)
         if not ok:
             store.journal(f"could not schedule the next wake: {detail}")
     _training(store, rush)  # before the board: an unreachable edge must not hold the plan
@@ -250,7 +251,10 @@ def rush_tick(args, store, rush):
         sys.exit("edge unreachable")
     ok = False
     try:
-        _tick(args, store, rush, client)
+        if workhours.working() and not rush.WORK_BRAIN:
+            store.journal("work hours, no work brain: board skipped")
+        else:
+            _tick(args, store, rush, client)
         ok = True
     finally:
         _text_pj(store, rush, ok)
@@ -282,22 +286,33 @@ def _mail(store, rush):
     except (OSError, subprocess.CalledProcessError) as e:
         store.journal(f"mail skipped, no phone channel: {e}")
         return
+    from light_labs.core.brain import brain_for
+
     teacher = None
     if rush.MAIL_TEACHER and not rush.mail_weapon():
-        from light_labs.core.brain import brain_for
-
         teacher = brain_for(rush.MAIL_TEACHER, source="rush/mail-teacher")
-    mail.check(
-        store,
-        rush.MAIL_ACCOUNTS,
-        Brain(rush.MAIL_MODEL),
-        lambda account: Gmail("rush", account),
-        send,
-        to,
-        rush.REMOTE_URL,
-        rush.QUIET_HOURS,
-        teacher=teacher,
-    )
+    # Work hours: no local model. Non-personal mail goes to the work brain; the rest waits.
+    work = workhours.working()
+    local = Brain(rush.MAIL_MODEL)
+    try:
+        mail.check(
+            store,
+            rush.MAIL_ACCOUNTS,
+            local,
+            lambda account: Gmail("rush", account),
+            send,
+            to,
+            rush.REMOTE_URL,
+            rush.QUIET_HOURS,
+            teacher=teacher,
+            work=work,
+            cloud=brain_for(rush.WORK_BRAIN, source="rush/mail-work")
+            if work and rush.WORK_BRAIN
+            else None,
+        )
+    finally:
+        if not work:
+            local.unload()
 
 
 def _phone(store, rush):
@@ -338,23 +353,52 @@ def _tick(args, store, rush, client):
     from light_labs.agents.rush.autosend import Policy
     from light_labs.agents.rush.heartbeat import Heartbeat
 
+    brain, spec, persona, autosend = _board_brain(rush, store, Policy)
     hb = Heartbeat(
         client,
-        Brain(rush.MODEL),
+        brain,
         store,
-        rush.system_prompt,  # built per message so triggered skills load
+        persona,
         actor=rush.ACTOR,
         watch_tasks=rush.WATCH_TASKS,
         name=rush.NAME,
         signoff=rush.SIGNOFF,
         temperature=rush.TEMPERATURE,
-        meta=_draft_meta(f"ollama:{rush.MODEL}"),
-        autosend=Policy(rush.AUTO_SEND, store),
+        meta=_draft_meta(spec),
+        autosend=autosend,
         mention=rush.MENTION,
         auto=_auto(rush),
     )
-    for item in hb.tick(backfill=args.backfill):
-        print(f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else ""))
+    try:
+        for item in hb.tick(backfill=args.backfill):
+            print(
+                f"queued {item['id']} {item['kind']}" + (" [escalate]" if item["escalate"] else "")
+            )
+    finally:
+        if isinstance(brain, Brain):
+            brain.unload()
+
+
+def _board_brain(rush, store, policy):
+    """(brain, spec, persona, autosend) for board drafts. In work hours the work brain
+    writes them from sanitized notes and every draft queues for PJ: auto-send was earned by
+    the local model, not this one."""
+    if not workhours.working():
+        # persona is built per message so triggered skills load
+        return (
+            Brain(rush.MODEL),
+            f"ollama:{rush.MODEL}",
+            rush.system_prompt,
+            policy(rush.AUTO_SEND, store),
+        )
+    from light_labs.core import sanitize
+    from light_labs.core.brain import brain_for
+
+    notes = sanitize.notes(
+        (rush.MEMORY if rush.MEMORY.exists() else rush.HERE / "memory.example.md").read_text()
+    )
+    brain = brain_for(rush.WORK_BRAIN, source="rush/board")
+    return brain, rush.WORK_BRAIN, lambda text="": rush.system_prompt(text, notes), None
 
 
 def _auto(rush):
@@ -761,7 +805,7 @@ def roll_chores(args):
     except gitops.GitError as e:
         sys.exit(f"lab roll chores: {e}")
     if brain is None and not args.no_roll:
-        print("Roll sat this one out (a fight is running or no brain set)")
+        print("Roll sat this one out (a fight is running, work hours, or no brain set)")
 
 
 def cmd_git(args):

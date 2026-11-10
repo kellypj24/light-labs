@@ -92,13 +92,20 @@ def parse_summary(raw):
     return line.strip(' `*"')[:SUMMARY_CHARS]
 
 
+def by_rule(msg):
+    """Filed bulk mail is a newsletter without a model call; None for everything else."""
+    if msg.get("category") == "promotions" and msg.get("unsubscribe"):
+        return {"label": "newsletter", "summary": msg.get("subject", "")[:SUMMARY_CHARS],
+                "raw": "", "by": "rule"}  # fmt: skip
+    return None
+
+
 def triage(brain, msg):
     """Label one message: by rule for filed bulk mail, else a one-word classify call and a
     separate summary call (one call asked for both, and the model echoed the email).
     An answer with no label is `unsorted`, which PJ is told about like needs_reply."""
-    if msg.get("category") == "promotions" and msg.get("unsubscribe"):
-        return {"label": "newsletter", "summary": msg.get("subject", "")[:SUMMARY_CHARS],
-                "raw": "", "by": "rule"}  # fmt: skip
+    if rule := by_rule(msg):
+        return rule
     raw = brain.think(CLASSIFY, f"{prompt(msg)}\nLabel:", temperature=0)
     label = parse_label(raw)
     return {"label": label or "unsorted", "summary": summarize(brain, msg, label),
@@ -166,10 +173,13 @@ class Inbox:
             fresh = []  # first look: remember what is there, triage nothing
         return state, ids, [from_gmail(self.gmail.message(i), self.account) for i in fresh]
 
-    def record(self, state, ids, items):
+    def log_items(self, items):
         with self.log.open("a") as f:
             for item in items:
                 f.write(json.dumps({k: v for k, v in item.items() if k != "snippet"}) + "\n")
+
+    def record(self, state, ids, items):
+        self.log_items(items)
         state["seen"] = (state["seen"] + [i for i in ids if i not in state["seen"]])[-KEEP_SEEN:]
         state["seeded"] = True
         self.state_path.write_text(json.dumps(state, indent=2) + "\n")
@@ -245,20 +255,89 @@ def teach(brain, teacher, item):
     }
 
 
+def work_triage(cloud, item):
+    """Work-hours triage (core/workhours.py): the work brain labels and summarizes from the
+    sanitized view, so no local model loads. The caller holds personal mail back."""
+    text = sanitize.prompt(sanitize.view(item))
+    raw = cloud.think(CLASSIFY, f"{text}\nLabel:", temperature=0)
+    label = parse_label(raw)
+    task = ASK if label in (None, "needs_reply") else NOTE
+    summary = parse_summary(cloud.think(SUMMARIZE.format(task=task), text, temperature=0))
+    return {"label": label or "unsorted", "summary": summary or item.get("subject", ""),
+            "raw": raw, "by": "work-model" if label else "work-model-unparsed"}  # fmt: skip
+
+
+def _held(store):
+    return store.root / "mail" / "held.json"
+
+
+def _hold(store, items):
+    """Mail that waits for the local brain after work hours: personal mail, and anything
+    the work brain could not take. Kept with its snippet, locally, in var/rush/mail/."""
+    path = _held(store)
+    path.parent.mkdir(exist_ok=True)
+    held = json.loads(path.read_text()) if path.exists() else []
+    path.write_text(json.dumps(held + items, indent=2))
+
+
 def check(
-    store, accounts, brain, gmail_for, send, to, remote_url=None, quiet_hours=None, teacher=None
+    store,
+    accounts,
+    brain,
+    gmail_for,
+    send,
+    to,
+    remote_url=None,
+    quiet_hours=None,
+    teacher=None,
+    work=False,
+    cloud=None,
 ):
     """Triage new mail in every account; text PJ once. Never raises: problems go to the
-    journal. Returns the triaged items."""
+    journal. Returns the triaged items.
+
+    `work` (work hours): `brain` is not called. Bulk mail is labelled by rule, other
+    non-personal mail by `cloud` (none: it waits too), and the rest is held until the
+    first check after work hours, which triages it first."""
     triaged = []
+    held_path = _held(store)
+    if not work and held_path.exists():
+        try:
+            held = json.loads(held_path.read_text())
+            for item in held:
+                item.update(teach(brain, teacher, item))
+                if item.get("agree") is False:
+                    _keep_disagreement(store, item)
+            for account in {i["account"] for i in held}:
+                Inbox(store, account, None).log_items([i for i in held if i["account"] == account])
+            held_path.unlink()
+            triaged += held
+            store.journal(f"mail: triaged {len(held)} held from work hours")
+        except Exception as e:  # noqa: BLE001 - stays held for the next check
+            store.journal(f"held mail not triaged yet: {e}")
     for account in accounts:
         try:
             inbox = Inbox(store, account, gmail_for(account))
             state, ids, items = inbox.new()
+            wait = []
             for item in items:
-                item.update(teach(brain, teacher, item))
-                if item.get("agree") is False:
-                    _keep_disagreement(store, item)
+                if not work:
+                    item.update(teach(brain, teacher, item))
+                    if item.get("agree") is False:
+                        _keep_disagreement(store, item)
+                elif rule := by_rule(item):
+                    item.update(rule)
+                elif cloud is None or sanitize.is_personal(item):
+                    wait.append(item)
+                else:
+                    try:
+                        item.update(work_triage(cloud, item))
+                    except Exception as e:  # noqa: BLE001 - an outage holds it for later
+                        store.journal(f"work-hours triage failed, held: {str(e)[:200]}")
+                        wait.append(item)
+            if wait:
+                _hold(store, wait)
+            items = [i for i in items if i not in wait]
             inbox.record(state, ids, items)
             triaged += items
         except Exception as e:  # noqa: BLE001 - one mailbox failing must not stop the tick

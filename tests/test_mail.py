@@ -120,6 +120,51 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
+class WorkHoursTest(CheckTest):
+    """In work hours the local brain is never called; personal mail waits for the evening."""
+
+    def setUp(self):
+        super().setUp()
+        self.cloud = Brain("fyi")
+
+    def gmail_from(self, senders):
+        gmail = FakeGmail(list(senders))
+        gmail.message = lambda i: {
+            "id": i, "threadId": f"t{i}", "snippet": "hi", "labelIds": ["INBOX"],
+            "payload": {"headers": [{"name": "From", "value": senders[i]},
+                                    {"name": "Subject", "value": f"Question {i}"}]},
+        }  # fmt: skip
+        return gmail
+
+    def check(self, work, cloud=None):
+        return mail.check(self.store, ["me@x"], self.brain, lambda a: self.gmail,
+                          lambda to, t: self.sent.append(t), "chat", work=work,
+                          cloud=cloud)  # fmt: skip
+
+    def test_personal_mail_is_held_then_triaged_locally_after(self):
+        senders = {"p": "Dana Whitfield <dana@gmail.com>", "s": "GitHub <noreply@github.com>"}
+        self.gmail = self.gmail_from({})
+        self.check(work=False)  # seed
+        self.gmail = self.gmail_from(senders)
+        triaged = self.check(work=True, cloud=self.cloud)
+        self.assertEqual([(i["id"], i["by"]) for i in triaged], [("s", "work-model")])
+        self.assertEqual(self.brain.calls, [])
+        self.assertNotIn("dana", " ".join(self.cloud.calls).lower())
+        self.gmail.ids = []
+        [held] = self.check(work=False)
+        self.assertEqual((held["id"], held["label"], held["by"]), ("p", "needs_reply", "model"))
+        self.assertFalse((self.store.root / "mail" / "held.json").exists())
+        logged = (self.store.root / "mail" / "me@x.jsonl").read_text()
+        self.assertEqual(logged.count('"id": "p"'), 1)
+
+    def test_no_work_brain_holds_everything_but_rules(self):
+        self.check(work=False)
+        self.gmail.ids = ["b", "a"]
+        self.assertEqual(self.check(work=True), [])
+        self.assertEqual(self.brain.calls, [])
+        self.assertEqual(len(self.check(work=False)), 1)
+
+
 class TeacherTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

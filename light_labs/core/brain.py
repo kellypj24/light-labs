@@ -52,6 +52,19 @@ class Brain:
         }
         return data
 
+    def unload(self):
+        """Free the model's memory now instead of after Ollama's 5-minute keep-alive.
+        Never raises: Ollama being down means nothing is loaded."""
+        req = urllib.request.Request(
+            f"{self.base}/api/generate",
+            data=json.dumps({"model": self.model, "keep_alive": 0}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=30).close()
+        except OSError:
+            pass
+
     def think(self, system, user, temperature=0.7, num_ctx=None):
         """`num_ctx` sets the context window; Ollama silently truncates a prompt past it."""
         options = {"temperature": temperature}
