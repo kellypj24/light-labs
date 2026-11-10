@@ -81,3 +81,19 @@ Telegram. Strong has no Shortcuts actions, so its export always starts in the ap
 A new exercise in Strong needs a row in `analytics/seeds/strong_exercises.csv`;
 `dbt build` fails until it has one. Dumbbell weights are both hands. A pull up or dip
 logged at 100 lb or more is read as bodyweight (`training_bodyweight_threshold_lb`).
+
+## Planning context
+
+`lab training context [--week 2026-W47]` (default: next week) writes
+`var/training/context/<week>.json`: per day, free windows (gaps of 45 min or more,
+05:00–21:00) and the weather with `outdoor_ok`.
+
+One-time setup:
+
+1. `lab google auth training`, then sign in and approve "See your calendars' free/busy"
+   and "See the list of your calendars". The Calendar API must be enabled in the
+   light-labs Google Cloud project.
+2. In `.env`: `TRAINING_GOOGLE_ACCOUNT=<the address it printed>` and
+   `TRAINING_CALENDARS=primary,Kelly family calendar`.
+3. `lab google check training --account <address>` lists the calendars it can see.
+4. `var/training/goals.md` has a `- Location: <lat>, <lon>` line for the forecast.

@@ -6,13 +6,17 @@ job needs, and keeps one refresh token per mailbox in Keychain
 (`light-labs-google-<robot>-<account>`), so a bug in one robot can never use another's
 permissions:
 
-    rush  gmail.readonly             triage, summaries
-    roll  gmail.modify               archive and label (inbox cleanup)
+    rush      gmail.readonly             triage, summaries
+    roll      gmail.modify               archive and label (inbox cleanup)
+    training  calendar.freebusy          busy blocks only, never event titles
+              calendar.calendarlist.readonly   calendar names and ids, to find
+                                               "Kelly family calendar" by name
 
 `lab google auth <robot>` runs the installed-app flow: a loopback listener on 127.0.0.1,
 PKCE, the browser for PJ's sign-in and consent. PJ types his password into Google only.
 
-Gmail here has no send method on purpose: nothing in the lab sends email.
+Gmail here has no send method on purpose: nothing in the lab sends email. Calendar has
+no events method on purpose: the training planner sees busy blocks, not what they are.
 """
 
 import base64
@@ -20,6 +24,7 @@ import hashlib
 import json
 import secrets
 import subprocess
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -29,10 +34,15 @@ CLIENT_KEYCHAIN = "light-labs-google-oauth-client"
 AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me"
+CALENDAR = "https://www.googleapis.com/calendar/v3"
 
 SCOPES = {
     "rush": ["https://www.googleapis.com/auth/gmail.readonly"],
     "roll": ["https://www.googleapis.com/auth/gmail.modify"],
+    "training": [
+        "https://www.googleapis.com/auth/calendar.freebusy",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    ],
 }
 
 
@@ -154,7 +164,7 @@ def authorize(robot, login_hint=None, open_browser=webbrowser.open, put=_keychai
     if "refresh_token" not in token:
         raise RuntimeError("Google returned no refresh token; run the sign-in again")
     granted = token.get("scope", "").split()
-    account = _profile(token["access_token"])["emailAddress"]
+    account = _account(token["access_token"], granted)
     put(
         keychain_service(robot, account),
         json.dumps({"refresh_token": token["refresh_token"], "scopes": granted}),
@@ -168,6 +178,40 @@ def _profile(access_token, opener=urllib.request.urlopen):
     )
     with opener(req, timeout=30) as r:
         return json.loads(r.read().decode())
+
+
+def _account(access_token, scopes, opener=urllib.request.urlopen):
+    """The signed-in address: the Gmail profile, or for a calendar-only sign-in the
+    primary calendar's id (which is the account's address)."""
+    if any("/gmail." in s for s in scopes):
+        return _profile(access_token, opener)["emailAddress"]
+    req = urllib.request.Request(
+        f"{CALENDAR}/users/me/calendarList/primary",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    try:
+        with opener(req, timeout=30) as r:
+            return json.loads(r.read().decode())["id"]
+    except urllib.error.HTTPError as e:  # e.g. the Calendar API not enabled in the project
+        detail = e.read().decode(errors="replace")[:500]
+        raise RuntimeError(f"Google Calendar refused ({e.code}): {detail}") from None
+
+
+def refresh_access(robot, account, get=_keychain_get, opener=urllib.request.urlopen):
+    """A fresh access token from the robot's stored refresh token."""
+    client = client_config(get)
+    saved = json.loads(get(keychain_service(robot, account)))
+    token = _post(
+        client.get("token_uri", TOKEN_URI),
+        {
+            "client_id": client["client_id"],
+            "client_secret": client["client_secret"],
+            "refresh_token": saved["refresh_token"],
+            "grant_type": "refresh_token",
+        },
+        opener,
+    )
+    return token["access_token"]
 
 
 # Robots allowed to change a mailbox, and only by moving labels (archive = remove INBOX).
@@ -185,19 +229,7 @@ class Gmail:
 
     def _access_token(self):
         if self._access is None:
-            client = client_config(self.get)
-            saved = json.loads(self.get(keychain_service(self.robot, self.account)))
-            token = _post(
-                client.get("token_uri", TOKEN_URI),
-                {
-                    "client_id": client["client_id"],
-                    "client_secret": client["client_secret"],
-                    "refresh_token": saved["refresh_token"],
-                    "grant_type": "refresh_token",
-                },
-                self.opener,
-            )
-            self._access = token["access_token"]
+            self._access = refresh_access(self.robot, self.account, self.get, self.opener)
         return self._access
 
     def call(self, path, body=None, **params):
@@ -264,3 +296,72 @@ class Gmail:
                 body={"ids": ids[i : i + 1000], "addLabelIds": list(add),
                       "removeLabelIds": list(remove)},
             )  # fmt: skip
+
+
+class Calendar:
+    """Free/busy for one sign-in: calendar names and ids, and busy intervals. There is no
+    events method: titles, attendees and notes are never fetched."""
+
+    def __init__(self, robot, account, get=_keychain_get, opener=urllib.request.urlopen):
+        self.robot, self.account, self.get, self.opener = robot, account, get, opener
+        self._access = None
+
+    def call(self, path, body=None, **params):
+        if self._access is None:
+            self._access = refresh_access(self.robot, self.account, self.get, self.opener)
+        query = f"?{urllib.parse.urlencode(params)}" if params else ""
+        headers = {"Authorization": f"Bearer {self._access}"}
+        data = None
+        if body is not None:
+            data, headers["Content-Type"] = json.dumps(body).encode(), "application/json"
+        req = urllib.request.Request(f"{CALENDAR}/{path}{query}", data=data, headers=headers)
+        with self.opener(req, timeout=60) as r:
+            return json.loads(r.read().decode())
+
+    def calendars(self):
+        """[(id, name)] for every calendar in the account's list, subscribed ones included."""
+        out, token = [], None
+        while True:
+            params = {"maxResults": 250, **({"pageToken": token} if token else {})}
+            page = self.call("users/me/calendarList", **params)
+            out += [
+                (c["id"], c.get("summaryOverride") or c.get("summary", ""))
+                for c in page.get("items", [])
+            ]
+            token = page.get("nextPageToken")
+            if not token:
+                return out
+
+    def resolve(self, names):
+        """Calendar ids for `names` ("primary", or a calendar's name, any case)."""
+        by_name = {name.casefold(): cid for cid, name in self.calendars()}
+        ids, missing = [], []
+        for name in names:
+            if name == "primary":
+                ids.append("primary")
+            elif name.casefold() in by_name:
+                ids.append(by_name[name.casefold()])
+            else:
+                missing.append(name)
+        if missing:
+            raise LookupError(f"no calendar named {', '.join(missing)}")
+        return ids
+
+    def busy(self, ids, start, end):
+        """{calendar id: [(start, end), ...]} as ISO strings, for start ≤ t < end (aware
+        datetimes). A calendar Google can't read raises instead of looking free."""
+        got = self.call(
+            "freeBusy",
+            body={
+                "timeMin": start.isoformat(),
+                "timeMax": end.isoformat(),
+                "items": [{"id": i} for i in ids],
+            },
+        )
+        out = {}
+        for cid, cal in got.get("calendars", {}).items():
+            if cal.get("errors"):
+                reasons = ", ".join(e.get("reason", "?") for e in cal["errors"])
+                raise RuntimeError(f"free/busy for {cid}: {reasons}")
+            out[cid] = [(b["start"], b["end"]) for b in cal.get("busy", [])]
+        return out

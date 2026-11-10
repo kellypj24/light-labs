@@ -156,6 +156,24 @@ def training_ingest_health(args):
     print(f"db: {results.DB}")
 
 
+def training_context(args):
+    from light_labs.training import context
+
+    path, ctx = context.run(args.week)
+    print(f"wrote {path}")
+    for day in ctx["days"]:
+        free = ", ".join(f"{a}–{b}" for a, b in day["free"]) or "no free window"
+        w = day["weather"]
+        sky = (
+            f"{w['daytime_min_f']}–{w['daytime_max_f']}°F, chill {w['wind_chill_min_f']}, "
+            f"rain {w['precip_max_pct']}%, outdoor "
+            + (", ".join(f"{a}–{b}" for a, b in w["outdoor_windows"]) or "no")
+            if w
+            else "no forecast yet"
+        )
+        print(f"{day['weekday']} {day['date']}: {free} | {sky}")
+
+
 def calibration_ingest(args):
     from light_labs.core import calibration_results
     from light_labs.evals import results
@@ -579,6 +597,9 @@ def cmd_google(args):
     if args.cmd == "auth":
         account, scopes = google.authorize(args.who, login_hint=args.account)
         print(f"{args.who}: signed in to {account} with {', '.join(scopes)}")
+    elif args.cmd == "check" and args.who == "training":
+        cals = google.Calendar(args.who, args.account).calendars()
+        print(f"{args.who}: {args.account}, {len(cals)} calendars: {', '.join(n for _, n in cals)}")
     elif args.cmd == "check":
         p = google.Gmail(args.who, args.account).profile()
         print(f"{args.who}: {p['emailAddress']}, {p['messagesTotal']} messages")
@@ -866,6 +887,9 @@ def main(argv=None):
         "ingest-strong", help="reload raw.strong_sets from the newest Strong export"
     ).add_argument("csv", nargs="?", help="an export to load (default: newest drop)")
     tcmd.add_parser(
+        "context", help="free windows and weather for a week -> var/training/context/"
+    ).add_argument("--week", help="ISO week, e.g. 2026-W47 (default: next week)")
+    tcmd.add_parser(
         "ingest-health", help="upsert Health workouts exports into raw.health_workouts"
     ).add_argument("json", nargs="*", help="exports to load (default: the inbox's drops)")
     claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
@@ -943,14 +967,14 @@ def main(argv=None):
     rocmd.add_parser(
         "chores-fixtures", help="Claude-reviewed Dependabot PRs -> dependabot-merge fixtures"
     )
-    google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail)")
+    google_p = sub.add_parser("google", help="robots' Google sign-ins (Gmail, Calendar)")
     gocmd = google_p.add_subparsers(dest="cmd", required=True)
     for name, text in (
         ("auth", "sign a robot in with its scopes"),
         ("check", "prove a token works"),
     ):
         gp = gocmd.add_parser(name, help=text)
-        gp.add_argument("who", choices=["rush", "roll"])
+        gp.add_argument("who", choices=["rush", "roll", "training"])
         gp.add_argument(
             "--account",
             required=name == "check",
