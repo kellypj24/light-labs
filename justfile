@@ -114,6 +114,34 @@ dagster-install: _dagster-home
 dagster-restart:
     launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.dagster
 
+# Pause launchd jobs: rush (hourly tick, default), rush-remote (phone page), dagster, or
+# all. Nothing is lost: the next tick catches up. `just resume` starts them again.
+pause +jobs="rush":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    jobs="{{ jobs }}"; [ "$jobs" = all ] && jobs="rush rush-remote dagster"
+    for job in $jobs; do
+        launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.$job 2>/dev/null \
+            && echo "paused $job" || echo "$job already paused"
+    done
+
+resume +jobs="rush":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    jobs="{{ jobs }}"; [ "$jobs" = all ] && jobs="rush rush-remote dagster"
+    for job in $jobs; do
+        launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.$job.plist \
+            2>/dev/null && echo "resumed $job" || echo "$job already running"
+    done
+
+# Which launchd jobs are running and which are paused
+bots:
+    #!/usr/bin/env bash
+    for job in rush rush-remote dagster; do
+        launchctl print gui/$(id -u)/com.pjkelly.light-labs.$job >/dev/null 2>&1 \
+            && echo "$job: running" || echo "$job: paused"
+    done
+
 _dagster-home:
     mkdir -p var/dagster && cp ops/orchestration/dagster.yaml var/dagster/
 
