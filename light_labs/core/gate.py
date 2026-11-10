@@ -33,6 +33,9 @@ SOURCES = {
     "rush/auto": {"board"},  # memory.md through sanitize.notes
     "rush/auto-handoff": {"board"},
     "rush/mail-teacher": set(),  # sanitized view, personal mail skipped
+    # Work hours (core/workhours.py): Rush's board drafts and mail triage run on Claude.
+    "rush/board": {"board"},  # memory.md through sanitize.notes
+    "rush/mail-work": set(),  # sanitized view, personal mail deferred to the evening
     "rush/mail-fixtures": set(),
     "roll/keep": {"mail"},
     "roll/keep-teacher": set(),  # sanitized view, personal mail skipped

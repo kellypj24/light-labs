@@ -53,9 +53,18 @@ def mail_weapon():
     return any(w.get("stage") == "mail-triage" for w in ENTRY.get("weapons", []))
 
 
+# Work hours (core/workhours.py): board drafts and non-personal mail use this brain instead
+# of a local model, so nothing loads into the laptop's memory while PJ works. Its drafts
+# always queue for PJ: auto-send was earned by the local model. Empty: Rush skips the
+# board and holds all mail until after work hours.
+WORK_BRAIN = os.environ.get("RUSH_WORK_BRAIN", "claude:sonnet")
+
 # Testing the wake schedule: text PJ after every tick until this local time (ISO).
 PING_UNTIL = os.environ.get("RUSH_PING_UNTIL", "")
 WAKE_MINUTES = int(os.environ.get("RUSH_WAKE_MINUTES") or 0)
+# Minutes past the slot the tick runs at: off the hour, where meetings start. Keep it equal
+# to the Minute in ops/com.pjkelly.light-labs.rush.plist.
+TICK_MINUTE = int(os.environ.get("RUSH_TICK_MINUTE") or 7)
 
 # Escalations: Auto writes the real draft with this brain (PJ approves it); empty = off.
 AUTO_BRAIN = os.environ.get("RUSH_AUTO_BRAIN", "claude:sonnet")

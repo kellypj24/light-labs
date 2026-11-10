@@ -3,10 +3,18 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-11-09._
+_Updated 2026-11-10._
 
 ## Now
 
+- PJ uses this 16 GB MacBook for work (Teams, Memex) until an always-on Mac mini takes
+  the local models; Claude Code is on a Max plan. Work hours (`LAB_WORK_HOURS`, weekdays
+  08:00-17:00, `core/workhours.py`): no local model loads, heavy jobs other than
+  `just check` need `--force`, Roll sits out of chores (big brother decides alone). Rush
+  drafts and triages through `RUSH_WORK_BRAIN` (`claude:sonnet`), drafts all queued;
+  personal mail waits for 17:00. Outside work hours each local model unloads when its
+  step ends. Rush ticks at :07. `RUSH_MAIL_MODEL=llama3.1:8b` in `.env` meanwhile (one
+  ~5 GB model per tick instead of 8b + 14b).
 - Rush (DLN-100) live under launchd: hourly tick, board and mail triage, Telegram and the
   tailnet remote page. Escalations drafted by Auto, approved by PJ. muse's LOOP thread
   (`task_fb2e059c5a8bd362`) muted 2026-11-09: 73 of ~88 drafts since 11-03, all rejected.
@@ -69,6 +77,12 @@ _Updated 2026-11-09._
 
 ## Open decisions
 
+- Work-hours board drafts from Claude always queue for PJ (auto-send was earned by
+  `llama3.1:8b`). Let them auto-send under the same guards? Not decided.
+- Cap Ollama at one loaded model (`OLLAMA_MAX_LOADED_MODELS=1`)? Ollama.app ignores
+  `launchctl setenv` (its server log shows 0, the default), so it needs `ollama serve`
+  under a LaunchAgent of ours instead of the app. Rush's explicit unloads cover the
+  hourly tick without it.
 - Radar's shared digest goes to Google Drive for Desktop, which isn't installed; until it
   is, `lab radar weekly` writes the local copy only.
 
