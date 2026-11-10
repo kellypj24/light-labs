@@ -1,6 +1,6 @@
 # Plan: training logs and weekly workout planning
 
-Status: agreed 2026-11-08. Steps 1–4 done (#110, #112–#115); step 5 in review. Written 2026-11-08.
+Status: agreed 2026-11-08. Steps 1–5 done (#110, #112–#116); step 6 in review. Written 2026-11-08.
 
 Moves the exercise-planning task from Claude desktop into the lab. Strong (lifting) and
 Strava (cardio, through Apple Health) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
@@ -139,9 +139,23 @@ or skipped week costs nothing.
    Files: `light_labs/training/plan.py`, `light_labs/core/gate.py`, `light_labs/cli.py`,
    `tests/test_training_plan.py`, seed `implements`, `int_training_sets`.
 
-6. **Delivery.** Rush sends the plan to Telegram on the planning day. Calendar events
-   come later and need a `calendar.events` scope, asked first. The desktop task keeps
-   running until two lab plans in a row pass PJ's review. Then it's retired.
+6. **Delivery.** `training/deliver.py`, run by Rush's hourly tick (before the board, so an
+   unreachable Agent Net never holds the plan), state in `var/training/deliver.json`.
+   - Sunday from 18:00: Strong is stale past 6 days, Health past 36 h; Rush texts how to
+     send each stale one. Next week's plan goes out once a Strong export lands that day,
+     or at 20:00 with what there is, saying what it was built without. Planner errors are
+     texted and retried hourly until 23:00.
+   - Daily from 21:00: Rush asks for Health when it is stale.
+   - A requested file (Telegram or the tailnet drop) refreshes the plan once Dagster has
+     loaded it: next week whole before it starts, else the current week's remaining days
+     (`plan.run(from_date=...)`, training days owed = 5 minus days logged). Unrequested
+     drops never re-plan. `/replan` refreshes on demand.
+   - Plain text in Rush's chat, split between days under Telegram's 4,096-character
+     limit. `lab training send [--week]` and `lab training tick` by hand.
+   - Calendar events come later and need a `calendar.events` scope, asked first. The
+     desktop task keeps running until two lab plans in a row pass PJ's review.
+   Files: `light_labs/training/{deliver,plan}.py`, `light_labs/agents/rush/telegram.py`,
+   `light_labs/cli.py`, `tests/test_training_deliver.py`, `tests/test_telegram.py`.
 
 ## Decided (2026-11-08)
 

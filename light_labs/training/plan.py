@@ -12,6 +12,10 @@ sessions and writes them up, returning JSON that `check` validates: exactly 5 tr
 days, each session inside a free window, each outdoor run inside the day's outdoor hours,
 lift loads from the table. A failed check gets one retry with the failures; then the plan
 is written with them listed.
+
+A midweek replan (`from_date`) plans only the days from that date, with as many training
+days as the week still owes after what Strong and Health logged before it; the days
+before it keep the earlier plan.
 """
 
 import json
@@ -176,6 +180,18 @@ def read_marts(db=None):
     return lifts, weeks
 
 
+def done_days(start, before, db=None):
+    """Training days logged in the week starting `start`, before `before`."""
+    import duckdb
+
+    with duckdb.connect(str(db or config.VAR / "lab.duckdb"), read_only=True) as con:
+        return con.execute(
+            "SELECT count(DISTINCT session_date) FROM intermediate.int_training_sessions "
+            "WHERE session_date >= ? AND session_date < ?",
+            [start, before],
+        ).fetchone()[0]
+
+
 def last_plan(start, var=None):
     """The most recent plan or imported note before this week, as text."""
     candidates = []
@@ -210,7 +226,8 @@ Return only JSON, no prose around it:
 }
 
 Rules:
-- All 7 dates of the week, in order. Exactly 5 days with "rest": false.
+- Every date listed under free windows, in order, and no others. Exactly the number of
+  training days the first line asks for ("rest": false); the rest are rest days.
 - Each training day's slot lies inside one of that day's free windows.
 - "outdoor": true only for a run, and its slot inside that day's outdoor windows.
 - A lift in the progression table uses its load_lb and reps exactly; you choose sets.
@@ -220,11 +237,30 @@ Rules:
 """
 
 
-def prompt(start, number, is_deload, why, ctx, table, weeks, goals, previous):
+def prompt(
+    start,
+    number,
+    is_deload,
+    why,
+    ctx,
+    table,
+    weeks,
+    goals,
+    previous,
+    train=TRAINING_DAYS,
+    from_date=None,
+):
+    replan = (
+        f" Replanning from {from_date}: PJ has trained {TRAINING_DAYS - train} days this week"
+        f" already, so plan exactly {train} training days across the dates listed below."
+        if from_date
+        else f" Plan exactly {train} training days."
+    )
     return "\n\n".join(
         [
             f"Week {number} ({start} to {start + timedelta(days=6)}). "
-            + (f"DELOAD: {why}." if is_deload else "Not a deload."),
+            + (f"DELOAD: {why}." if is_deload else "Not a deload.")
+            + replan,
             "goals.md:\n" + goals,
             "Free windows and weather per day:\n" + json.dumps(ctx["days"], indent=1),
             "Progression table (lb; dumbbell loads are per hand, as Strong logs them):\n"
@@ -247,7 +283,7 @@ def _inside(slot, windows):
     return any(_minutes(a) <= s0 and s1 <= _minutes(b) for a, b in windows)
 
 
-def check(plan, ctx, table):
+def check(plan, ctx, table, train=TRAINING_DAYS):
     """Failures, as sentences the model can act on. Empty means the plan passes."""
     fails = []
     days = {d["date"]: d for d in ctx["days"]}
@@ -255,8 +291,8 @@ def check(plan, ctx, table):
     if sorted(d.get("date") for d in got) != sorted(days):
         fails.append(f"days must be exactly {', '.join(sorted(days))}")
     training = [d for d in got if not d.get("rest")]
-    if len(training) != TRAINING_DAYS:
-        fails.append(f"{len(training)} training days; must be exactly {TRAINING_DAYS}")
+    if len(training) != train:
+        fails.append(f"{len(training)} training days; must be exactly {train}")
     loads = {r["exercise"]: r for r in table}
     for d in training:
         day = days.get(d.get("date"))
@@ -296,10 +332,12 @@ def _item(i):
     return f"{i['exercise']} {i.get('sets', '?')}x{i.get('reps', '?')}{load}"
 
 
-def render(plan, start, number, is_deload, why, fails):
+def render(plan, start, number, is_deload, why, fails, from_date=None):
     year, wk, _ = start.isocalendar()
     head = f"# Week {number} ({year}-W{wk:02d}, {start:%b %-d}–{start + timedelta(days=6):%b %-d})"
     lines = [head, "", plan.get("glance", ""), ""]
+    if from_date:
+        lines += [f"_Updated: replanned from {from_date:%a %b %-d}._", ""]
     lines.append(f"**Deload:** {why}." if is_deload else "Not a deload week.")
     lines.append("")
     for d in sorted(plan.get("days", []), key=lambda d: d.get("date", "")):
@@ -328,8 +366,8 @@ def render(plan, start, number, is_deload, why, fails):
     return "\n".join(lines) + "\n"
 
 
-def run(week=None, brain=None, var=None, db=None, ctx=None):
-    """Plan one week and write it. Returns (path, failures)."""
+def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
+    """Plan one week (or its days from `from_date`) and write it. Returns (path, failures)."""
     start = week_context.week_start(week)
     goals = (home(var) / "goals.md").read_text()
     number = week_number(start, goals)
@@ -340,7 +378,21 @@ def run(week=None, brain=None, var=None, db=None, ctx=None):
     if ctx is None:
         _, ctx = week_context.run(week)
     ctx = with_assumed_work(ctx, ASSUME_WORK)
-    user = prompt(start, number, is_deload, why, ctx, table, weeks, goals, last_plan(start, var))
+    year, wk, _ = start.isocalendar()
+    out = home(var) / "plans" / f"{year}-W{wk:02d}.md"
+    train, earlier = TRAINING_DAYS, []
+    if from_date and from_date > start:
+        ctx = {**ctx, "days": [d for d in ctx["days"] if d["date"] >= from_date.isoformat()]}
+        train = max(0, min(len(ctx["days"]), TRAINING_DAYS - done_days(start, from_date, db)))
+        if out.with_suffix(".json").exists():
+            old = json.loads(out.with_suffix(".json").read_text())
+            earlier = [d for d in old.get("days", []) if d.get("date", "") < from_date.isoformat()]
+    else:
+        from_date = None
+    previous = out.read_text() if from_date and out.exists() else last_plan(start, var)
+    user = prompt(
+        start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date
+    )
     if brain is None:
         from light_labs.core.brain import brain_for
 
@@ -357,14 +409,13 @@ def run(week=None, brain=None, var=None, db=None, ctx=None):
         except (ValueError, json.JSONDecodeError) as e:
             fails = [f"reply was not the JSON asked for: {e}"]
             continue
-        fails = check(plan, ctx, table)
+        fails = check(plan, ctx, table, train)
         if not fails:
             break
     if plan is None:
         raise RuntimeError(f"no usable plan: {fails[0]}")
-    year, wk, _ = start.isocalendar()
-    out = home(var) / "plans" / f"{year}-W{wk:02d}.md"
+    plan = {**plan, "days": earlier + plan.get("days", [])}
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(plan, start, number, is_deload, why, fails))
+    out.write_text(render(plan, start, number, is_deload, why, fails, from_date))
     (out.with_suffix(".json")).write_text(json.dumps(plan, indent=2) + "\n")
     return out, fails
