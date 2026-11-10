@@ -79,9 +79,10 @@ _Updated 2026-11-10._
 
 - Work-hours board drafts from Claude always queue for PJ (auto-send was earned by
   `llama3.1:8b`). Let them auto-send under the same guards? Not decided.
-- `OLLAMA_MAX_LOADED_MODELS=1` is set with `launchctl setenv`, which a reboot clears;
-  make it permanent (a LaunchAgent that sets it at login) or drop it once the Mac mini
-  runs Ollama?
+- Cap Ollama at one loaded model (`OLLAMA_MAX_LOADED_MODELS=1`)? Ollama.app ignores
+  `launchctl setenv` (its server log shows 0, the default), so it needs `ollama serve`
+  under a LaunchAgent of ours instead of the app. Rush's explicit unloads cover the
+  hourly tick without it.
 - Radar's shared digest goes to Google Drive for Desktop, which isn't installed; until it
   is, `lab radar weekly` writes the local copy only.
 
