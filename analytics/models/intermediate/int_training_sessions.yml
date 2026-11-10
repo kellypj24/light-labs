@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: int_training_sessions
+    description: One row per training session, Strong lifting and Health cardio, in local time.
+    columns:
+      - name: session_id
+        description: Strong workout_id or Health workout uuid
+        tests:
+          - unique
+          - not_null
+      - name: session_source
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["strong", "health"]
+      - name: kind
+        description: lifting, or Health's activity type (running, cycling, ...)
+      - name: duration_minutes
+        description: Strong's workout duration, or Health's
+      - name: session_week
+        description: Monday of the ISO week, local time

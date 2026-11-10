@@ -1,6 +1,6 @@
 # Plan: training logs and weekly workout planning
 
-Status: agreed 2026-11-08. Steps 1 (#110) and 2 (#112) done; tailnet drop in review. Written 2026-11-08.
+Status: agreed 2026-11-08. Steps 1 (#110) and 2 (#112, #113) done; step 3 in review. Written 2026-11-08.
 
 Moves the exercise-planning task from Claude desktop into the lab. Strong (lifting) and
 Strava (cardio, through Apple Health) logs flow through Dagster into `var/lab.duckdb`; marts summarise load and
@@ -72,17 +72,29 @@ or skipped week costs nothing.
    `analytics/models/staging/*health*`, `tests/test_training_health.py`.
 
 3. **Marts.**
-   - `int_training__sessions`: Strong workouts and counted Health workouts (not
-     `traditionalStrengthTraining`, which Strong covers) as one session
-     grain (date, source, kind, duration).
-   - `mart_training_weekly`: per ISO week, lifting volume (sets, tonnage) by movement
-     pattern and cardio time and distance by type. Also acute:chronic load (7-day vs
-     28-day).
-   - `mart_lift_progress`: per exercise, best e1RM (Epley) per week and the last
-     top set.
-   - Exercise → movement-pattern mapping as a dbt seed, `seeds/strong_exercises.csv`;
-     a dbt test fails on an exercise not in the seed.
-   Files: `analytics/models/{intermediate,marts}/*training*`, `analytics/seeds/strong_exercises.csv`.
+   - Seed `seeds/strong_exercises.csv`: exercise → movement pattern (squat, hinge, lunge,
+     horizontal/vertical push and pull, power, arms, shoulders, calves) and
+     `is_bodyweight_lift`. A `not_null` test on `int_training_sets.movement_pattern`
+     fails when Strong logs an exercise the seed lacks.
+   - `int_training_sets`: pattern, added weight, tonnage, Epley e1RM. Dumbbell weights are
+     both hands, as logged. A bodyweight lift logged at 100 lb or more logged PJ's
+     bodyweight: 0 added weight, no tonnage, progress on reps. e1RM only from loaded,
+     non-bodyweight sets of 1–10 reps.
+   - `int_training_sessions`: Strong workouts and counted Health workouts (not strength
+     types, which Strong covers) as one session grain, local time (America/New_York).
+   - `mart_training_weekly`: one row per ISO week from the first session to this week,
+     empty weeks included: sessions, sets, tonnage, cardio minutes and miles, and
+     acute:chronic load on training minutes (no RPE is logged; HR is sparse), as of the
+     week's last day or today.
+   - `mart_training_weekly_breakdown`: per week, sets and tonnage by movement pattern and
+     minutes and miles by cardio type.
+   - `mart_lift_progress`: per exercise and week, best e1RM and its change, best reps,
+     and the top set of the week's last session; `is_latest_week` is where progression
+     starts.
+   - Vars in `dbt_project.yml`: bodyweight threshold, e1RM rep cap, strength activity
+     types, timezone.
+   Files: `analytics/seeds/strong_exercises.csv`, `analytics/models/{intermediate,marts}/*training*`,
+   `analytics/models/marts/mart_lift_progress.*`, `analytics/dbt_project.yml`.
 
 4. **Context: calendar, weather, history.** Each pulled locally; the planner sees only
    the derived view.

@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: int_training_sets
+    description: One row per Strong set with movement pattern, load, tonnage and e1RM.
+    columns:
+      - name: set_id
+        tests:
+          - unique
+          - not_null
+      - name: movement_pattern
+        description: From seed strong_exercises; NULL means Strong logged an exercise the seed lacks
+        tests:
+          - not_null:
+              config:
+                error_if: ">0"
+      - name: added_weight
+        description: Weight that counts as load (lb); 0 for bodyweight lifts logged at bodyweight
+      - name: tonnage
+        description: added_weight × reps; 0 for warm-ups
+      - name: e1rm
+        description: Epley, weight × (1 + reps / 30), loaded non-bodyweight sets of 1–10 reps only

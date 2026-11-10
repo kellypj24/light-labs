@@ -1,0 +1,40 @@
+exercise,movement_pattern,is_bodyweight_lift
+Arnold Press (Dumbbell),vertical_push,false
+Bench Press (Barbell),horizontal_push,false
+Bench Press (Dumbbell),horizontal_push,false
+Bent Over One Arm Row (Dumbbell),horizontal_pull,false
+Bent Over Row (Barbell),horizontal_pull,false
+Bent Over Row (Dumbbell),horizontal_pull,false
+Bicep Curl (Barbell),arms,false
+Bicep Curl (Dumbbell),arms,false
+Box Squat (Barbell),squat,false
+Bulgarian Split Squat,lunge,false
+Chest Dip,horizontal_push,true
+Chest Fly (Dumbbell),horizontal_push,false
+Clean (Barbell),power,false
+Deadlift (Band),hinge,false
+Decline Bench Press (Barbell),horizontal_push,false
+Decline Bench Press (Dumbbell),horizontal_push,false
+Front Raise (Barbell),shoulders,false
+Front Raise (Dumbbell),shoulders,false
+Hammer Curl (Dumbbell),arms,false
+Incline Bench Press (Barbell),horizontal_push,false
+Incline Bench Press (Dumbbell),horizontal_push,false
+Incline Row (Dumbbell),horizontal_pull,false
+Lateral Raise (Dumbbell),shoulders,false
+Lunge (Barbell),lunge,false
+Lunge (Dumbbell),lunge,false
+Pull Up,vertical_pull,true
+Reverse Curl (Dumbbell),arms,false
+Romanian Deadlift (Dumbbell),hinge,false
+Seated Overhead Press (Barbell),vertical_push,false
+Shrug (Barbell),shoulders,false
+Skullcrusher (Dumbbell),arms,false
+Squat (Barbell),squat,false
+Standing Calf Raise (Barbell),calves,false
+Standing Calf Raise (Dumbbell),calves,false
+Sumo Deadlift High Pull (Barbell),power,false
+Triceps Dip,arms,true
+Triceps Extension (Barbell),arms,false
+Triceps Extension (Dumbbell),arms,false
+Upright Row (Barbell),shoulders,false

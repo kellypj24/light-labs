@@ -175,10 +175,14 @@ def _sample(rng, p, category, latency, cost, can_error=True):
 
 
 def _fingerprint():
-    """Cache key: this file (the synthetic data) and the project's models and macros."""
+    """Cache key: this file (the synthetic data) and the project's models, macros and seeds."""
     h = hashlib.sha256(Path(__file__).read_bytes())
     for path in sorted(PROJECT.rglob("*")):
-        if path.is_file() and path.suffix in (".sql", ".yml") and "target" not in path.parts:
+        if (
+            path.is_file()
+            and path.suffix in (".sql", ".yml", ".csv")
+            and "target" not in path.parts
+        ):
             h.update(str(path.relative_to(PROJECT)).encode())
             h.update(path.read_bytes())
     return h.hexdigest()[:16]
@@ -226,6 +230,20 @@ def _invoke(runner, project, args):
     )
 
 
+def load_seeds(db):
+    """Each analytics/seeds/<name>.csv as table seeds.<name>, where the models ref it."""
+    import duckdb
+
+    with duckdb.connect(str(db)) as con:
+        con.execute("CREATE SCHEMA IF NOT EXISTS seeds")
+        for path in sorted((PROJECT / "seeds").glob("*.csv")):
+            con.execute(
+                f'CREATE OR REPLACE TABLE seeds."{path.stem}" AS '
+                "SELECT * FROM read_csv(?, header = true)",
+                [str(path)],
+            )
+
+
 def prepare():
     """Path to the cached database: synthetic raw data plus the built project."""
     from light_labs.core import calibration_results, claude_results, queue_results
@@ -255,7 +273,16 @@ def prepare():
             # ...and Strong's training logs; no export, an empty table.
             strong.ingest(var=Path(tmp) / "no-strong", db=building)
             health.ingest(var=Path(tmp) / "no-health", db=building)
-            res = dbt(copy_project(Path(tmp) / "project"), building, "build")
+            # Seeds are the project's own CSVs. dbt would read them through DuckDB, which
+            # the sandboxed profile forbids, so load them here and build everything else.
+            load_seeds(building)
+            res = dbt(
+                copy_project(Path(tmp) / "project"),
+                building,
+                "build",
+                "--exclude",
+                "resource_type:seed",
+            )
             if not res.success:
                 failed = [
                     f"{r.node.name}: {r.message}"

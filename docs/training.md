@@ -69,3 +69,15 @@ Telegram. Strong has no Shortcuts actions, so its export always starts in the ap
 `stg_health_workouts` keeps every record and flags what marts skip: `is_fragment` (under
 3 min), `is_implausible_pace` (slower than 20 min/km), `is_duplicate` (same type within
 10 min of a better record). `is_counted` is the rest.
+
+## Marts
+
+| Model | Grain | Use |
+|---|---|---|
+| `marts.mart_training_weekly` | ISO week (Monday, local time), empty weeks included | Sessions, sets, tonnage, cardio minutes and miles; `acute_chronic_ratio` on training minutes |
+| `marts.mart_training_weekly_breakdown` | Week × movement pattern or cardio type | Where the volume went |
+| `marts.mart_lift_progress` | Exercise × week trained | Best e1RM and change, best reps, last session's top set; `is_latest_week` |
+
+A new exercise in Strong needs a row in `analytics/seeds/strong_exercises.csv`;
+`dbt build` fails until it has one. Dumbbell weights are both hands. A pull up or dip
+logged at 100 lb or more is read as bodyweight (`training_bodyweight_threshold_lb`).

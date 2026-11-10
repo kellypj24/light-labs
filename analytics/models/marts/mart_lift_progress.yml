@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: mart_lift_progress
+    description: One row per exercise and week trained, with e1RM and the last session's top set.
+    columns:
+      - name: lift_week_key
+        description: exercise | week_start
+        tests:
+          - unique
+          - not_null
+      - name: best_e1rm
+        description: Best Epley e1RM of the week (lb); NULL for bodyweight lifts and sets over 10 reps
+      - name: e1rm_change
+        description: best_e1rm minus the previous week this exercise was trained
+      - name: top_set_weight
+        description: Heaviest added weight in the week's last session (lb)
+      - name: top_set_reps
+        description: Reps of that top set
+      - name: is_latest_week
+        description: The exercise's most recent week; what the planner progresses from

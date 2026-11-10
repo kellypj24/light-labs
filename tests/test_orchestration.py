@@ -267,6 +267,9 @@ class FullRunTest(unittest.TestCase):
                     "mart_claude_repeated_work",
                     "mart_claude_activity_weekly",
                     "mart_calibration",
+                    "mart_training_weekly",
+                    "mart_training_weekly_breakdown",
+                    "mart_lift_progress",
                 ):
                     n = con.execute(f"SELECT count(*) FROM marts.{table}").fetchone()[0]
                     self.assertGreater(n, 0, table)

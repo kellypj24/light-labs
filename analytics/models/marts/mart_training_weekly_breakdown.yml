@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: mart_training_weekly_breakdown
+    description: Weekly volume per movement pattern (lifting) and per cardio type.
+    columns:
+      - name: breakdown_key
+        description: week_start | category_type | category
+        tests:
+          - unique
+          - not_null
+      - name: category_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["movement_pattern", "cardio"]
+      - name: category
+        description: Movement pattern (seed strong_exercises) or Health activity type

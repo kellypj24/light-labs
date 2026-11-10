@@ -9,6 +9,7 @@ profile: light_labs
 
 model-paths: ["models"]
 macro-paths: ["macros"]
+seed-paths: ["seeds"]
 test-paths: ["tests"]
 
 target-path: "target"
@@ -34,6 +35,16 @@ vars:
   # mart_run_health: a run still "running" with no reading for this long was killed.
   run_stale_minutes: 10
 
+  # Training (docs/plans/training.md). A bodyweight lift (pull up, dip) logged at or
+  # above this weight logged PJ's bodyweight, not added weight: it progresses on reps
+  # and stays out of tonnage.
+  training_bodyweight_threshold_lb: 100
+  # e1RM (Epley) only from sets of at most this many reps.
+  training_e1rm_max_reps: 10
+  # Health workouts Strong already covers (Strong writes its sessions to Health).
+  training_strength_activity_types: ["traditionalStrengthTraining", "functionalStrengthTraining"]
+  training_timezone: America/New_York
+
 models:
   light_labs:
     staging:
@@ -45,3 +56,12 @@ models:
     marts:
       +materialized: table
       +schema: marts
+
+seeds:
+  light_labs:
+    +schema: seeds
+    strong_exercises:
+      +column_types:
+        exercise: varchar
+        movement_pattern: varchar
+        is_bodyweight_lift: boolean
