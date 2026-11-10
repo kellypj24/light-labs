@@ -156,6 +156,15 @@ def training_ingest_health(args):
     print(f"db: {results.DB}")
 
 
+def training_plan(args):
+    from light_labs.training import plan
+
+    path, fails = plan.run(args.week)
+    print(f"wrote {path}")
+    for f in fails:
+        print(f"check failed: {f}")
+
+
 def training_context(args):
     from light_labs.training import context
 
@@ -888,6 +897,9 @@ def main(argv=None):
     ).add_argument("csv", nargs="?", help="an export to load (default: newest drop)")
     tcmd.add_parser(
         "context", help="free windows and weather for a week -> var/training/context/"
+    ).add_argument("--week", help="ISO week, e.g. 2026-W47 (default: next week)")
+    tcmd.add_parser(
+        "plan", help="plan a week with Claude around code-set loads -> var/training/plans/"
     ).add_argument("--week", help="ISO week, e.g. 2026-W47 (default: next week)")
     tcmd.add_parser(
         "ingest-health", help="upsert Health workouts exports into raw.health_workouts"

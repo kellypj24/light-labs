@@ -15,8 +15,10 @@ models:
               config:
                 error_if: ">0"
       - name: added_weight
-        description: Weight that counts as load (lb); 0 for bodyweight lifts logged at bodyweight
+        description: Weight that counts as load (lb, per hand for dumbbells); 0 for bodyweight lifts logged at bodyweight
+      - name: implements
+        description: Dumbbells lifted at once (2 for most dumbbell lifts, else 1), from the seed
       - name: tonnage
-        description: added_weight × reps; 0 for warm-ups
+        description: added_weight × implements × reps; 0 for warm-ups
       - name: e1rm
         description: Epley, weight × (1 + reps / 30), loaded non-bodyweight sets of 1–10 reps only

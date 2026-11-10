@@ -65,3 +65,4 @@ seeds:
         exercise: varchar
         movement_pattern: varchar
         is_bodyweight_lift: boolean
+        implements: integer
