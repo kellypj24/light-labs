@@ -267,6 +267,24 @@ class TestPipeline(RadarCase):
         self.assertIn("yours wins from now on", applied)
         self.assertFalse(circles.apply_if_empty(self.paths.circles_proposed, self.paths.circles))
 
+    def test_doctor_reports_the_latest_run_not_an_older_message(self):
+        from light_labs.radar import doctor
+
+        self.con.execute(
+            """
+            INSERT INTO runs VALUES
+                ('r1', 'imessage', TIMESTAMPTZ '2026-01-01 06:30+00',
+                 TIMESTAMPTZ '2026-01-01 06:31+00', 'skipped', NULL, 0, 'no export'),
+                ('r2', 'imessage', TIMESTAMPTZ '2026-01-02 06:30+00',
+                 TIMESTAMPTZ '2026-01-02 06:31+00', 'ok', '5', 3, NULL)
+            """
+        )
+        self.con.close()
+        checks = {c.name: c for c in doctor.run(self.paths, self.settings)}
+        self.assertEqual(checks["source imessage"].level, "ok")
+        detail = checks["source imessage"].detail  # local time, so no exact match
+        self.assertRegex(detail, r"^last run ok at 2026-01-0\d \d\d:31$")
+
     def test_schedule_plists(self):
         from light_labs import config, deploy
         from light_labs.radar import schedule
