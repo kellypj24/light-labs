@@ -135,10 +135,12 @@ def run(paths: Paths, settings: Settings) -> list[Check]:
         con = duckdb.connect(str(paths.db), read_only=True)
         try:
             for source, status, finished, msg in con.execute(
+                # The latest run's own row: arg_max(message, ...) skips a NULL message
+                # and would show an older run's.
                 """
-                SELECT source, arg_max(status, started_at), max(finished_at),
-                       arg_max(message, started_at)
-                FROM runs GROUP BY source ORDER BY source
+                SELECT source, status, finished_at, message FROM runs
+                QUALIFY row_number() OVER (PARTITION BY source ORDER BY started_at DESC) = 1
+                ORDER BY source
                 """
             ).fetchall():
                 level = {"ok": "ok", "skipped": "warn"}.get(status, "fail")
