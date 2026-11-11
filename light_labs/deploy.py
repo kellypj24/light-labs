@@ -7,6 +7,7 @@ release. Branch work in the checkout can't reach them; only a deploy can.
 
     lab deploy hermes                 origin/main
     lab deploy hermes --ref my-branch a branch, until main is deployed again
+    lab deploy radar                  Radar's scheduled jobs (no service to restart)
 
 `lab git land` redeploys a target that tracks main. A target on a branch stays put.
 A deploy that changes the commit restarts the target's service (RESTART), since a running
@@ -24,7 +25,11 @@ from pathlib import Path
 
 from light_labs import config
 
-TARGETS = {"hermes": Path.home() / ".hermes" / "lab"}
+TARGETS = {
+    "hermes": Path.home() / ".hermes" / "lab",
+    # Relationship Radar's scheduled sync and digest (light_labs/radar/schedule.py).
+    "radar": Path.home() / ".relationship-radar" / "lab",
+}
 # The gateway drains in-flight runs, then launchd starts it on the new release.
 RESTART = {"hermes": ("hermes", "gateway", "restart")}
 # Git-ignored files a release reads from the checkout; linked so edits there stay live.

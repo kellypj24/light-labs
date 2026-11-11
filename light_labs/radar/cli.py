@@ -42,7 +42,9 @@ def register(sub) -> None:
     hb.add_argument("--snippets", action="store_true", help="compile in 140-char previews")
     hcmd.add_parser("install", help="LaunchAgent: daily 06:20 and on `lab radar sync`")
     hcmd.add_parser("uninstall", help="remove the LaunchAgent and binary")
-    sc = cmd.add_parser("schedule", help="LaunchAgents: sync daily 06:30, weekly Fri 15:00")
+    sc = cmd.add_parser(
+        "schedule", help="LaunchAgents on the release: sync 06:30, weekly Fri 15:00"
+    )
     sc.add_argument("action", choices=["install", "uninstall"])
 
 
@@ -287,7 +289,12 @@ def schedule_cmd(args) -> int:
 
     paths, _ = _setup()
     if args.action == "install":
-        for p in schedule.install(paths):
+        try:
+            installed = schedule.install(paths)
+        except FileNotFoundError as e:
+            print(e)
+            return 1
+        for p in installed:
             print(f"installed {p}")
     else:
         schedule.uninstall()

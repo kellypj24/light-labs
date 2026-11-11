@@ -88,10 +88,12 @@ class GateTest(unittest.TestCase):
 
     def test_unreleased_paths_denied_to_tools_once_enforced(self):
         v = gate.check("roll/chores", "s", "u", "Read,Grep,Glob", str(config.REPO))
-        self.assertEqual((v.hits, v.disallowed), ({"unreleased": "sanitize"}, ()))
+        self.assertEqual((v.hits, v.disallowed), ({"unreleased": "sanitize"}, (gate.RADAR_READ,)))
         with mock.patch.object(gate, "ENFORCED", {"client-repo", "unreleased"}):
             v = gate.check("roll/chores", "s", "u", "Read,Grep,Glob", str(config.REPO))
-        self.assertEqual(v.disallowed, ("Read(./docs/plans/**)", "Read(./STATUS.md)"))
+        self.assertEqual(
+            v.disallowed, (gate.RADAR_READ, "Read(./docs/plans/**)", "Read(./STATUS.md)")
+        )
         self.assertFalse(v.blocked)
 
     def test_unscrubbed_notes_hit_the_memory_rule(self):
@@ -122,7 +124,9 @@ class GateTest(unittest.TestCase):
         ):
             b.think("s", "u")
         self.assertIn(
-            "--disallowedTools=Read(./docs/plans/**),Read(./STATUS.md)", run.call_args.args[0]
+            "--disallowedTools=Read(~/.relationship-radar/**),Read(./docs/plans/**),"
+            "Read(./STATUS.md)",
+            run.call_args.args[0],
         )
 
 

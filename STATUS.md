@@ -50,7 +50,11 @@ _Updated 2026-11-10._
   since 2026-11-08: a Swift helper (the only code with Full Disk Access, built only from
   source PJ approved) exports Messages and the Mac's Contacts at 06:20; `sync` 06:30
   daily, `weekly` Friday 15:00 (LaunchAgents) → `~/.relationship-radar`. First sync:
-  39.5k interactions, 160 people. Gate rule `radar` denies its data to Claude.
+  39.5k interactions, 160 people. Gate rule `radar` denies its data to Claude; Claude
+  Code sessions are held off by a deny rule and the `private-paths-guard` hook. Hardening
+  merged, PJ's steps pending: `lab radar helper approve` (snippets query diff), `build`,
+  re-grant Full Disk Access, `lab deploy radar`, `lab radar schedule install` (until
+  then the LaunchAgents still run the checkout and `doctor` warns).
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
@@ -84,7 +88,12 @@ _Updated 2026-11-10._
   under a LaunchAgent of ours instead of the app. Rush's explicit unloads cover the
   hourly tick without it.
 - Radar's shared digest goes to Google Drive for Desktop, which isn't installed; until it
-  is, `lab radar weekly` writes the local copy only.
+  is, `lab radar weekly` writes the local copy only. The digest carries names, circles and
+  birthdays to Google and a cloud Claude task, which the `radar` gate rule forbids
+  elsewhere: decide before installing Drive or sending picks over Telegram.
+- Radar helper: the binary, approved copy and build record are writable by code running
+  as PJ. Install the binary root-owned (needs sudo) so only the FDA grant and a root
+  path stand between a swap and Messages? Not built.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today

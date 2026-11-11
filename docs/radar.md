@@ -21,12 +21,19 @@ lab radar helper build         # compile the approved copy and sign it
 lab radar helper install       # LaunchAgent: daily 06:20 and on `lab radar sync`
 lab radar sync
 lab radar bootstrap            # proposes circles; the first one fills an empty circles.yaml
+lab deploy radar               # the release the scheduled jobs run (origin/main)
 lab radar schedule install     # LaunchAgents: sync daily 06:30, weekly Friday 15:00
 lab radar doctor               # checks every permission and freshness, with fixes
 ```
 
 After that nothing is manual: the helper exports at 06:20, sync runs at 06:30, and the
 digest is written on Fridays at 15:00. Logs: `~/.relationship-radar/logs/`.
+
+The scheduled jobs run `~/.relationship-radar/lab/current/.venv/bin/lab`, a release of
+origin/main with its locked environment (`lab deploy radar`), not a checkout: a branch
+left checked out can't run at 06:30, and nothing is resolved or installed at run time.
+`lab git land` redeploys it after a merge; `lab radar doctor` warns when a LaunchAgent
+still points at a checkout.
 
 `lab radar person "<name>"` shows one person's identities and timeline.
 `lab radar sync --source addressbook` runs one source.
@@ -41,12 +48,17 @@ not your terminal, not Python. FDA also covers the Contacts databases, so the sa
 helper exports contact cards, with no export step for you.
 
 1. `lab radar helper approve` shows the source (later, only the diff since your last
-   approval) and asks you to type `approve`. It refuses without a terminal, so no robot
-   or script can approve. The approved copy is kept in `~/.relationship-radar/bin/`.
+   approval) and asks you to type `approve`. It refuses without a terminal, which stops
+   a robot or a scheduled job approving by accident; it is not a boundary, since code
+   running as you can open a pty or write the approved copy. The approved copy is kept
+   in `~/.relationship-radar/bin/`.
 2. `lab radar helper build` compiles **that copy**, never the repo file, to
    `~/.relationship-radar/bin/radar-messages-export`, ad-hoc signed with the hardened
    runtime. A change merged to the repo reaches the binary only after you approve it;
-   `lab radar doctor` warns when the repo has moved on. `xcrun`, `codesign` and
+   `lab radar doctor` warns when the repo has moved on. The build records the source
+   hash, the binary's cdhash and whether snippets were compiled in
+   (`radar-messages-export.build.json`); `doctor` fails a binary whose cdhash differs
+   from the record and warns on a snippets build. `xcrun`, `codesign` and
    `launchctl` run by absolute path with a minimal environment, so neither PATH nor
    `DEVELOPER_DIR` nor `DYLD_*` in your shell decides what gets built.
 3. System Settings → Privacy & Security → Full Disk Access → **+** → Cmd-Shift-G → paste
@@ -55,7 +67,13 @@ helper exports contact cards, with no export step for you.
    command-line tool's file access to the app that launched it. Started from Terminal,
    the helper would need Terminal's FDA.
 
-The grant is tied to the binary's code hash. After any rebuild, remove the entry and add it again.
+The grant is tied to the binary's code hash (cdhash), and that is the boundary: a
+replaced binary loses Full Disk Access until you grant it again. After a rebuild **you
+ran**, remove the entry and add it again. If the helper loses access and you did not
+rebuild, run `lab radar doctor` before granting anything. The binary, the approved copy
+and the build record are all writable by code running as you, so `doctor` catches drift
+and a careless swap, not code that rewrites all three; a root-owned install path would
+close that and is not built.
 
 To include texts with non-Apple phones (SMS/RCS), turn on iPhone Settings → Apps → Messages
 → Text Message Forwarding → this Mac. For older history, also turn on Messages in iCloud.
@@ -69,9 +87,11 @@ The file is short. Check that it:
       `RADAR_TEST` build, which never gets FDA)
 - [ ] opens only `chat.db` and the Contacts databases (`AddressBook-v22.abcddb`, the root
       one and `Sources/*/`), each with `SQLITE_OPEN_READONLY`
-- [ ] runs only fixed `SELECT`s, with no input interpolated: two on Messages, three on
-      Contacts (cards, phones, emails), no notes, addresses, photos or relations
-- [ ] reads `m.text` only under `#if RADAR_SNIPPETS`, truncated to 140 characters
+- [ ] runs only fixed `SELECT`s, with no input interpolated: two on Messages (a third
+      in the snippets build), three on Contacts (cards, phones, emails), no notes,
+      addresses, photos or relations
+- [ ] reads `m.text` only under `#if RADAR_SNIPPETS`, truncated to 140 characters, and
+      only for the newest message per chat, direction and sender
 - [ ] writes only `messages.jsonl` and `contacts.jsonl` (via `.tmp` and rename, mode 0600), creating them
       relative to directories it has checked one by one: `~/.relationship-radar`, then
       `inbox`, each opened with `O_NOFOLLOW`, owned by you, not group or other writable
@@ -121,7 +141,9 @@ Identity resolution has four steps, in order:
 | with `--with-snippets`: newest 140-char preview per contact | anything from chats you didn't take part in |
 
 - The helper's exports hold the same metadata. They live in `inbox/` until the next sync
-  reads them, then they are deleted.
+  reads them, then they are deleted. A snippets build (`helper build --snippets`) adds
+  the preview of the newest message per chat, direction and sender, never the history.
+  Anything running as you can start the helper and read its export.
 - **What leaves the machine:** the shared digest (`weekly-digest.md` in the Google Drive
   folder). It has names, circles, days since contact, birthdays, reasons and openers, and
   it is read by Google and by the cloud Claude task. Snippets never go in it. They appear
@@ -163,7 +185,12 @@ Because interactions are keyed by identity, a merge or split never rewrites hist
 
 - **Gate:** the sensitivity gate's `radar` rule (enforced) denies any Claude call that
   carries Radar data: a source declaring `radar`, a path under `~/.relationship-radar`, or
-  `radar.duckdb`. Robots that use Radar run on local models.
+  `radar.duckdb`. A call with tools also gets `--disallowedTools
+  Read(~/.relationship-radar/**)`. Robots that use Radar run on local models.
+- **Claude Code sessions** don't pass the gate. PJ's `~/.claude/settings.json` denies
+  `Read` and `Edit` under `~/.relationship-radar`, and the `private-paths-guard` hook
+  (claude-toolkit) blocks shell commands that name the folder or print its data
+  (`lab radar person`). Both are speed bumps for an honest session, not a sandbox.
 - **Data:** the data stays in `~/.relationship-radar/radar.duckdb`, not `var/lab.duckdb`.
   Dagster doesn't touch it, and it never feeds the marts.
 - **Robots:** Rush delivering the weekly picks is the next step. A robot that drafts
