@@ -189,7 +189,9 @@ def run(paths: Paths, settings: Settings) -> list[Check]:
                 )
             )
 
-    if settings.output_dir is None:
+    if not settings.share_digest:
+        out.append(Check("output", "ok", "shared digest off (share_digest); local copies only"))
+    elif settings.output_dir is None:
         out.append(
             Check(
                 "output",

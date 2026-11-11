@@ -83,7 +83,11 @@ class Paths:
 @dataclass
 class Settings:
     default_region: str = "US"
-    output_dir: Path | None = None
+    # Off unless config.yaml says `share_digest: true`: the shared digest carries names,
+    # circles and birthdays off the machine (Google Drive, the cloud Claude task).
+    share_digest: bool = False
+    output_dir: Path | None = None  # where `weekly` writes the shared copy; None when off
+    shared_dir: Path | None = None  # where a shared copy would be, on or off (for purge)
     former_employers: list[str] = field(default_factory=list)
     fuzzy_auto_merge: float = 0.95
     fuzzy_review_floor: float = 0.85
@@ -101,7 +105,9 @@ class Settings:
         s.fuzzy_review_floor = float(raw.get("fuzzy_review_floor", s.fuzzy_review_floor))
         s.two_way_window_days = int(raw.get("two_way_window_days", s.two_way_window_days))
         out = raw.get("output_dir")
-        s.output_dir = Path(out).expanduser() if out else default_output_dir()
+        s.share_digest = raw.get("share_digest") is True
+        s.shared_dir = Path(out).expanduser() if out else default_output_dir()
+        s.output_dir = s.shared_dir if s.share_digest else None
         return s
 
 

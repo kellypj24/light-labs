@@ -93,7 +93,7 @@ class RadarCase(unittest.TestCase):
             '  "+1 (415) 555-0104": friends\n'
         )
         p.config.write_text(
-            "former_employers: [SmarterDx, THP, Arine]\noutput_dir: "
+            "former_employers: [SmarterDx, THP, Arine]\nshare_digest: true\noutput_dir: "
             + str(self.tmp / "drive")
             + "\n"
         )

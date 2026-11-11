@@ -87,10 +87,10 @@ _Updated 2026-11-10._
   `launchctl setenv` (its server log shows 0, the default), so it needs `ollama serve`
   under a LaunchAgent of ours instead of the app. Rush's explicit unloads cover the
   hourly tick without it.
-- Radar's shared digest goes to Google Drive for Desktop, which isn't installed; until it
-  is, `lab radar weekly` writes the local copy only. The digest carries names, circles and
-  birthdays to Google and a cloud Claude task, which the `radar` gate rule forbids
-  elsewhere: decide before installing Drive or sending picks over Telegram.
+- Radar's shared digest is off by default (`share_digest: true` in its config turns it
+  on; installing Drive for Desktop alone shares nothing). It would carry names, circles
+  and birthdays to Google and a cloud Claude task, which the `radar` gate rule forbids
+  elsewhere: decide before turning it on or sending picks over Telegram.
 - Radar helper: the binary, approved copy and build record are writable by code running
   as PJ. Install the binary root-owned (needs sudo) so only the FDA grant and a root
   path stand between a swap and Messages? Not built.
