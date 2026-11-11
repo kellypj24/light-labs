@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import json
 import os
 import plistlib
 import shutil
@@ -56,8 +57,38 @@ def approved_path(paths: Paths) -> Path:
     return paths.bin / "approved.swift"
 
 
-def built_from_path(paths: Paths) -> Path:
+def build_record_path(paths: Paths) -> Path:
+    return paths.bin / f"{BINARY}.build.json"
+
+
+def _legacy_built_from_path(paths: Paths) -> Path:
+    """Builds from before the record kept only the source hash."""
     return paths.bin / f"{BINARY}.source-sha256"
+
+
+def cdhash(binary: Path) -> str | None:
+    """The binary's code directory hash: what macOS ties the Full Disk Access grant to."""
+    r = subprocess.run(
+        [CODESIGN, "-dvvv", str(binary)],
+        capture_output=True, text=True, check=False, env=tool_env(),
+    )  # fmt: skip
+    for line in r.stderr.splitlines():
+        if line.startswith("CDHash="):
+            return line.split("=", 1)[1].strip()
+    return None
+
+
+def build_record(paths: Paths) -> dict[str, object]:
+    """What `build` last produced: source hash, the binary's cdhash, snippets or not.
+
+    It sits beside the binary, writable by anything running as PJ, so it catches a
+    binary that drifted or was swapped carelessly, not one swapped by code that also
+    rewrites this file."""
+    p = build_record_path(paths)
+    if p.exists():
+        return json.loads(p.read_text())
+    old = _legacy_built_from_path(paths)
+    return {"source_sha256": old.read_text().strip()} if old.exists() else {}
 
 
 def sha256(path: Path) -> str | None:
@@ -76,7 +107,9 @@ def approve(
 ) -> bool:
     """Show the repo source's diff against the approved copy; on `approve`, replace it.
 
-    Needs a terminal: a robot or a script can't approve, only PJ at the keyboard."""
+    Needs a terminal, which stops a robot or a scheduled job from approving by accident.
+    It is not a boundary: code running as PJ can open a pty or write the approved copy
+    itself. The boundary is the Full Disk Access grant, tied to the binary's cdhash."""
     source = source or SOURCE
     if not interactive():
         raise NotApproved("approving the helper needs an interactive terminal")
@@ -128,17 +161,20 @@ def build(paths: Paths, snippets: bool = False) -> Path:
         check=True,
         env=tool_env(),
     )
-    built_from_path(paths).write_text(f"{sha256(approved)}\n")
+    record = {"source_sha256": sha256(approved), "cdhash": cdhash(out), "snippets": snippets}
+    build_record_path(paths).write_text(json.dumps(record, indent=2) + "\n")
+    build_record_path(paths).chmod(0o600)
+    _legacy_built_from_path(paths).unlink(missing_ok=True)
     return out
 
 
 def source_state(paths: Paths, source: Path | None = None) -> dict[str, str | None]:
     """Hashes of the repo source, the approved copy and the copy the binary was built from."""
-    built = built_from_path(paths)
+    built = build_record(paths).get("source_sha256")
     return {
         "repo": sha256(source or SOURCE),
         "approved": sha256(approved_path(paths)),
-        "built": built.read_text().strip() if built.exists() else None,
+        "built": str(built) if built else None,
     }
 
 

@@ -928,7 +928,7 @@ def main(argv=None):
     sub.add_parser("roster", help="list the DLN registry")
     sub.add_parser("mcp", help="serve the lab over MCP on stdio (read-only; for Hermes)")
     deploy_p = sub.add_parser("deploy", help="run a service from a fixed commit of origin")
-    deploy_p.add_argument("target", choices=["hermes"])
+    deploy_p.add_argument("target", choices=["hermes", "radar"])
     deploy_p.add_argument("--ref", default="main", help="branch on origin (default: main)")
     sub.add_parser("skills", help="list skills, their audience and which robots carry them")
     evals_p = sub.add_parser("evals", help="eval results in DuckDB (var/lab.duckdb)")

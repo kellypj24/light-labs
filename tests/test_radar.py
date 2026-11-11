@@ -268,16 +268,21 @@ class TestPipeline(RadarCase):
         self.assertFalse(circles.apply_if_empty(self.paths.circles_proposed, self.paths.circles))
 
     def test_schedule_plists(self):
-        from light_labs import config
+        from light_labs import config, deploy
         from light_labs.radar import schedule
 
-        sync = schedule.plist("sync", self.paths, "/opt/homebrew/bin/uv")
-        self.assertEqual(
-            sync["ProgramArguments"],
-            ["/opt/homebrew/bin/uv", "run", "--project", str(config.REPO), "lab", "radar", "sync"],
-        )
+        lab = schedule.release_lab()
+        self.assertEqual(lab, deploy.TARGETS["radar"] / "current/.venv/bin/lab")
+        sync = schedule.plist("sync", self.paths, lab)
+        self.assertEqual(sync["ProgramArguments"], [str(lab), "radar", "sync"])
+        self.assertNotIn(str(config.REPO), " ".join(sync["ProgramArguments"]))  # no checkout
+        with (
+            mock.patch.dict(deploy.TARGETS, {"radar": self.tmp / "none"}),
+            self.assertRaises(FileNotFoundError),
+        ):
+            schedule.install(self.paths)
         self.assertEqual(sync["StartCalendarInterval"], {"Hour": 6, "Minute": 30})
-        weekly = schedule.plist("weekly", self.paths, "/opt/homebrew/bin/uv")
+        weekly = schedule.plist("weekly", self.paths, lab)
         self.assertEqual(weekly["StartCalendarInterval"], {"Weekday": 5, "Hour": 15, "Minute": 0})
         self.assertTrue(weekly["StandardOutPath"].startswith(str(self.paths.logs)))
 

@@ -1,16 +1,18 @@
 """LaunchAgents for the daily sync and the weekly digest.
 
-They run `lab radar` from this checkout through uv, like Rush's tick, and need no special
-permission: only the helper (its own LaunchAgent, 06:20) reads Messages and Contacts.
+They run `lab radar` from the deployed release (`lab deploy radar`, a fixed commit of
+origin/main with its own locked environment), never from a checkout: a branch someone
+left checked out, or a dependency resolved at run time, would otherwise run at 06:30 with
+the database in reach. They need no special permission: only the helper (its own
+LaunchAgent, 06:20) reads Messages and Contacts.
 """
 
 from __future__ import annotations
 
 import plistlib
-import shutil
 from pathlib import Path
 
-from light_labs import config
+from light_labs import deploy
 from light_labs.radar import helper
 from light_labs.radar.config import Paths
 
@@ -30,31 +32,36 @@ def plist_path(job: str) -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{label(job)}.plist"
 
 
-def plist(job: str, paths: Paths, uv: str) -> dict[str, object]:
+def release_lab() -> Path:
+    """`lab` in the deployed release's environment."""
+    return deploy.TARGETS["radar"] / "current" / ".venv" / "bin" / "lab"
+
+
+def plist(job: str, paths: Paths, lab: Path) -> dict[str, object]:
     when, args = JOBS[job]
     log = str(paths.logs / f"{job}.log")
     return {
         "Label": label(job),
-        "ProgramArguments": [uv, "run", "--project", str(config.REPO), "lab", "radar", *args],
+        "ProgramArguments": [str(lab), "radar", *args],
         "StartCalendarInterval": when,
         "RunAtLoad": False,
         "StandardOutPath": log,
         "StandardErrorPath": log,
-        "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
+        "EnvironmentVariables": {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"},
         "ProcessType": "Background",
     }
 
 
 def install(paths: Paths) -> list[Path]:
-    uv = shutil.which("uv")
-    if not uv:
-        raise FileNotFoundError("uv not on PATH")
+    lab = release_lab()
+    if not lab.exists():
+        raise FileNotFoundError(f"{lab} is missing: run `lab deploy radar` first")
     paths.ensure()
     out = []
     for job in JOBS:
         p = plist_path(job)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(plistlib.dumps(plist(job, paths, uv)))
+        p.write_bytes(plistlib.dumps(plist(job, paths, lab)))
         helper._launchctl("bootout", f"{helper._domain()}/{label(job)}", check=False)
         helper._launchctl("bootstrap", helper._domain(), str(p))
         out.append(p)
@@ -70,3 +77,12 @@ def uninstall() -> None:
 def loaded(job: str) -> bool:
     r = helper._launchctl("print", f"{helper._domain()}/{label(job)}", check=False)
     return r.returncode == 0
+
+
+def runs_release(job: str) -> bool:
+    """Whether the installed LaunchAgent starts the release's `lab`."""
+    p = plist_path(job)
+    if not p.exists():
+        return False
+    args = plistlib.loads(p.read_bytes()).get("ProgramArguments") or [""]
+    return args[0] == str(release_lab())

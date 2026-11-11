@@ -10,7 +10,8 @@
 //   messages.jsonl: handle, time, direction, chat members, service.
 //   contacts.jsonl: names, organization, job title, birthday, phones, emails, and
 //   which card is PJ's own ("My Card"). No notes, addresses, photos or relations.
-//   Message text is compiled in only with -D RADAR_SNIPPETS, truncated to 140 characters.
+//   Message text is compiled in only with -D RADAR_SNIPPETS: the newest message per
+//   chat, direction and sender, truncated to 140 characters (one more fixed query).
 // - Both files go to ~/.relationship-radar/inbox, mode 0600, via a temp file and rename.
 //   It refuses to write unless ~/.relationship-radar and its inbox are both real
 //   directories (not symlinks), owned by the user, and not writable by group or others;
@@ -279,6 +280,22 @@ for (c, handles) in members.sorted(by: { $0.key < $1.key }) {
     append(ChatRecord(chat: c, members: handles), to: &messages)
 }
 
+// Snippets build: text for the newest message per chat, direction and sender only. That
+// covers the newest interaction per contact, which is all sync keeps; every other
+// message leaves chat.db without its text.
+#if RADAR_SNIPPETS
+    var snippetRows = Set<Int64>()
+    mustQuery(
+        """
+        SELECT m.ROWID, max(m.date)
+        FROM message m
+        JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+        WHERE m.associated_message_type = 0 AND m.item_type = 0
+        GROUP BY cmj.chat_id, m.is_from_me, m.handle_id
+        """
+    ) { s in snippetRows.insert(sqlite3_column_int64(s, 0)) }
+#endif
+
 // Regular messages only: no tapbacks or edits (associated_message_type), no
 // group-membership events (item_type).
 mustQuery(
@@ -295,7 +312,9 @@ mustQuery(
     guard let guid = text(s, 1), let c = text(s, 5) else { return }
     var snippet: String? = nil
     #if RADAR_SNIPPETS
-        snippet = text(s, 7).map { String($0.prefix(maxSnippet)) }
+        if snippetRows.contains(sqlite3_column_int64(s, 0)) {
+            snippet = text(s, 7).map { String($0.prefix(maxSnippet)) }
+        }
     #endif
     append(
         MessageRecord(

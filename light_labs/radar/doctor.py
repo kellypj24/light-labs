@@ -56,6 +56,24 @@ def helper_checks(paths: Paths) -> list[Check]:
     if st["built"] != st["approved"]:
         out.append(Check("helper", "warn", "built from an older approval",
                          "lab radar helper build, then re-grant Full Disk Access"))  # fmt: skip
+    record = helper.build_record(paths)
+    actual = helper.cdhash(binary)
+    if not record.get("cdhash"):
+        out.append(Check("helper build", "warn", "no build record for this binary",
+                         "lab radar helper build, then re-grant Full Disk Access"))  # fmt: skip
+    elif actual != record["cdhash"]:
+        out.append(Check(
+            "helper build", "fail",
+            f"the binary (cdhash {actual}) is not the one `lab radar helper build` "
+            f"produced ({record['cdhash']})",
+            "don't grant it Full Disk Access; lab radar helper build, then re-grant",
+        ))  # fmt: skip
+    else:
+        out.append(Check("helper build", "ok", f"cdhash {actual}"))
+    if record.get("snippets"):
+        out.append(Check("helper snippets", "warn",
+                         "built with --snippets: the export carries message previews",
+                         "lab radar helper build (no --snippets), then re-grant"))  # fmt: skip
     sig = subprocess.run(
         [helper.CODESIGN, "-dv", str(binary)], check=False, capture_output=True, text=True
     )
@@ -70,6 +88,10 @@ def helper_checks(paths: Paths) -> list[Check]:
         if not schedule.loaded(job):
             out.append(Check(f"schedule {job}", "warn", "LaunchAgent not installed",
                              "lab radar schedule install"))  # fmt: skip
+        elif not schedule.runs_release(job):
+            out.append(Check(f"schedule {job}", "warn",
+                             "runs from a checkout, not the deployed release",
+                             "lab deploy radar && lab radar schedule install"))  # fmt: skip
     if helper.is_loaded():
         out.append(Check("helper agent", "ok", f"{helper.LABEL} loaded"))
     else:

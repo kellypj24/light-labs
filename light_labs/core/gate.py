@@ -55,6 +55,8 @@ CLIENT_TEXT = re.compile(
     r"|kellypj24/(?:" + "|".join(CLIENT_REPOS) + r")\b"
 )
 RADAR_TEXT = re.compile(r"\.relationship-radar\b|\bradar\.duckdb\b")
+# Every tool call carries this: an absolute path reaches outside the repo it runs in.
+RADAR_READ = "Read(~/.relationship-radar/**)"
 PERSONAL_ADDRESS = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
 
 
@@ -120,13 +122,15 @@ def evaluate(source, text, tools="", cwd=None):
     personal = any(PERSONAL.fullmatch(d.lower()) for d in PERSONAL_ADDRESS.findall(text))
     if "mail" in tags or personal:
         v.hits["personal-mail"] = "sanitize"
+    if tools:
+        v.disallowed = (RADAR_READ,)
     if tools and repo not in TOOL_REPOS:
         v.hits["tool-repo"] = "deny"
     elif tools and UNRELEASED.get(repo):
         v.hits["unreleased"] = "sanitize"
         if "unreleased" in ENFORCED:
             # Claude Code applies Read rules to Grep and Glob too.
-            v.disallowed = tuple(f"Read(./{p})" for p in UNRELEASED[repo])
+            v.disallowed += tuple(f"Read(./{p})" for p in UNRELEASED[repo])
     return v
 
 

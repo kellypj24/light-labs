@@ -109,6 +109,22 @@ class TestHelper(RadarCase):
         self.assertEqual(texts[0], "hi there")
         self.assertEqual(len(texts[1]), 140)
 
+    def test_snippet_build_keeps_text_for_the_newest_message_only(self):
+        con = sqlite3.connect(self.db)
+        con.executescript(
+            "INSERT INTO message VALUES"
+            " (7, 'm7', 'newer', 1, 'iMessage', 783000100000000000, 0, 0, 0);"
+            "INSERT INTO chat_message_join VALUES (1, 7, 0);"
+        )
+        con.close()
+        self.make_home()
+        r = run(build("snippets", ["-D", "RADAR_SNIPPETS"]), self.db, self.home)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        texts = {m["rowid"]: m.get("text") for m in self.records() if m["type"] == "message"}
+        self.assertIsNone(texts[1])  # same chat and sender as 7, older
+        self.assertEqual(texts[7], "newer")
+        self.assertEqual(len(texts[2]), 140)  # the newest sent message in that chat
+
     def test_refuses_symlinks_anywhere_on_the_path(self):
         real = self.tmp / "real"
         real.mkdir(mode=0o700)
@@ -229,7 +245,10 @@ class TestApproval(RadarCase):
     def test_build_uses_the_approved_copy_not_the_repo(self):
         self.approve()
         self.src.write_text(self.src.read_text() + "// unreviewed\n")
-        with mock.patch.object(helper.subprocess, "run") as run_:
+        with (
+            mock.patch.object(helper.subprocess, "run") as run_,
+            mock.patch.object(helper, "cdhash", return_value="abc123"),
+        ):
             helper.build(self.paths)
         swiftc, codesign = (c.args[0] for c in run_.call_args_list)
         self.assertEqual(swiftc[:2], ["/usr/bin/xcrun", "swiftc"])
@@ -242,6 +261,25 @@ class TestApproval(RadarCase):
         state = helper.source_state(self.paths)
         self.assertEqual(state["built"], state["approved"])
         self.assertNotEqual(state["repo"], state["approved"])
+        self.assertEqual(helper.build_record(self.paths)["cdhash"], "abc123")
+
+    def test_doctor_fails_a_binary_the_build_did_not_produce(self):
+        self.approve()
+        binary = helper.binary_path(self.paths)
+        with (
+            mock.patch.object(helper.subprocess, "run"),
+            mock.patch.object(helper, "cdhash", return_value="abc123"),
+        ):
+            helper.build(self.paths, snippets=True)
+        binary.write_text("")
+        with mock.patch.object(helper, "cdhash", return_value="abc123"):
+            checks = self.checks()
+        self.assertEqual(checks["helper build"].level, "ok")
+        self.assertEqual(checks["helper snippets"].level, "warn")
+        with mock.patch.object(helper, "cdhash", return_value="swapped"):
+            self.assertEqual(self.checks()["helper build"].level, "fail")
+        helper.build_record_path(self.paths).unlink()
+        self.assertEqual(self.checks()["helper build"].level, "warn")  # built before records
 
 
 if __name__ == "__main__":
