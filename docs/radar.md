@@ -118,7 +118,7 @@ that live only on another device.
 
 | File | What |
 |---|---|
-| `config.yaml` | region, output folder, former employers, match thresholds |
+| `config.yaml` | region, `share_digest` and its output folder, former employers, match thresholds |
 | `circles.yaml` | cadence per circle; people by name, phone, email or `p_` id |
 | `overrides.yaml` | `me`, `merge`, `split`, `ignore` (incl. `*@domain`), `names`, `tags` |
 | `review_matches.csv` | fuzzy pairs; set `decision` to `merge` or `different` |
@@ -144,8 +144,9 @@ Identity resolution has four steps, in order:
   reads them, then they are deleted. A snippets build (`helper build --snippets`) adds
   the preview of the newest message per chat, direction and sender, never the history.
   Anything running as you can start the helper and read its export.
-- **What leaves the machine:** the shared digest (`weekly-digest.md` in the Google Drive
-  folder). It has names, circles, days since contact, birthdays, reasons and openers, and
+- **What leaves the machine:** nothing by default. With `share_digest: true` in
+  `config.yaml`, `weekly` also writes the shared digest (`weekly-digest.md` in the Google
+  Drive folder, or `output_dir`); installing Drive for Desktop alone shares nothing. It has names, circles, days since contact, birthdays, reasons and openers, and
   it is read by Google and by the cloud Claude task. Snippets never go in it. They appear
   only in the local dated copy (`digests/YYYY-MM-DD.md`) with `weekly --with-snippets`.
 - **Names are data:** names, organizations and titles come from contact cards and, later,

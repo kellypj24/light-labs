@@ -1,5 +1,7 @@
 # ~/.relationship-radar/config.yaml
 default_region: US          # for phone numbers without a country code
+share_digest: false         # true: `weekly` also writes weekly-digest.md to output_dir.
+                            #   It carries names, circles and birthdays off this machine.
 # output_dir: ~/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/Relationship Radar
 #   default: Google Drive for Desktop's "My Drive/Relationship Radar" if installed
 former_employers: []        # company names that mark a former colleague, e.g. [Acme]

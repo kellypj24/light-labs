@@ -169,7 +169,8 @@ def weekly(args) -> None:
         out.write_text(shared)
         print(f"wrote {out}")
     else:
-        log.warning("no output_dir (Google Drive for Desktop not found): local copy only")
+        why = "Google Drive for Desktop not found" if settings.share_digest else "share_digest off"
+        log.info("local copy only (%s)", why)
 
 
 def person(args) -> int:
@@ -238,8 +239,8 @@ def purge(args) -> int:
         paths.review_matches,
         paths.circles_proposed,
     ]
-    if settings.output_dir:
-        targets.append(settings.output_dir / "weekly-digest.md")
+    if settings.shared_dir:  # also when sharing is off now: an earlier run may have shared
+        targets.append(settings.shared_dir / "weekly-digest.md")
     if args.all_:
         targets += [paths.config, paths.circles, paths.overrides]
     existing = [t for t in targets if t.exists()]

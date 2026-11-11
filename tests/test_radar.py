@@ -285,6 +285,17 @@ class TestPipeline(RadarCase):
         detail = checks["source imessage"].detail  # local time, so no exact match
         self.assertRegex(detail, r"^last run ok at 2026-01-0\d \d\d:31$")
 
+    def test_shared_digest_is_off_unless_asked(self):
+        from light_labs.radar.config import Settings
+
+        drive = self.tmp / "drive"
+        self.assertEqual(self.settings.output_dir, drive)  # the fixture opts in
+        for line in ("", "share_digest: false\n", "share_digest: yes please\n"):
+            self.paths.config.write_text(f"{line}output_dir: {drive}\n")
+            off = Settings.load(self.paths)
+            self.assertIsNone(off.output_dir, line)
+            self.assertEqual(off.shared_dir, drive)  # purge still finds an earlier copy
+
     def test_schedule_plists(self):
         from light_labs import config, deploy
         from light_labs.radar import schedule
