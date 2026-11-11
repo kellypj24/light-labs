@@ -266,20 +266,21 @@ class TestApproval(RadarCase):
     def test_doctor_fails_a_binary_the_build_did_not_produce(self):
         self.approve()
         binary = helper.binary_path(self.paths)
+        # No codesign or launchctl off macOS: every subprocess is a stand-in.
+        tool = mock.Mock(returncode=1, stderr="flags=0x10002(adhoc,runtime)")
         with (
-            mock.patch.object(helper.subprocess, "run"),
-            mock.patch.object(helper, "cdhash", return_value="abc123"),
+            mock.patch.object(helper.subprocess, "run", return_value=tool),
+            mock.patch.object(helper, "cdhash", return_value="abc123") as cdhash,
         ):
             helper.build(self.paths, snippets=True)
-        binary.write_text("")
-        with mock.patch.object(helper, "cdhash", return_value="abc123"):
+            binary.write_text("")
             checks = self.checks()
-        self.assertEqual(checks["helper build"].level, "ok")
-        self.assertEqual(checks["helper snippets"].level, "warn")
-        with mock.patch.object(helper, "cdhash", return_value="swapped"):
+            self.assertEqual(checks["helper build"].level, "ok")
+            self.assertEqual(checks["helper snippets"].level, "warn")
+            cdhash.return_value = "swapped"
             self.assertEqual(self.checks()["helper build"].level, "fail")
-        helper.build_record_path(self.paths).unlink()
-        self.assertEqual(self.checks()["helper build"].level, "warn")  # built before records
+            helper.build_record_path(self.paths).unlink()
+            self.assertEqual(self.checks()["helper build"].level, "warn")  # no record
 
 
 if __name__ == "__main__":
