@@ -3,7 +3,7 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-11-10._
+_Updated 2026-11-12._
 
 ## Now
 
@@ -51,10 +51,14 @@ _Updated 2026-11-10._
   source PJ approved) exports Messages and the Mac's Contacts at 06:20; `sync` 06:30
   daily, `weekly` Friday 15:00 (LaunchAgents) → `~/.relationship-radar`. First sync:
   39.5k interactions, 160 people. Gate rule `radar` denies its data to Claude; Claude
-  Code sessions are held off by a deny rule and the `private-paths-guard` hook. Hardening
-  merged, PJ's steps pending: `lab radar helper approve` (snippets query diff), `build`,
-  re-grant Full Disk Access, `lab deploy radar`, `lab radar schedule install` (until
-  then the LaunchAgents still run the checkout and `doctor` warns).
+  Code sessions are held off by a deny rule and the `private-paths-guard` hook
+  (claude-toolkit, `~/.claude/private-paths`). Security review 2026-11-10, hardening
+  live (#120–#122): the scheduled jobs run the `lab deploy radar` release, the helper
+  has a build record (`doctor` fails a mismatched cdhash), a snippets build exports only
+  the newest message per chat and sender, the shared digest is off unless
+  `share_digest: true`. `lab radar doctor` passes. Run Radar commands with `uv run lab
+  radar ...` from the checkout: the bare `lab` tool install is unlocked (DuckDB 1.5.6,
+  can't read the 2.0 database).
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 
@@ -71,7 +75,13 @@ _Updated 2026-11-10._
 3. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
 4. Radar: Rush delivers the weekly picks (Telegram), the first robot tie-in. Slice 2
    LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
-   asked before requesting scopes.
+   asked before requesting scopes. Left from the security review, all low:
+   `digest.safe()` strips Markdown but an 80-character name still fits an instruction,
+   so tighten it before slice 2 or 3 brings strangers' display names; logs are 0644 and
+   the shared digest is written without a chmod (the 0700 folder covers the logs);
+   confirm whether Time Machine backs up Radar's folder. `doctor` warnings open: no
+   SMS/RCS rows (Text Message Forwarding), 13 matches to review in `review_matches.csv`.
+   Make bare `lab radar` work (tool env on the lock) or drop it from the docs.
 5. Training planner (`docs/plans/training.md`): steps 1–5 live (landing, marts,
    context, `lab training plan`). Step 6 in review: Rush's hourly tick sends next week's
    plan Sunday evening, asks for stale Strong or Health files, refreshes the plan when a
