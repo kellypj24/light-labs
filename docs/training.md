@@ -119,6 +119,6 @@ Rush's hourly tick runs `lab training tick`'s logic:
 | Sunday 18:00–23:00 | Asks for any stale input (Strong over 6 days, Health over 36 h); sends next week's plan once a Strong export lands that day, or at 20:00 regardless |
 | Daily from 21:00 | Asks for Health if the nightly Shortcut hasn't landed in 36 h |
 | A file he asked for arrives | Refreshes the plan once Dagster loads it: next week whole, or this week's remaining days |
-| `/replan` in chat | Same refresh, now |
+| `/replan` in chat, or `lab training replan` | Same refresh, now |
 
 `lab training send [--week]` texts an existing plan. State: `var/training/deliver.json`.

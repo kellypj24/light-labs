@@ -222,7 +222,7 @@ def tick(send, now=None, planner=None, var=None):
 
 
 def replan(send, now=None, planner=None, var=None):
-    """`/replan` on Telegram: refresh whatever week is current, now."""
+    """`/replan` on Telegram, `lab training replan`: refresh whatever week is current, now."""
     if planner is None:
         from light_labs.training import plan
 
