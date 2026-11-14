@@ -808,7 +808,10 @@ def roll_chores(args):
         text = roll.chores_all(args.apply)
         print(text)
         if args.text and roll.TELEGRAM_CHAT:
-            roll.bot().text(None, text)
+            bot = roll.bot()
+            bot.text(None, text)
+            if args.apply and bot.holds:
+                bot.holds.present_new()  # the always-on poller answers their buttons
         return
     repo = gitops.Repo(args.repo)
     brain = None if args.no_roll else chores.roll_brain(roll.CHORES_BRAIN)

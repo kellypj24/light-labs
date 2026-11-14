@@ -35,6 +35,12 @@ CHORES_LADDER = tuple(
     for m in os.environ.get("ROLL_CHORES_LADDER", "haiku,sonnet,opus").split(",")
     if m.strip()
 )
+# Held PRs (holds.py): the models a fix climbs, cheapest first, and the one offered only
+# on PJ's tap once those are spent.
+FIX_LADDER = tuple(
+    m.strip() for m in os.environ.get("ROLL_FIX_LADDER", "sonnet,opus").split(",") if m.strip()
+)
+FIX_TOP = os.environ.get("ROLL_FIX_TOP", "claude-fable-5-2")
 
 
 # Mail keep (keep.py): the brain that earned the mail-keep weapon, and the cloud teacher for
@@ -55,10 +61,16 @@ def bot():
     from light_labs.core.google import Gmail
 
     HOME.mkdir(parents=True, exist_ok=True)
-    return RollBot(
+    roll = RollBot(
         keychain_token(TELEGRAM_KEYCHAIN), TELEGRAM_CHAT, HOME, Gmail("roll", INBOX_ACCOUNT),
         chores=chores_all if CHORES_REPOS else None,
     )  # fmt: skip
+    if CHORES_REPOS:
+        from light_labs.agents.roll.holds import Holds
+        from light_labs.core.store import Store
+
+        roll.holds = Holds(Store(HOME), roll.buttons, CHORES_REPOS, ladder=FIX_LADDER, top=FIX_TOP)
+    return roll
 
 
 def chores_all(apply):

@@ -23,7 +23,11 @@ _Updated 2026-11-14._
   cleanup, and the `mail-keep` weapon on `qwen2.5:14b`. Her chores answers now come from
   `qwen2.5:14b` too (`ROLL_CHORES_BRAIN` in `.env`). Claude's review climbs a ladder,
   haiku first (`docs/roll-chores.md`), every rung recorded. `/chores` in Roll's chat and
-  `lab roll chores --all` cover `ROLL_CHORES_REPOS` (not set in `.env` yet).
+  `lab roll chores --all` cover `ROLL_CHORES_REPOS`. Holds are texted with Fix it / Merge /
+  Leave; a fix runs on sonnet then opus, PJ's replies are turns of the same review, and a
+  fixed PR merges only on his tap. Not yet run on a live PR. Setup still to do by PJ:
+  `ROLL_CHORES_REPOS=~/data-engineering:admin,~/light-labs` in `.env`, `just
+  roll-chores-install`, restart `rush-remote`.
 - data-engineering Dependabot backlog (28 open) is Roll's chores training set: PJ runs
   `lab roll chores -C ~/data-engineering --apply --admin` daily until clear (one merge
   per directory per run, 10 a day); each run grows the record, `lab roll chores-fixtures`
@@ -109,10 +113,6 @@ _Updated 2026-11-14._
   path stand between a swap and Messages? Not built.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
-- Roll chores (#128): standing `:admin` for data-engineering in `ROLL_CHORES_REPOS`
-  (nothing merges there without it)? Install the 17:30 schedule (`just
-  roll-chores-install`)? A major bump now merges on haiku and sonnet agreeing, without
-  opus: keep, or make opus the floor again?
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
   flat, ~4 MB) and prune `var/evals/cache/` (17 MB, rebuildable) past 30 days? Proposed,
   not agreed.

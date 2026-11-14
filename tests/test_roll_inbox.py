@@ -76,6 +76,36 @@ class RollInboxTest(unittest.TestCase):
         sent = [p["text"] for m, p in self.wire.calls if m == "sendMessage"]
         self.assertEqual(sent.count("Roll: chores done."), 2)
 
+    def test_hold_buttons_and_replies_reach_the_holds(self):
+        calls = []
+
+        class Holds:
+            store = type("S", (), {"pending": staticmethod(lambda: [{"id": "ab12"}])})
+
+            def leave(self, item_id):
+                return "Left for you."
+
+            def by_message(self, message_id):
+                return {"id": "ab12"} if message_id == 9 else None
+
+            def turn(self, item_id, note=None, top=False):
+                calls.append((item_id, note, top))
+
+        self.bot.holds = Holds()
+        self.press("hold:leave:ab12")
+        self.press("hold:fix:ab12")
+        self.bot.job.join()
+        self.press("hold:fix:gone")
+        self.wire.updates = [{"update_id": 2, "message": {
+            "chat": {"id": PJ}, "text": "pin it below 2", "reply_to_message": {"message_id": 9}}}]  # fmt: skip
+        self.bot.poll_once(None, timeout=0)
+        self.bot.job.join()
+        self.assertEqual(calls, [("ab12", None, False), ("ab12", "pin it below 2", False)])
+        sent = [p["text"] for m, p in self.wire.calls if m == "sendMessage"]
+        self.assertIn("Left for you.", sent)
+        self.assertIn("That one is settled already.", sent)
+        self.assertEqual(self.bot.buttons("x", [("Fix it", "hold:fix:ab12")]), len(self.wire.calls))
+
     def test_every_rule_spares_starred_mail(self):
         for rule_id in inbox.RULES:
             self.assertIn("-is:starred", inbox.search(rule_id))

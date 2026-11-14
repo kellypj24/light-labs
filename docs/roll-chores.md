@@ -52,6 +52,38 @@ A repo that requires a human review (data-engineering) refuses the merge unless 
 passes `--admin`, which uses PJ's repo-admin bypass: Claude's review stands in for PJ's.
 Opt in per run, per repo. Required checks have no bypass, so CI must still pass.
 
+## Holds: a dialogue until the merge
+
+After a run with `--apply` (from `/chores` or the schedule), Roll texts each new hold once,
+with buttons (`light_labs/agents/roll/holds.py`):
+
+| Button | What happens |
+|---|---|
+| Fix it | Claude works the hold in a throwaway worktree of the PR's branch, with Read, Grep, Glob, Edit and Write and no shell. `ROLL_FIX_LADDER` (default `sonnet,opus`), cheapest first. Code commits and pushes what it changed, then waits for CI. Green: Roll texts the fix with a Merge button. Red, or the model is stuck: the next rung tries, up to 3 automatic attempts per PR. |
+| Merge | Shown only while CI is green. Squash-merges the head PJ was shown (`--match-head-commit`), with `--admin` for repos marked `:admin`. |
+| Leave | No more texts for this hold; it stays in the queue. |
+
+Replying to a hold's message is the next turn: PJ's words go to Claude with everything said
+so far, and the answer (and any fix) comes back with the buttons. A fix PJ steered that
+ends red waits for him and does not climb.
+
+When the ladder is spent Roll offers `ROLL_FIX_TOP` (default `claude-fable-5-2`), called
+only on PJ's tap, and suggests opening Heeler to finish the PR with Auto. Caps: 3
+automatic attempts per PR, 5 Claude turns in 24 hours across PRs.
+
+Guards, all in code:
+
+- A fix that touches `.github/` is not pushed. The prompt also forbids weakening tests or
+  lint rules; CI and PJ's tap are what check that.
+- A PR with a fix merges only on PJ's tap. The queue item moves to the pushed head, and a
+  chores run holds any PR with a commit Dependabot didn't write without asking Claude.
+- Pushing to a Dependabot branch stops Dependabot rebasing it.
+
+Each turn is recorded in the item's `dialogue`: who (PJ or the model), FIXED / ANSWER /
+STUCK, the text, files changed, the commit, seconds and cost. A hold PJ merges untouched
+is a `merge` label for the `dependabot-merge` stage, as before; one that needed a fix
+keeps its `hold` label.
+
 ## The record
 
 Each decision is a queue item in `var/roll/queue/` (kind `dependabot`): Roll's answer and
