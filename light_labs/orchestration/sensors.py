@@ -1,5 +1,6 @@
-"""Sensors: rebuild the analytics when a fight ends, a queue changes or a Strong export
-or Health workouts drop lands, and Claude Code's usage once a day.
+"""Sensors: rebuild the analytics when a fight ends, a queue changes, a Strong export or
+Health workouts drop lands or PJ's training notes or plans change, and Claude Code's usage
+once a day.
 
 All are on by default and tick in the Dagster daemon (`just dagster-install`). They only
 launch the landing + dbt jobs, never a fight, and skip while a fight is on or any heavy job
@@ -22,6 +23,7 @@ from light_labs.orchestration.jobs import (
     health_job,
     queue_job,
     strong_job,
+    training_record_job,
 )
 
 # `just eval` loads its own results when a fight ends; let that finish first.
@@ -150,6 +152,46 @@ def health_dropped(context: SensorEvaluationContext):
     return RunRequest(run_key=f"health:{fingerprint}")
 
 
+def record_fingerprint(var_dir, now=None):
+    """Changes with PJ's notes and the plans' JSON; None while the newest change is
+    younger than SETTLE. A note is often followed by a replan within a minute, and the
+    planner reads var/lab.duckdb for it: a run that starts in between holds the write
+    lock the planner then waits on."""
+    home = Path(var_dir) / "training"
+    paths = sorted([*home.glob("notes/notes.jsonl"), *home.glob("plans/*-W*.json")])
+    if not paths:
+        return None
+    now = now or datetime.now(UTC)
+    h, newest = hashlib.sha256(), 0
+    for path in paths:
+        st = path.stat()
+        newest = max(newest, st.st_mtime)
+        h.update(f"{path.relative_to(home)}:{st.st_mtime_ns}:{st.st_size}\n".encode())
+    if now.timestamp() - newest < SETTLE.total_seconds():
+        return None
+    return h.hexdigest()[:16]
+
+
+@sensor(
+    job=training_record_job,
+    minimum_interval_seconds=300,
+    default_status=DefaultSensorStatus.RUNNING,
+    description="Reloads PJ's training notes and plans once they have been still for two minutes.",
+)
+def training_record_changed(context: SensorEvaluationContext):
+    if run_id := live_fight(config.VAR / "evals"):
+        return SkipReason(f"fight {run_id} is running")
+    if held := holder():
+        return SkipReason(f"heavy job {held['job']} is running")
+    fingerprint = record_fingerprint(config.VAR)
+    if fingerprint is None:
+        return SkipReason("no notes or plans, or one changed in the last two minutes")
+    if fingerprint == context.cursor:
+        return SkipReason("notes and plans unchanged")
+    context.update_cursor(fingerprint)
+    return RunRequest(run_key=f"training-record:{fingerprint}")
+
+
 def claude_due(cursor, now=None):
     """The UTC day to load Claude Code's usage for, or None when today's is done."""
     today = (now or datetime.now(UTC)).date().isoformat()
@@ -179,4 +221,11 @@ def claude_daily(context: SensorEvaluationContext):
     return RunRequest(run_key=f"claude:{day}")
 
 
-ALL_SENSORS = [fight_finished, queue_changed, claude_daily, strong_dropped, health_dropped]
+ALL_SENSORS = [
+    fight_finished,
+    queue_changed,
+    claude_daily,
+    strong_dropped,
+    health_dropped,
+    training_record_changed,
+]

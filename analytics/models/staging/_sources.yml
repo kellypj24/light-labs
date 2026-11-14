@@ -101,6 +101,28 @@ sources:
               - accepted_values:
                   arguments:
                     values: ["normal", "warmup", "drop", "failure"]
+      - name: training_notes
+        description: >
+          One row per thing one of PJ's training notes said (`/note` in Rush's chat),
+          reloaded in full by `lab training ingest-notes` from
+          var/training/notes/notes.jsonl. Voided notes are kept and flagged. `note_text`
+          and `what` are his words; the marts never select them.
+        columns:
+          - name: note_id
+            tests:
+              - not_null
+          - name: note_date
+            tests:
+              - not_null
+      - name: training_plan_days
+        description: >
+          One row per day of each weekly plan, reloaded in full by `lab training
+          ingest-plans` from var/training/plans/*.json.
+        columns:
+          - name: plan_date
+            tests:
+              - unique
+              - not_null
       - name: health_workouts
         description: >
           Apple Health workouts (Strava writes rides and runs to Health), upserted by

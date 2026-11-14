@@ -10,6 +10,8 @@ from light_labs.orchestration.assets import (
     health_workouts,
     queue_items,
     strong_sets,
+    training_notes,
+    training_plan_days,
 )
 
 evals_job = define_asset_job(
@@ -38,10 +40,23 @@ health_job = define_asset_job(
     selection=AssetSelection.assets(health_workouts).downstream(),
     description="Upsert the Health workouts drops, then build what reads them.",
 )
+training_record_job = define_asset_job(
+    "training_record_job",
+    selection=AssetSelection.assets(training_notes, training_plan_days).downstream(),
+    description="Reload PJ's notes and the weekly plans, then build what reads them.",
+)
 analytics_job = define_asset_job(
     "analytics_job",
     selection=AssetSelection.all(),
     description="Everything; what `just analytics` runs.",
 )
 
-ALL_JOBS = [evals_job, queue_job, claude_job, strong_job, health_job, analytics_job]
+ALL_JOBS = [
+    evals_job,
+    queue_job,
+    claude_job,
+    strong_job,
+    health_job,
+    training_record_job,
+    analytics_job,
+]

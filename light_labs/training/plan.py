@@ -14,8 +14,9 @@ lift loads from the table. A failed check gets one retry with the failures; then
 is written with them listed.
 
 PJ's notes (`training.notes`) come in before the model is asked: a noted event's time and
-a sick day leave the free windows, a sick day lowers the sessions owed, and chores, aches
-and travel reach the model as kind, date and duration.
+a sick or travel day leave the free windows, a sick day lowers the sessions owed and
+holds every load at last time's (this week and the next), and chores and aches reach the
+model as kind, date and duration.
 
 A midweek replan (`from_date`) plans only the days from that date, with as many training
 days as the week still owes after what Strong and Health logged before it; the days
@@ -75,13 +76,14 @@ def _round(x, step):
     return round(step * round(x / step), 1)
 
 
-def progression(lifts, start, is_deload):
+def progression(lifts, start, is_deload, hold=False):
     """One row per exercise trained in the last 12 weeks: its last top set and next
     target. `lifts` are mart_lift_progress rows (dicts), any number of weeks each.
 
     The rep target is the scheme PJ trains: the more reps of the last two weeks' top sets.
     The last top set reaching it adds one step of load; falling short repeats the load.
-    Bodyweight lifts add a rep instead. A deload takes 90% of the load."""
+    Bodyweight lifts add a rep instead. A deload takes 90% of the load. `hold` (PJ was
+    sick this week or last) repeats the last load and reps whatever the last set did."""
     by_exercise = {}
     for r in lifts:
         by_exercise.setdefault(r["exercise"], []).append(r)
@@ -96,15 +98,16 @@ def progression(lifts, start, is_deload):
             continue
         weight, reps = latest["top_set_weight"] or 0, int(latest["top_set_reps"] or 0)
         if latest["is_bodyweight_lift"]:
-            target_reps, load = reps + 1, None
-            rule = f"bodyweight: {reps} → {target_reps} reps"
+            target_reps, load = reps + (0 if hold else 1), None
+            rule = f"bodyweight: {reps} → {target_reps} reps" + (", held (sick)" if hold else "")
         else:
             target_reps = max(reps, int(prev["top_set_reps"] or 0) if prev else 0)
             step = DUMBBELL_STEP_LB if "(Dumbbell)" in name else STEP_LB
             hit = reps >= target_reps
-            load = weight + step if hit else weight
+            load = weight + step if hit and not hold else weight
             rule = (
                 f"{weight:g}×{reps}, scheme {target_reps}: {'hit' if hit else 'short'} → {load:g}"
+                + (", held (sick)" if hold else "")
             )
             if is_deload:
                 load = _round(load * DELOAD_LOAD, step)
@@ -199,7 +202,7 @@ def read_marts(db=None):
         weeks = rows(
             con,
             "SELECT iso_week, training_days, lifting_sessions, working_sets, tonnage_lb, "
-            "cardio_sessions, cardio_minutes, cardio_miles, training_minutes, "
+            "cardio_sessions, cardio_minutes, cardio_miles, training_minutes, chore_minutes, "
             "acute_chronic_ratio FROM marts.mart_training_weekly "
             "ORDER BY week_start DESC LIMIT 6",
         )
@@ -258,7 +261,7 @@ Rules:
   Lifts not in the table: name them as Strong does, load_lb null, cue RPE or RIR.
 - Rest days: "rest": true, "slot": null, "items": []. A day with no free windows is one.
 - Notes from PJ, when listed: a chore or ache is fatigue (keep the hard sessions away
-  from it); on travel days he is away from his gym (a run or bodyweight work only).
+  from it).
 - No safety disclaimer; the page adds its own.
 """
 
@@ -409,7 +412,8 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
     lifts, weeks = read_marts(db)
     ratio = next((w["acute_chronic_ratio"] for w in weeks if w["acute_chronic_ratio"]), None)
     is_deload, why = deload(number, ratio)
-    table = progression(lifts, start, is_deload)
+    noted_rows = week_notes.rows_for(start, var)
+    table = progression(lifts, start, is_deload, hold=week_notes.held(noted_rows))
     if ctx is None:
         _, ctx = week_context.run(week)
     ctx = with_assumed_work(ctx, ASSUME_WORK)
@@ -424,7 +428,7 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
             earlier = [d for d in old.get("days", []) if d.get("date", "") < from_date.isoformat()]
     else:
         from_date = None
-    ctx, train, noted = week_notes.apply(ctx, week_notes.rows_for(start, var), train, subtract)
+    ctx, train, noted = week_notes.apply(ctx, noted_rows, train, subtract)
     previous = out.read_text() if from_date and out.exists() else last_plan(start, var)
     user = prompt(
         start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date, noted

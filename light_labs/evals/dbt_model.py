@@ -248,7 +248,7 @@ def prepare():
     """Path to the cached database: synthetic raw data plus the built project."""
     from light_labs.core import calibration_results, claude_results, queue_results
     from light_labs.evals import results
-    from light_labs.training import health, strong
+    from light_labs.training import health, record, strong
 
     CACHE.mkdir(parents=True, exist_ok=True)
     # Always named lab.duckdb: DuckDB names the catalog after the file, and dbt-duckdb's
@@ -273,6 +273,9 @@ def prepare():
             # ...and Strong's training logs; no export, an empty table.
             strong.ingest(var=Path(tmp) / "no-strong", db=building)
             health.ingest(var=Path(tmp) / "no-health", db=building)
+            # ...and PJ's training notes and plans; empty tables.
+            record.ingest_notes(var=Path(tmp) / "no-notes", db=building)
+            record.ingest_plans(var=Path(tmp) / "no-plans", db=building)
             # Seeds are the project's own CSVs. dbt would read them through DuckDB, which
             # the sandboxed profile forbids, so load them here and build everything else.
             load_seeds(building)

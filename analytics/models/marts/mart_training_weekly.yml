@@ -14,12 +14,14 @@ models:
       - name: load_as_of
         description: Day the load columns are measured at; the week's Sunday, or today
       - name: acute_minutes
-        description: Training minutes in the 7 days to load_as_of
+        description: Training and noted chore minutes in the 7 days to load_as_of
       - name: chronic_weekly_minutes
-        description: Training minutes in the 28 days to load_as_of, divided by 4
+        description: Training and noted chore minutes in the 28 days to load_as_of, divided by 4
       - name: acute_chronic_ratio
         description: acute / chronic; NULL with no chronic load. Above 1.3 the planner deloads
       - name: tonnage_lb
         description: Working-set tonnage (added weight × reps); bodyweight lifts add none
       - name: training_minutes
-        description: Lifting plus cardio minutes, the load measure
+        description: Lifting plus cardio minutes
+      - name: chore_minutes
+        description: Minutes of chores PJ noted that week; they count in the load columns

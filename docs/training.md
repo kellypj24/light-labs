@@ -138,13 +138,21 @@ a past weekday read as upcoming, which the reply shows.
 | Row | What it does to the plan |
 |---|---|
 | A start and end on an upcoming day | That time leaves the day's free windows |
-| `sick` | The day has no free windows; the week owes one session fewer per sick day |
-| `chore`, `ache`, `travel` | Context for the planner: kind, date, minutes, effort |
+| `sick` | The day has no free windows; the week owes one session fewer per sick day. Every load repeats last time's, that week and the next |
+| `travel`, upcoming | Its days have no free windows; the sessions owed stay, capped at the days left |
+| `chore`, `ache` | Context for the planner: kind, date, minutes, effort. A chore's minutes count in the weekly load (and so in the acute:chronic deload trigger) once its day has come |
 
 The note's text and what each row was stay on this machine: the planner's Claude call
 gets kind, date and duration only. In work hours no local model runs, so a note is saved
 unread and the first tick after them reads it (and replans, for `/replan <text>`).
-Notes are append-only in `var/training/notes/notes.jsonl`; they are not in DuckDB yet.
+Notes are append-only in `var/training/notes/notes.jsonl`.
+
+Dagster lands the notes and each plan's days (`raw.training_notes`,
+`raw.training_plan_days`; `lab training ingest-notes`, `ingest-plans`) once the files
+have been still for two minutes. `marts.mart_training_adherence` has one row per planned
+week: sessions planned, due, completed (any session logged that date) and missed, the
+misses on a noted sick or travel day, unplanned training days, sick and away days, ache
+notes and chore minutes. The note's words stay in raw and staging.
 
 The remote page's Training tab (`/training`, `/training/<week>`; tailnet only) renders any
 week's plan, and a week's imported note where the lab has no plan. With `RUSH_REMOTE_URL`

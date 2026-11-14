@@ -90,11 +90,13 @@ _Updated 2026-11-14._
    requested one lands, `/replan` on demand; `/plan` texts a stored plan and the remote's
    Training tab shows any week. `/note` and `/replan <text>` log events, chores and sick
    days (`training/notes.py`, read by `llama3.1:8b`) and the planner works around them.
-   Next: land notes and plan JSON in DuckDB through Dagster, with a planned-vs-done mart.
+   Notes and plan days land in DuckDB (`training_record_job`); planned vs done is
+   `mart_training_adherence`. A sick day holds loads, travel days are blocked, chore
+   minutes count in the load.
    Work calendar not shared yet (weekdays 08:00–17:00 assumed busy). The Claude desktop task keeps planning until two lab plans
    in a row pass review; then it's retired.
-6. Harness and CI/CD review (PJ, 2026-11-14): `just check` takes ~3.5 min per ship and
-   merges have piled up. Look for time to cut and for guards against costly merges.
+6. Harness and CI/CD review (PJ, 2026-11-14): reviewed; `just check` medians 245 s and
+   the CI eval job 174 s. Ten recommendations with PJ; none built yet.
 
 ## Open decisions
 
@@ -112,9 +114,9 @@ _Updated 2026-11-14._
   as PJ. Install the binary root-owned (needs sudo) so only the FDA grant and a root
   path stand between a swap and Messages? Not built.
 
-- Training notes: does a sick week repeat loads instead of progressing? Do chore
-  minutes count toward acute:chronic load (today: no)? Do travel days lose their free
-  windows (today: context only)? Not decided.
+- Training notes: chore minutes count in the load minute for minute, whatever the
+  effort, and an upcoming chore counts once its day passes without a "done". Weight by
+  effort, or require a done note? Not decided.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Roll chores (#128): standing `:admin` for data-engineering in `ROLL_CHORES_REPOS`

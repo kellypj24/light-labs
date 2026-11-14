@@ -69,6 +69,19 @@ class NumbersTest(unittest.TestCase):
         with self.assertRaises(LookupError):
             plan.week_number(MON, "# no week line")
 
+    def test_a_sick_week_holds_loads_and_reps(self):
+        lifts = [
+            lift("Bench Press (Barbell)", MON - timedelta(days=7), 160, 5),
+            lift("Pull Up", MON - timedelta(days=7), 0, 4, "vertical_pull", bodyweight=True),
+        ]
+        rows = {r["exercise"]: r for r in plan.progression(lifts, MON, False, hold=True)}
+        self.assertEqual(rows["Bench Press (Barbell)"]["load_lb"], 160)
+        self.assertIn("held (sick)", rows["Bench Press (Barbell)"]["rule"])
+        self.assertEqual(rows["Pull Up"]["reps"], 4)
+        moving = {r["exercise"]: r for r in plan.progression(lifts, MON, False)}
+        self.assertEqual(moving["Bench Press (Barbell)"]["load_lb"], 165)
+        self.assertEqual(moving["Pull Up"]["reps"], 5)
+
     def test_progression_keeps_the_logged_scheme(self):
         w1, w2 = MON - timedelta(days=14), MON - timedelta(days=7)
         lifts = [

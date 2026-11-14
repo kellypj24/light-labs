@@ -1,7 +1,8 @@
 {#
     One row per ISO week (Monday start, local time) from the first session to this week,
-    including weeks without training. Load is training minutes: lifting sessions plus
-    counted cardio (no RPE is logged, and heart rate is on few sessions).
+    including weeks without training. Load is minutes: lifting sessions, counted cardio
+    (no RPE is logged, and heart rate is on few sessions) and the chores PJ noted with
+    a duration, once their day has come (int_training_note_days), minute for minute.
 
     acute_chronic_ratio is the 7-day minutes over the 28-day weekly average, as of the
     week's last day (today for the current week). The planner deloads above 1.3.
@@ -31,13 +32,51 @@ days AS (
 
 ),
 
+chores AS (
+
+    SELECT
+        note_day,
+        CAST(DATE_TRUNC('week', note_day) AS DATE) AS chore_week,
+        minutes
+    FROM {{ ref('int_training_note_days') }}
+    WHERE
+        kind = 'chore'
+        AND minutes IS NOT NULL
+        AND note_day <= CURRENT_DATE
+
+),
+
+load_minutes AS (
+
+    SELECT
+        session_date AS load_date,
+        duration_minutes AS minutes
+    FROM sessions
+    UNION ALL
+    SELECT
+        note_day AS load_date,
+        minutes
+    FROM chores
+
+),
+
 daily_minutes AS (
 
     SELECT
-        session_date,
-        SUM(duration_minutes) AS minutes
-    FROM sessions
-    GROUP BY session_date
+        load_date AS session_date,
+        SUM(minutes) AS minutes
+    FROM load_minutes
+    GROUP BY load_date
+
+),
+
+weekly_chores AS (
+
+    SELECT
+        chore_week,
+        SUM(minutes) AS chore_minutes
+    FROM chores
+    GROUP BY chore_week
 
 ),
 
@@ -105,8 +144,11 @@ SELECT
     COALESCE(weekly_sessions.cardio_miles, 0) AS cardio_miles,
     COALESCE(weekly_sessions.lifting_minutes, 0)
     + COALESCE(weekly_sessions.cardio_minutes, 0) AS training_minutes,
+    COALESCE(weekly_chores.chore_minutes, 0) AS chore_minutes,
     {{ safe_divide('week_end_load.acute_minutes', 'week_end_load.chronic_weekly_minutes') }}
         AS acute_chronic_ratio
 FROM week_end_load
 LEFT JOIN weekly_sessions
     ON week_end_load.week_start = weekly_sessions.session_week
+LEFT JOIN weekly_chores
+    ON week_end_load.week_start = weekly_chores.chore_week

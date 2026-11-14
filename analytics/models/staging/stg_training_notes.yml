@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: stg_training_notes
+    description: One row per thing one of PJ's training notes said, voided notes flagged.
+    columns:
+      - name: note_row_id
+        description: note_id and the row's position in the note
+        tests:
+          - unique
+          - not_null
+      - name: kind
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["event", "chore", "sick", "ache", "travel", "other"]
+      - name: last_date
+        description: The last day the row covers; note_date when it is one day
+        tests:
+          - not_null
+      - name: is_counted
+        description: Not voided; what the marts count
+        tests:
+          - not_null
