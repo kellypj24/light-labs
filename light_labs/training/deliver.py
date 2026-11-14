@@ -11,6 +11,10 @@ Rush's hourly tick calls `tick`. It:
    what there is, its first line saying what it was built without.
 3. Daily from 21:00, asks for Health if it is stale.
 
+`/note <text>` logs a note about the week (`training.notes`) and texts back what Rush
+understood; `/replan <text>` does that and then replans. A note sent in work hours is read
+by the first tick after them, which replans if the note asked for it.
+
 `/plan` texts a stored plan (`show`); each plan text ends with its page on Rush's remote
 when `RUSH_REMOTE_URL` is set.
 
@@ -29,6 +33,7 @@ from pathlib import Path
 
 from light_labs import config
 from light_labs.training import context as week_context
+from light_labs.training import notes
 
 STRONG_STALE = timedelta(days=6)
 HEALTH_STALE = timedelta(hours=36)
@@ -216,7 +221,28 @@ def refresh(state, now, send, planner):
     return _plan(state, this, send, planner, "Updated plan for the rest of the week:", from_date)
 
 
-def tick(send, now=None, planner=None, var=None):
+def note(text, send, now=None, var=None, parser=None, planner=None, then_replan=False):
+    """`/note <text>`, `/replan <text>`: log it, text back the reading, maybe replan."""
+    now = now or datetime.now()
+    try:
+        record = notes.add(text, now, var, parser, replan=then_replan)
+    except Exception as e:  # noqa: BLE001 - Ollama down, or a reply that isn't JSON
+        return send(None, f"Couldn't read that note: {e}. Nothing was saved.")
+    if record["rows"] is None:
+        after = " and replan then" if then_replan else ""
+        return send(None, f"Saved. No local model runs in work hours; I'll read it after{after}.")
+    send(None, notes.echo(record["rows"]))
+    if then_replan and record["rows"]:
+        replan(send, now, planner, var)
+
+
+def unnote(send, now=None, var=None):
+    """`/note undo`: void the newest note."""
+    dropped = notes.undo(now, var)
+    send(None, f"Dropped: {dropped['text']}" if dropped else "No notes to drop.")
+
+
+def tick(send, now=None, planner=None, var=None, parser=None):
     """One pass; returns what it did, for the journal."""
     if planner is None:
         from light_labs.training import plan
@@ -224,7 +250,16 @@ def tick(send, now=None, planner=None, var=None):
         planner = plan.run
     now = now or datetime.now()
     done = []
+    try:
+        late = notes.read_unread(now, var, parser)
+    except Exception as e:  # noqa: BLE001 - retried next tick; the notes stay unread
+        late, _ = [], done.append(f"notes unread: {e}")
+    for record in late:
+        send(None, notes.echo(record["rows"]))
+        done.append("read a note")
     with _locked(var) as state:
+        if any(r["replan"] and r["rows"] for r in late) and refresh(state, now, send, planner):
+            done.append("replanned after a note")
         newest = latest(var)
         arrived = [
             kind

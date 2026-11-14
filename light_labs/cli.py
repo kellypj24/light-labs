@@ -179,7 +179,25 @@ def training_replan(args):
     from light_labs.training import deliver
 
     _, send, _ = _phone(Store(rush.HOME), rush)
-    deliver.replan(send)
+    if args.note:
+        deliver.note(" ".join(args.note), send, then_replan=True)
+    else:
+        deliver.replan(send)
+
+
+def training_note(args):
+    """Log a note about the week; prints the reading here, not to the phone."""
+    from light_labs.training import deliver
+
+    def show(_, text):
+        print(text)
+
+    if args.undo:
+        deliver.unnote(show)
+    elif args.text:
+        deliver.note(" ".join(args.text), show)
+    else:
+        raise SystemExit("lab training note <text> | --undo")
 
 
 def training_plan(args):
@@ -989,7 +1007,12 @@ def main(argv=None):
         "--week", help="ISO week, e.g. 2026-W47 (default: next week)"
     )
     tcmd.add_parser("tick", help="what Rush's hourly tick runs: plan, send, ask for files")
-    tcmd.add_parser("replan", help="what /replan in Rush's chat runs: refresh the plan, text it")
+    tcmd.add_parser(
+        "replan", help="what /replan in Rush's chat runs: refresh the plan, text it"
+    ).add_argument("note", nargs="*", help="a note to log and plan around first")
+    tnote = tcmd.add_parser("note", help="log an event, chore or sick day the plan should know")
+    tnote.add_argument("text", nargs="*", help="e.g. dentist Thu 3-5, mowed 2h yesterday")
+    tnote.add_argument("--undo", action="store_true", help="drop the newest note")
     tcmd.add_parser(
         "ingest-health", help="upsert Health workouts exports into raw.health_workouts"
     ).add_argument("json", nargs="*", help="exports to load (default: the inbox's drops)")

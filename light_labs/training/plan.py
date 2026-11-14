@@ -13,6 +13,10 @@ days, each session inside a free window, each outdoor run inside the day's outdo
 lift loads from the table. A failed check gets one retry with the failures; then the plan
 is written with them listed.
 
+PJ's notes (`training.notes`) come in before the model is asked: a noted event's time and
+a sick day leave the free windows, a sick day lowers the sessions owed, and chores, aches
+and travel reach the model as kind, date and duration.
+
 A midweek replan (`from_date`) plans only the days from that date, with as many training
 days as the week still owes after what Strong and Health logged before it; the days
 before it keep the earlier plan.
@@ -26,6 +30,7 @@ from pathlib import Path
 
 from light_labs import config
 from light_labs.training import context as week_context
+from light_labs.training import notes as week_notes
 
 SOURCE = "training/plan"
 MODEL = os.environ.get("TRAINING_PLAN_BRAIN", "claude:sonnet")
@@ -251,7 +256,9 @@ Rules:
 - "outdoor": true only for a run, and its slot inside that day's outdoor windows.
 - A lift in the progression table uses its load_lb and reps exactly; you choose sets.
   Lifts not in the table: name them as Strong does, load_lb null, cue RPE or RIR.
-- Rest days: "rest": true, "slot": null, "items": [].
+- Rest days: "rest": true, "slot": null, "items": []. A day with no free windows is one.
+- Notes from PJ, when listed: a chore or ache is fatigue (keep the hard sessions away
+  from it); on travel days he is away from his gym (a run or bodyweight work only).
 - No safety disclaimer; the page adds its own.
 """
 
@@ -268,6 +275,7 @@ def prompt(
     previous,
     train=TRAINING_DAYS,
     from_date=None,
+    noted=(),
 ):
     replan = (
         f" Replanning from {from_date}: PJ has trained {TRAINING_DAYS - train} days this week"
@@ -282,6 +290,14 @@ def prompt(
             + replan,
             "goals.md:\n" + goals,
             "Free windows and weather per day:\n" + json.dumps(ctx["days"], indent=1),
+            *(
+                [
+                    "Notes from PJ (busy times and sick days are already out of the free windows):\n"
+                    + "\n".join(noted)
+                ]
+                if noted
+                else []
+            ),
             "Progression table (lb; dumbbell loads are per hand, as Strong logs them):\n"
             + json.dumps(table, indent=1),
             "Recent weeks (from Strong and Health):\n" + json.dumps(weeks, default=str, indent=1),
@@ -408,9 +424,10 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
             earlier = [d for d in old.get("days", []) if d.get("date", "") < from_date.isoformat()]
     else:
         from_date = None
+    ctx, train, noted = week_notes.apply(ctx, week_notes.rows_for(start, var), train, subtract)
     previous = out.read_text() if from_date and out.exists() else last_plan(start, var)
     user = prompt(
-        start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date
+        start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date, noted
     )
     if brain is None:
         from light_labs.core.brain import brain_for

@@ -44,7 +44,9 @@ SOURCES = {
     "roll/calibrate": set(),
     "evals": set(),
     # Weekly plan: PJ's training logs, goals.md, free windows (no event titles) and the
-    # forecast. Allowed and recorded (docs/plans/training.md, decided 2026-11-08).
+    # forecast. Allowed and recorded (docs/plans/training.md, decided 2026-11-08). His
+    # notes add kind, date and duration per row (training/notes.py `line`); their text
+    # and what each one was stay local.
     "training/plan": set(),
 }
 

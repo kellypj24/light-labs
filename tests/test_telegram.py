@@ -271,6 +271,20 @@ class TrainingCommandsTest(DropTest):
         self.assertIn("Plan for 2026-W47:\n\nMon: lift", self.wire.sent()[-1]["text"])
         self.assertEqual(self.spawned, [])
 
+    def say(self, text):
+        self.tg.handle(
+            {"message": {"chat": {"id": PJ_CHAT}, "date": 1762600000, "text": text}}, None
+        )
+        return self.wire.sent()[-1]["text"]
+
+    def test_a_note_is_read_off_the_polling_thread(self):
+        self.assertIn("Reading that", self.say("/note mowed 2h yesterday"))
+        self.assertIn("Reading that", self.say("/replan dentist Thu 3-5"))
+        self.assertEqual(len(self.spawned), 2)
+        self.assertIn("What should I note?", self.say("/note"))
+        self.assertIn("No notes to drop.", self.say("/note undo"))
+        self.assertEqual(len(self.spawned), 2)
+
     def test_only_a_requested_kind_triggers_a_refresh(self):
         self.tg.handle(self.doc(), None)  # nothing requested
         self.assertEqual(self.spawned, [])

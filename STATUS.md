@@ -86,9 +86,13 @@ _Updated 2026-11-12._
    context, `lab training plan`). Step 6 in review: Rush's hourly tick sends next week's
    plan Sunday evening, asks for stale Strong or Health files, refreshes the plan when a
    requested one lands, `/replan` on demand; `/plan` texts a stored plan and the remote's
-   Training tab shows any week. Work calendar not shared yet (weekdays
-   08:00–17:00 assumed busy). The Claude desktop task keeps planning until two lab plans
+   Training tab shows any week. `/note` and `/replan <text>` log events, chores and sick
+   days (`training/notes.py`, read by `llama3.1:8b`) and the planner works around them.
+   Next: land notes and plan JSON in DuckDB through Dagster, with a planned-vs-done mart.
+   Work calendar not shared yet (weekdays 08:00–17:00 assumed busy). The Claude desktop task keeps planning until two lab plans
    in a row pass review; then it's retired.
+6. Harness and CI/CD review (PJ, 2026-11-14): `just check` takes ~3.5 min per ship and
+   merges have piled up. Look for time to cut and for guards against costly merges.
 
 ## Open decisions
 
@@ -105,6 +109,10 @@ _Updated 2026-11-12._
 - Radar helper: the binary, approved copy and build record are writable by code running
   as PJ. Install the binary root-owned (needs sudo) so only the FDA grant and a root
   path stand between a swap and Messages? Not built.
+
+- Training notes: does a sick week repeat loads instead of progressing? Do chore
+  minutes count toward acute:chronic load (today: no)? Do travel days lose their free
+  windows (today: context only)? Not decided.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
