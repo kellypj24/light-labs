@@ -11,6 +11,9 @@ Rush's hourly tick calls `tick`. It:
    what there is, its first line saying what it was built without.
 3. Daily from 21:00, asks for Health if it is stale.
 
+`/plan` texts a stored plan (`show`); each plan text ends with its page on Rush's remote
+when `RUSH_REMOTE_URL` is set.
+
 Only requested files trigger a refresh, so the nightly Health drop never re-plans. State
 lives in var/training/deliver.json; a lock keeps the tick and a Telegram-triggered
 refresh from planning at once.
@@ -18,6 +21,7 @@ refresh from planning at once.
 
 import fcntl
 import json
+import os
 import re
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
@@ -121,8 +125,52 @@ def _since(newest, kind):
     return "ever" if at is None else f"{at:%a %b %-d}"
 
 
+def link(key):
+    """The plan's page on Rush's remote (tailnet only), '' when no remote is configured."""
+    base = os.environ.get("RUSH_REMOTE_URL", "").rstrip("/")
+    return f"{base}/training/{key}" if base else ""
+
+
+def weeks(var=None):
+    """{week key: path} for every plan, and every imported note of a week without one."""
+    out = {}
+    for folder in ("history", "plans"):  # a lab plan replaces the imported note
+        for p in (home(var) / folder).glob("*-W*.md"):
+            out[p.stem] = p
+    return out
+
+
+def plan_file(spec="", now=None, var=None):
+    """(week key, path or None) for '' (this week), 'next' or 'YYYY-Www'. ValueError on
+    anything else."""
+    now = now or datetime.now()
+    spec = spec.strip().lower()
+    if spec == "next":
+        start = week_context.week_start(today=now.date())
+    elif spec:
+        start = week_context.week_start(spec)
+    else:
+        start = week_context.week_start(today=now.date()) - timedelta(days=7)
+    key = _week_key(start)
+    return key, weeks(var).get(key)
+
+
+def show(spec, send, now=None, var=None):
+    """`/plan [next|YYYY-Www]`: text a stored plan. Reads the file; never plans."""
+    try:
+        key, path = plan_file(spec, now, var)
+    except ValueError:
+        return send(None, "Which week? /plan, /plan next or /plan 2026-W47.")
+    if path is None:
+        return send(None, f"No plan for {key} yet.")
+    return _send_plan(path, send, f"Plan for {key}:")
+
+
 def _send_plan(path, send, lead):
-    text = path.read_text()
+    # Imported notes open with an HTML comment naming their source.
+    text = "\n".join(ln for ln in path.read_text().splitlines() if not ln.startswith("<!--"))
+    if url := link(path.stem):
+        text = f"{text.strip()}\n\n{url}"
     for i, part in enumerate(split(text)):
         send(None, f"{lead}\n\n{part}" if i == 0 else part)
 

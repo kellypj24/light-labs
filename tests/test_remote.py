@@ -209,6 +209,22 @@ class RemoteTest(unittest.TestCase):
         self.assertIn("asks about 3pm", body)
         self.assertIn("authuser=me@x#all/t1", body)
 
+    def test_training_page_renders_a_week_and_links_the_others(self):
+        self.remote.training_var = Path(self.tmp.name)
+        self.assertIn("No plans yet", self.call("/training")[1])
+        plans = Path(self.tmp.name) / "training" / "plans"
+        plans.mkdir(parents=True)
+        (plans / "2026-W46.md").write_text("# Week 1\n\n**Mon**: lift\n- Bench <5x5>\n- _easy_\n")
+        (plans / "2026-W47.md").write_text("# Week 2\n")
+        code, body = self.call("/training/2026-W46")
+        self.assertEqual(code, 200)
+        self.assertIn("<h3>Week 1</h3>", body)
+        self.assertIn("<p><b>Mon</b>: lift</p>", body)
+        self.assertIn("<ul>\n<li>Bench &lt;5x5&gt;</li>\n<li><i>easy</i></li>\n</ul>", body)
+        self.assertIn('<a href="/training/2026-W47">2026-W47</a>', body)
+        self.assertEqual(self.call("/training/2026-W01")[0], 404)
+        self.assertEqual(self.call("/training/2026-W46", login=None)[0], 403)
+
     def test_usage_page_reports_when_the_marts_are_missing(self):
         import duckdb
 

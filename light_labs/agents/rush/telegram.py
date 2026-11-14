@@ -37,6 +37,7 @@ HELP = (
     'and "no <reason>" rejects it.\n'
     "/queue lists what's waiting. /tick checks the board now.\n"
     "Share a Strong export (CSV) or Health workouts (JSON) and I'll save it for the lab.\n"
+    "/plan shows this week's training plan; /plan next or /plan 2026-W47 another week's.\n"
     "/replan redoes this week's training plan from today."
 )
 # How long a requested drop waits for Dagster to load it before the plan refreshes anyway.
@@ -152,6 +153,10 @@ class Telegram:
         if text in ("/tick", "tick"):
             started = remote.start_tick()
             return self.text(None, "Checking the board." if started else "Already checking.")
+        if (text == "plan" or text.split()[:1] == ["/plan"]) and self.drops is not None:
+            from light_labs.training import deliver
+
+            return deliver.show(text.partition(" ")[2], self.text, var=self.drops.parent)
         if text in ("/replan", "replan") and self.drops is not None:
             from light_labs.training import deliver
 

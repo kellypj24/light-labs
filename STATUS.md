@@ -85,7 +85,8 @@ _Updated 2026-11-12._
 5. Training planner (`docs/plans/training.md`): steps 1–5 live (landing, marts,
    context, `lab training plan`). Step 6 in review: Rush's hourly tick sends next week's
    plan Sunday evening, asks for stale Strong or Health files, refreshes the plan when a
-   requested one lands, `/replan` on demand. Work calendar not shared yet (weekdays
+   requested one lands, `/replan` on demand; `/plan` texts a stored plan and the remote's
+   Training tab shows any week. Work calendar not shared yet (weekdays
    08:00–17:00 assumed busy). The Claude desktop task keeps planning until two lab plans
    in a row pass review; then it's retired.
 

@@ -263,6 +263,14 @@ class TrainingCommandsTest(DropTest):
         self.assertEqual(len(self.spawned), 1)
         self.assertIn("Replanning", self.wire.sent()[-1]["text"])
 
+    def test_plan_texts_a_stored_plan_without_planning(self):
+        (self.drops / "plans").mkdir(parents=True)
+        (self.drops / "plans" / "2026-W47.md").write_text("Mon: lift")
+        msg = {"message": {"chat": {"id": PJ_CHAT}, "date": 1762600000, "text": "/plan 2026-W47"}}
+        self.tg.handle(msg, None)
+        self.assertIn("Plan for 2026-W47:\n\nMon: lift", self.wire.sent()[-1]["text"])
+        self.assertEqual(self.spawned, [])
+
     def test_only_a_requested_kind_triggers_a_refresh(self):
         self.tg.handle(self.doc(), None)  # nothing requested
         self.assertEqual(self.spawned, [])

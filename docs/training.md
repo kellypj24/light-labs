@@ -120,5 +120,11 @@ Rush's hourly tick runs `lab training tick`'s logic:
 | Daily from 21:00 | Asks for Health if the nightly Shortcut hasn't landed in 36 h |
 | A file he asked for arrives | Refreshes the plan once Dagster loads it: next week whole, or this week's remaining days |
 | `/replan` in chat, or `lab training replan` | Same refresh, now |
+| `/plan`, `/plan next`, `/plan 2026-W47` in chat | Texts that week's stored plan (this week by default); never plans |
 
 `lab training send [--week]` texts an existing plan. State: `var/training/deliver.json`.
+
+The remote page's Training tab (`/training`, `/training/<week>`; tailnet only) renders any
+week's plan, and a week's imported note where the lab has no plan. With `RUSH_REMOTE_URL`
+set, every plan text ends with that week's link. A week runs Monday to Sunday, so on
+Sunday evening the new plan is `/plan next`.

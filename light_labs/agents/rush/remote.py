@@ -166,13 +166,42 @@ details .week .name { padding-left:12px; }
 """
 
 
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_ITALIC = re.compile(r"(?<![A-Za-z0-9])_(.+?)_(?![A-Za-z0-9])")
+
+
+def md_html(text):
+    """The Markdown the training plans use: headings, bullets, **bold**, _italic_."""
+
+    def inline(s):
+        return _ITALIC.sub(r"<i>\1</i>", _BOLD.sub(r"<b>\1</b>", esc(s)))
+
+    out, in_list = [], False
+    for line in text.splitlines():
+        line = line.strip()
+        item = line.startswith("- ")
+        if in_list and not item:
+            out.append("</ul>")
+        if item and not in_list:
+            out.append("<ul>")
+        in_list = item
+        if item:
+            out.append(f"<li>{inline(line[2:])}</li>")
+        elif line.startswith("#"):
+            out.append(f"<h3>{inline(line.lstrip('#').strip())}</h3>")
+        elif line and not line.startswith("<!--"):
+            out.append(f"<p>{inline(line)}</p>")
+    return "\n".join(out + (["</ul>"] if in_list else []))
+
+
 def page(title, body, flash=None):
     note = f'<div class="flash">{esc(flash)}</div>' if flash else ""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title><style>{STYLE}</style></head><body>
 <header><b>Rush</b><a href="/">Queue</a><a href="/mail">Mail</a><a href="/board">Board</a>
-<a href="/inbox">Inbox</a><a href="/usage">Usage</a><a href="/lab">Lab</a>
+<a href="/inbox">Inbox</a><a href="/training">Training</a><a href="/usage">Usage</a>
+<a href="/lab">Lab</a>
 </header><main>{note}{body}</main></body></html>"""
 
 
@@ -295,6 +324,7 @@ class Remote:
         self.token = secrets.token_urlsafe(16)
         self.tick = tick  # callable running one heartbeat
         self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
+        self.training_var = None  # var/; tests point it elsewhere
         self.ticking = threading.Lock()
         self.lab_lock = threading.Lock()
         self.lab_cache = (float("-inf"), None)
@@ -360,6 +390,26 @@ class Remote:
         except usage.Unavailable as e:
             body = f'<p class="meta">{esc(str(e))}</p>'
         return page("Rush · usage", "<h2>Claude Code usage</h2>" + body)
+
+    def training_page(self, key=None):
+        """A week's training plan (default: this week's, else the newest), and the others.
+        None when `key` has no plan."""
+        from light_labs.training import deliver
+
+        weeks = deliver.weeks(self.training_var)
+        if key is None:
+            this, _ = deliver.plan_file(var=self.training_var)
+            key = this if this in weeks else max(weeks, default=None)
+        elif key not in weeks:
+            return None
+        if key is None:
+            return page("Rush · training", '<p class="meta">No plans yet.</p>')
+        nav = " · ".join(
+            f"<b>{esc(k)}</b>" if k == key else f'<a href="/training/{quote(k)}">{esc(k)}</a>'
+            for k in sorted(weeks, reverse=True)
+        )
+        body = f'<p class="meta">{nav}</p>{md_html(weeks[key].read_text())}'
+        return page(f"Rush · {key}", body)
 
     def lab_snapshot(self):
         """One snapshot per LAB_POLL_MS however many tabs poll: each costs ~8 processes."""
@@ -544,6 +594,10 @@ def handler(remote):
                     body = remote.inbox_page()
                 elif parts == ["usage"]:
                     body = remote.usage_page()
+                elif parts[0] == "training" and len(parts) <= 2:
+                    body = remote.training_page(*parts[1:])
+                    if body is None:
+                        return self._send(404, page("Not found", "<p>No plan for that week.</p>"))
                 elif parts == ["lab"] or parts == ["lab.json"]:
                     try:
                         if parts == ["lab"]:
