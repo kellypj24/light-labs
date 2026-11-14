@@ -119,6 +119,21 @@ class DeliverTest(unittest.TestCase):
         self.planner.fail = False
         self.assertIn("sent 2026-W47", self.tick(SUN.replace(hour=21)))
 
+    def test_a_failed_refresh_is_retried_next_tick(self):
+        self.fresh()
+        self.tick(SUN.replace(hour=19))  # W47 sent
+        wed = SUN + timedelta(days=3, hours=9)
+        with deliver._locked(self.var) as state:
+            state["requested"]["health"] = (wed - timedelta(hours=1)).isoformat()
+        self.drop("health", f"health-{wed:%Y-%m-%d}-085500.json")
+        self.planner.fail = True
+        self.assertEqual(self.tick(wed), [])
+        self.assertIn("health", self.state()["requested"])
+        self.planner.fail = False
+        self.assertEqual(self.tick(wed + timedelta(hours=1)), ["refreshed after health"])
+        self.assertEqual(self.state()["requested"], {})
+        self.assertNotIn("error", self.state())
+
     def test_long_plans_split_between_days(self):
         text = "\n\n".join(f"Day {i}: " + "x" * 900 for i in range(7))
         parts = deliver.split(text)
