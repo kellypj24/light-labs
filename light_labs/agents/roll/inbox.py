@@ -98,13 +98,49 @@ def rule_text(r):
 
 class RollBot(Telegram):
     """Roll's chat: Approve/Skip on rules, /undo <rule>, /report, /chores. `chores(apply)`
-    runs the Dependabot chores and returns the summary to text; None when no repos are set."""
+    runs the Dependabot chores and returns the summary to text; None when no repos are set.
+    `holds` (holds.Holds, set by roll.bot()) works the PRs a run left on hold: its
+    buttons and PJ's replies to its messages land here."""
 
     def __init__(self, token, chat_id, root, gmail, opener=None, chores=None):
         kw = {"opener": opener} if opener else {}
         super().__init__(token, chat_id, root / "telegram.json", **kw)
         self.root, self.gmail, self.chores, self.job = root, gmail, chores, None
+        self.holds = None
         (root / "applied").mkdir(parents=True, exist_ok=True)
+
+    def buttons(self, text, buttons):
+        """A message with one row of [(label, callback data)] buttons; its message id."""
+        params = {"chat_id": self.chat_id, "text": text}
+        if buttons:
+            params["reply_markup"] = {
+                "inline_keyboard": [[{"text": t, "callback_data": d} for t, d in buttons]]
+            }
+        return self.call("sendMessage", **params)["message_id"]
+
+    def _spawn(self, work):
+        """Claude's reviews take minutes; a thread keeps the chat answering."""
+
+        def run():
+            try:
+                work()
+            except Exception as e:  # noqa: BLE001 - reported in the chat, like a failed tap
+                self.report_failure(e)
+
+        self.job = threading.Thread(target=run, daemon=True)
+        self.job.start()
+
+    def _hold(self, verb, item_id):
+        if not any(i["id"] == item_id for i in self.holds.store.pending()):
+            return self.text(None, "That one is settled already.")
+        if verb == "leave":
+            return self.text(None, self.holds.leave(item_id))
+        if verb == "merge":
+            return self.text(None, self.holds.merge(item_id))
+        if verb in ("fix", "top"):
+            self._spawn(lambda: self.holds.turn(item_id, top=verb == "top"))
+            return self.text(None, "Claude is on it. I'll text what it finds.")
+        return None
 
     def journal(self, line):
         with (self.root / "journal.md").open("a") as f:
@@ -204,6 +240,9 @@ class RollBot(Telegram):
             if not self._from_pj(q.get("message", {}).get("chat", {})):
                 return None
             action, _, rule_id = (q.get("data") or "").partition(":")
+            if action == "hold" and self.holds:
+                self.call("answerCallbackQuery", callback_query_id=q["id"], text="On it")
+                return self._hold(*rule_id.split(":", 1))
             if rule_id not in RULES:
                 return None
             self.call("answerCallbackQuery", callback_query_id=q["id"], text="On it")
@@ -221,6 +260,11 @@ class RollBot(Telegram):
         if not self._from_pj(msg.get("chat", {})):
             return None
         text = (msg.get("text") or "").strip()
+        replied = msg.get("reply_to_message")
+        held = self.holds and replied and self.holds.by_message(replied["message_id"])
+        if held and text:
+            self._spawn(lambda: self.holds.turn(held["id"], note=text))
+            return self.text(None, "Passing that to Claude.")
         if text.startswith("/undo"):
             rule_id = text.partition(" ")[2].strip()
             if rule_id not in RULES:
@@ -233,9 +277,7 @@ class RollBot(Telegram):
             if not self.chores:
                 return self.text(None, "No repos to look after yet: ROLL_CHORES_REPOS is empty.")
             dry = "dry" in text.split()[1:]
-            # Claude's reviews take minutes; a thread keeps the rule buttons answering.
-            self.job = threading.Thread(target=self._chores, args=(not dry,), daemon=True)
-            self.job.start()
+            self._spawn(lambda: self._chores(not dry))
             return self.text(
                 None,
                 "On it: Dependabot PRs"
@@ -249,11 +291,11 @@ class RollBot(Telegram):
             None,
             "I'm Roll. I clean your inbox with rules you approve: /report for a fresh count, "
             "/undo <rule> to put a rule's mail back. /chores looks after Dependabot PRs "
-            "(/chores dry to see what would merge).",
+            "(/chores dry to see what would merge). A PR on hold comes with buttons; reply "
+            "to its message to tell Claude what to do.",
         )
 
     def _chores(self, apply):
-        try:
-            self.text(None, self.chores(apply))
-        except Exception as e:  # noqa: BLE001 - reported in the chat, like a failed tap
-            self.report_failure(e)
+        self.text(None, self.chores(apply))
+        if apply and self.holds:
+            self.holds.present_new()

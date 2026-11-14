@@ -41,6 +41,7 @@ SOURCES = {
     "roll/keep-teacher": set(),  # sanitized view, personal mail skipped
     "roll/keep-fixtures": set(),
     "roll/chores": set(),
+    "roll/fix": set(),  # a held Dependabot PR: its notes, CI log and PJ's replies about it
     "roll/calibrate": set(),
     "evals": set(),
     # Weekly plan: PJ's training logs, goals.md, free windows (no event titles) and the

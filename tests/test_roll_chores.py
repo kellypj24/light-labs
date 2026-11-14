@@ -28,7 +28,7 @@ class FakeRepo:
 
     def __init__(self, prs, states=None, main_files=()):
         self.prs, self.states, self.calls = prs, states or {}, []
-        self.main_files = list(main_files)
+        self.main_files, self.authors = list(main_files), ["dependabot[bot]"]
 
     def gh_json(self, *args):
         if args[:2] == ("repo", "view"):
@@ -37,6 +37,8 @@ class FakeRepo:
             return {"files": [{"filename": f} for f in self.main_files]}
         if args[:2] == ("pr", "list"):
             return self.prs
+        if args[:2] == ("pr", "view") and args[-1] == "commits":
+            return {"commits": [{"authors": [{"login": a}]} for a in self.authors]}
         if args[:2] == ("pr", "view"):
             return self.states[int(args[2])]
         raise AssertionError(args)
@@ -244,6 +246,13 @@ class ChoresTest(unittest.TestCase):
         title = "Bump b from 1.0 to 1.1 in /orchestration/airflow"
         repo = FakeRepo([pr(9, title)], main_files=["orchestration/dagster/x.py", "STATUS.md"])
         self.assertEqual(self.chores(repo).run()[0][1], "merged")
+
+    def test_a_pr_someone_else_pushed_to_is_held_by_code(self):
+        repo = FakeRepo([pr(7, "Bump dbt-core from 1.12.5 to 1.12.6 in /t")])
+        repo.authors.append("kellypj24")
+        self.assertEqual(self.chores(repo).run()[0][1], "hold")
+        self.assertEqual(self.brother.models, [])
+        self.assertIn("Dependabot didn't write", self.store.pending()[0]["escalate"])
 
     def major(self, **kw):
         repo = FakeRepo([pr(3, "Bump pytest from 8.4.0 to 9.2.0 in /t")])

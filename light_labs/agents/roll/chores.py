@@ -237,7 +237,7 @@ class Chores:
     def decide(self, f):
         if wait := transient(f):
             return f["number"], "later", wait
-        why = blocked(f) or self.stale(f)
+        why = blocked(f) or self.foreign(f) or self.stale(f)
         if why and why.startswith("main changed") and self.apply:
             self.repo.gh("pr", "comment", str(f["number"]), "--body", "@dependabot rebase")
         if not why and self.apply and self.merged_today() >= self.cap:
@@ -314,6 +314,16 @@ class Chores:
             if (call == "MERGE" and (i >= floor or confirmed)) or (call == "HOLD" and i):
                 break
         return rungs
+
+    def foreign(self, f):
+        """Why a PR someone else pushed to never merges here, or None: with a commit from
+        holds.py's fixer or from PJ it is no longer only a version bump. Asked per PR (the
+        list query can't carry commit authors for 100 PRs)."""
+        commits = self.repo.gh_json("pr", "view", str(f["number"]), "--json", "commits")
+        logins = {a.get("login") or "" for c in commits.get("commits") or [] for a in c["authors"]}
+        if all(login.startswith("dependabot") for login in logins):
+            return None
+        return "carries a commit Dependabot didn't write; merges on PJ's tap only"
 
     def stale(self, f):
         """Why the PR's green CI no longer counts, or None: main changed files in the PR's
