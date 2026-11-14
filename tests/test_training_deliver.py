@@ -1,8 +1,10 @@
 import json
+import os
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 from light_labs.training import deliver
 
@@ -40,6 +42,9 @@ class DeliverTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.var = Path(tmp.name)
         self.phone, self.planner = Phone(), Planner(self.var)
+        env = mock.patch.dict(os.environ, {"RUSH_REMOTE_URL": ""})  # a developer's .env sets it
+        env.start()
+        self.addCleanup(env.stop)
 
     def drop(self, kind, name, inbox=False):
         folder = self.var / "training" / kind / ("inbox" if inbox else "")
@@ -133,6 +138,39 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(self.tick(wed + timedelta(hours=1)), ["refreshed after health"])
         self.assertEqual(self.state()["requested"], {})
         self.assertNotIn("error", self.state())
+
+    def plan(self, key, folder="plans", text="Mon: lift"):
+        path = self.var / "training" / folder / f"{key}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def show(self, spec, at=SUN):
+        deliver.show(spec, self.phone, now=at, var=self.var)
+        return self.phone.texts[-1]
+
+    def test_plan_shows_this_week_next_week_or_a_named_one(self):
+        self.plan("2026-W46", text="this week")
+        self.plan("2026-W47", text="next week")
+        self.assertIn("Plan for 2026-W46:\n\nthis week", self.show(""))
+        self.assertIn("next week", self.show("next"))
+        self.assertIn("next week", self.show("2026-w47"))
+        self.assertEqual(self.planner.calls, [])
+
+    def test_plan_falls_back_to_an_imported_note_without_its_comment(self):
+        self.plan("2026-W46", "history", "<!-- Imported from Drive -->\n# Week 1")
+        self.assertEqual(self.show(""), "Plan for 2026-W46:\n\n# Week 1")
+        self.plan("2026-W46", text="lab plan")
+        self.assertIn("lab plan", self.show(""))
+
+    def test_plan_says_when_there_is_none_or_the_week_is_unreadable(self):
+        self.assertEqual(self.show("next"), "No plan for 2026-W47 yet.")
+        self.assertIn("Which week?", self.show("tomorrow"))
+        self.assertIn("Which week?", self.show("2026-W99"))
+
+    def test_plan_texts_end_with_the_remote_link_when_one_is_set(self):
+        self.plan("2026-W46")
+        with mock.patch.dict(os.environ, {"RUSH_REMOTE_URL": "http://mac.ts.net/"}):
+            self.assertTrue(self.show("").endswith("\n\nhttp://mac.ts.net/training/2026-W46"))
 
     def test_long_plans_split_between_days(self):
         text = "\n\n".join(f"Day {i}: " + "x" * 900 for i in range(7))
