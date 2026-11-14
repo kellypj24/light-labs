@@ -174,6 +174,14 @@ def training_tick(args):
         print(line)
 
 
+def training_replan(args):
+    from light_labs.agents import rush
+    from light_labs.training import deliver
+
+    _, send, _ = _phone(Store(rush.HOME), rush)
+    deliver.replan(send)
+
+
 def training_plan(args):
     from light_labs.training import plan
 
@@ -981,6 +989,7 @@ def main(argv=None):
         "--week", help="ISO week, e.g. 2026-W47 (default: next week)"
     )
     tcmd.add_parser("tick", help="what Rush's hourly tick runs: plan, send, ask for files")
+    tcmd.add_parser("replan", help="what /replan in Rush's chat runs: refresh the plan, text it")
     tcmd.add_parser(
         "ingest-health", help="upsert Health workouts exports into raw.health_workouts"
     ).add_argument("json", nargs="*", help="exports to load (default: the inbox's drops)")
