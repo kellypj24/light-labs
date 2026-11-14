@@ -26,6 +26,15 @@ HOME = config.VAR / "roll"
 # Repo chores (chores.py): the local brain whose answers are recorded while big brother
 # decides. Mega Man's brain until a dependabot-merge fight picks one.
 CHORES_BRAIN = os.environ.get("ROLL_CHORES_BRAIN", "ollama:llama3.1:8b")
+# The checkouts `/chores` and `lab roll chores --all` cover: comma-separated, `:admin` on a
+# repo whose merges go past a required review. Empty: chores run only with -C.
+CHORES_REPOS = os.environ.get("ROLL_CHORES_REPOS", "")
+# Claude models big brother climbs, cheapest first.
+CHORES_LADDER = tuple(
+    m.strip()
+    for m in os.environ.get("ROLL_CHORES_LADDER", "haiku,sonnet,opus").split(",")
+    if m.strip()
+)
 
 
 # Mail keep (keep.py): the brain that earned the mail-keep weapon, and the cloud teacher for
@@ -47,8 +56,23 @@ def bot():
 
     HOME.mkdir(parents=True, exist_ok=True)
     return RollBot(
-        keychain_token(TELEGRAM_KEYCHAIN), TELEGRAM_CHAT, HOME, Gmail("roll", INBOX_ACCOUNT)
+        keychain_token(TELEGRAM_KEYCHAIN), TELEGRAM_CHAT, HOME, Gmail("roll", INBOX_ACCOUNT),
+        chores=chores_all if CHORES_REPOS else None,
+    )  # fmt: skip
+
+
+def chores_all(apply):
+    """Dependabot chores over CHORES_REPOS; the summary Roll texts."""
+    from light_labs.agents.roll import chores
+    from light_labs.core.store import Store
+
+    HOME.mkdir(parents=True, exist_ok=True)
+    results = chores.run_all(
+        Store(HOME), CHORES_REPOS, CHORES_BRAIN, apply=apply, ladder=CHORES_LADDER
     )
+    if results is None:
+        return "Roll: chores are already running."
+    return chores.summary(results, apply)
 
 
 def system_prompt(text=""):

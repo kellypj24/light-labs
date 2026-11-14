@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Daily Dependabot chores for DLN-102 Roll over ROLL_CHORES_REPOS (docs/roll-chores.md).
+     Install with `just roll-chores-install`. 17:30: after work hours, so Roll's local
+     answer is recorded beside Claude's. A Mac asleep at 17:30 runs it on wake. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.roll-chores</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>/Users/pjkelly/light-labs</string>
+    <string>lab</string>
+    <string>roll</string>
+    <string>chores</string>
+    <string>--all</string>
+    <string>--apply</string>
+    <string>--text</string>
+  </array>
+  <!-- launchd's PATH lacks gh and claude. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/pjkelly/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/roll/launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/roll/launchd.log</string>
+</dict>
+</plist>

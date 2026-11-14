@@ -47,15 +47,20 @@ class FakeRepo:
 
 
 class Brother:
-    def __init__(self, raw):
-        self.raw, self.models = raw, []
+    """Every rung answers `raw`, or its own entry in `by`; an exception there is raised."""
+
+    def __init__(self, raw, by=None):
+        self.raw, self.by, self.models = raw, by or {}, []
 
     def __call__(self, model):
         self.models.append(model)
         return self
 
     def think(self, system, user, **kw):
-        return self.raw
+        raw = self.by.get(self.models[-1], self.raw)
+        if isinstance(raw, Exception):
+            raise raw
+        return raw
 
 
 class Roll:
@@ -79,8 +84,8 @@ class ChoresTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def chores(self, repo, raw=MERGE, apply=True, roll=None, cap=10, admin=False):
-        self.brother = Brother(raw)
+    def chores(self, repo, raw=MERGE, apply=True, roll=None, cap=10, admin=False, by=None):
+        self.brother = Brother(raw, by)
         return chores.Chores(repo, self.store, roll or Roll(0.9), self.brother, apply, cap, admin)
 
     def test_title_and_jump(self):
@@ -165,13 +170,14 @@ class ChoresTest(unittest.TestCase):
         self.chores(repo, raw=raw).run()
         (item,) = self.store.pending()
         self.assertEqual(item["big_brother"]["critique"], "wrong, notes say so")
-        self.assertEqual(self.brother.models, ["sonnet"])
+        self.assertEqual(self.brother.models, ["haiku", "sonnet"])  # haiku's HOLD is checked once
         self.assertEqual(self.chores(repo, raw=raw).run()[0][1], "pending")  # no second call
         repo.states[9] = {"state": "MERGED", "headRefOid": "sha9", "mergedBy": {"login": "pj"}}
         repo.prs = []
         self.chores(repo).run()
         self.assertEqual(chores.scorecard(self.store)["minor"], {
-            "n": 1, "agree": 0, "false_yes": 1, "overruled": 1})  # fmt: skip
+            "n": 1, "agree": 0, "false_yes": 1, "overruled": 1,
+            "calls": 2, "settled": {"sonnet": 1}})  # fmt: skip
 
     def test_one_merge_per_directory_and_the_daily_cap(self):
         repo = FakeRepo([
@@ -239,8 +245,68 @@ class ChoresTest(unittest.TestCase):
         repo = FakeRepo([pr(9, title)], main_files=["orchestration/dagster/x.py", "STATUS.md"])
         self.assertEqual(self.chores(repo).run()[0][1], "merged")
 
-    def test_verdict_without_a_line_is_a_hold(self):
-        self.assertEqual(chores.verdict("looks fine to me")[0], "HOLD")
+    def major(self, **kw):
+        repo = FakeRepo([pr(3, "Bump pytest from 8.4.0 to 9.2.0 in /t")])
+        out = self.chores(repo, **kw).run()[0]
+        items = [json.loads(p.read_text()) for p in self.store.root.glob("queue/*/*.json")]
+        return out, items[0]
+
+    def test_a_merge_below_the_floor_needs_the_next_rung_to_agree(self):
+        (_, action, note), item = self.major()
+        self.assertEqual(action, "merged")
+        self.assertEqual(self.brother.models, ["haiku", "sonnet"])  # opus never called
+        self.assertTrue(note.startswith("haiku>sonnet: "))
+        self.assertEqual([r["verdict"] for r in item["ladder"]], ["MERGE", "MERGE"])
+        self.assertEqual((item["big_brother"]["model"], item["brain"]), ("sonnet", "claude:sonnet"))
+
+    def test_escalate_and_failures_climb_and_every_rung_is_recorded(self):
+        by = {
+            "haiku": RuntimeError("claude -p failed"),
+            "sonnet": "ESCALATE: notes cut off\nwhy: x",
+        }
+        (_, action, _), item = self.major(by=by)
+        self.assertEqual(action, "merged")
+        self.assertEqual(self.brother.models, ["haiku", "sonnet", "opus"])
+        self.assertEqual([r["verdict"] for r in item["ladder"]], ["ESCALATE", "ESCALATE", "MERGE"])
+        self.assertEqual(item["ladder"][0]["question"], "big brother failed")
+        self.assertEqual(chores.scorecard(self.store)["major"]["calls"], 3)
+
+    def test_a_hold_above_the_bottom_stops_the_climb(self):
+        (_, action, _), item = self.major(by={"sonnet": "HOLD: drop py3.9?\nwhy: new minimum"})
+        self.assertEqual(action, "hold")
+        self.assertEqual(self.brother.models, ["haiku", "sonnet"])
+        self.assertEqual(item["escalate"], "drop py3.9?")
+
+    def test_no_rung_deciding_is_a_hold_for_pj(self):
+        (_, action, _), item = self.major(raw="not sure what to say")
+        self.assertEqual((action, len(item["ladder"])), ("hold", 3))
+        self.assertEqual(item["escalate"], "no model could decide: gave no verdict")
+        self.assertEqual(item["big_brother"]["verdict"], "HOLD")
+        self.assertFalse([c for c in self.brother.models if c not in chores.LADDER])
+
+    def test_repos_and_summary(self):
+        got = chores.repos("~/de:admin, /src/lab ,")
+        self.assertEqual(got, [(Path("~/de").expanduser(), True), (Path("/src/lab"), False)])
+        text = chores.summary([
+            ("pj/de", [(7, "merged", "haiku: fine"), (8, "later", "CI pending"),
+                       (9, "pending", "waiting on PJ")]),
+            ("lab", "not a git repo"),
+        ])  # fmt: skip
+        self.assertIn("pj/de: 1 merged, 1 later, 1 pending", text)
+        self.assertIn("  #7 merged: haiku: fine", text)
+        self.assertNotIn("#8", text)
+        self.assertIn("lab: failed: not a git repo", text)
+        self.assertIn("ROLL_CHORES_REPOS", chores.summary([]))
+
+    def test_one_run_at_a_time(self):
+        with chores._RUNNING:
+            self.assertIsNone(chores.run_all(self.store, "/nowhere", ""))
+
+    def test_verdict_without_a_line_goes_up(self):
+        self.assertEqual(chores.verdict("looks fine to me")[:2], ("ESCALATE", "gave no verdict"))
+        self.assertEqual(
+            chores.verdict("ESCALATE: need the repo\nwhy: no tools")[1], "need the repo"
+        )
         self.assertEqual(chores.verdict("**MERGE**\nwhy: ok\nroll: right")[:3], ("MERGE", "", "ok"))
 
 
