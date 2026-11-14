@@ -124,6 +124,28 @@ Rush's hourly tick runs `lab training tick`'s logic:
 
 `lab training send [--week]` texts an existing plan. State: `var/training/deliver.json`.
 
+## Notes
+
+`/note <text>` in Rush's chat (or `lab training note <text>`) logs something the plan
+should know and no calendar shows: an appointment, a chore done or coming, being sick or
+sore, travel. `/replan <text>` logs it and replans. `/note undo` drops the newest.
+
+A local model (`TRAINING_NOTES_MODEL`, default `llama3.1:8b`) turns the text into rows;
+code resolves day words to dates and checks every field. Rush texts back what it
+understood before any plan. On 30 sample notes the model read 27 right; the usual miss is
+a past weekday read as upcoming, which the reply shows.
+
+| Row | What it does to the plan |
+|---|---|
+| A start and end on an upcoming day | That time leaves the day's free windows |
+| `sick` | The day has no free windows; the week owes one session fewer per sick day |
+| `chore`, `ache`, `travel` | Context for the planner: kind, date, minutes, effort |
+
+The note's text and what each row was stay on this machine: the planner's Claude call
+gets kind, date and duration only. In work hours no local model runs, so a note is saved
+unread and the first tick after them reads it (and replans, for `/replan <text>`).
+Notes are append-only in `var/training/notes/notes.jsonl`; they are not in DuckDB yet.
+
 The remote page's Training tab (`/training`, `/training/<week>`; tailnet only) renders any
 week's plan, and a week's imported note where the lab has no plan. With `RUSH_REMOTE_URL`
 set, every plan text ends with that week's link. A week runs Monday to Sunday, so on

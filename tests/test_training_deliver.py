@@ -172,6 +172,47 @@ class DeliverTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"RUSH_REMOTE_URL": "http://mac.ts.net/"}):
             self.assertTrue(self.show("").endswith("\n\nhttp://mac.ts.net/training/2026-W46"))
 
+    def sick(self, text, today):
+        return [{"kind": "sick", "date": today.isoformat(), "end_date": None, "start": None,
+                 "end": None, "minutes": None, "effort": None, "done": False, "what": text}]  # fmt: skip
+
+    def test_a_note_is_echoed_and_replans_only_when_asked(self):
+        self.fresh()
+        self.tick(SUN.replace(hour=19))  # W47 sent
+        at = SUN.replace(hour=21)
+        deliver.note("a cold", self.phone, at, self.var, self.sick)
+        self.assertTrue(self.phone.said("Sun Nov 15: sick (a cold)"))
+        self.assertEqual(len(self.planner.calls), 1)
+        deliver.note("flu", self.phone, at, self.var, self.sick, self.planner, then_replan=True)
+        self.assertEqual(len(self.planner.calls), 2)
+        self.assertTrue(self.phone.said("Updated plan:"))
+        deliver.unnote(self.phone, at, self.var)
+        self.assertEqual(self.phone.texts[-1], "Dropped: flu")
+
+    def test_a_note_that_cannot_be_read_is_not_saved(self):
+        def broken(text, today):
+            raise ValueError("no JSON array in the reply")
+
+        deliver.note("mumble", self.phone, SUN, self.var, broken)
+        self.assertTrue(self.phone.said("Couldn't read that note"))
+        deliver.unnote(self.phone, SUN, self.var)
+        self.assertEqual(self.phone.texts[-1], "No notes to drop.")
+
+    def test_a_work_hours_note_is_read_and_replanned_by_the_next_tick_after(self):
+        self.fresh()
+        self.tick(SUN.replace(hour=19))  # W47 sent
+        wed = SUN + timedelta(days=3, hours=10)  # Wed Nov 18, 10:00
+        deliver.note("flu", self.phone, wed, self.var, self.sick, then_replan=True)
+        self.assertTrue(self.phone.said("No local model runs in work hours"))
+        self.assertEqual(len(self.planner.calls), 1)
+        done = deliver.tick(
+            self.phone, now=wed.replace(hour=17), planner=self.planner, var=self.var,
+            parser=self.sick,
+        )  # fmt: skip
+        self.assertEqual(done, ["read a note", "replanned after a note"])
+        self.assertTrue(self.phone.said("Wed Nov 18: sick (flu)"))
+        self.assertEqual(self.planner.calls[-1], ("2026-W47", date(2026, 11, 19)))
+
     def test_long_plans_split_between_days(self):
         text = "\n\n".join(f"Day {i}: " + "x" * 900 for i in range(7))
         parts = deliver.split(text)

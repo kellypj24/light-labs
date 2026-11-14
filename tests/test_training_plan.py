@@ -1,12 +1,12 @@
 import json
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
 from light_labs.core import gate
-from light_labs.training import plan
+from light_labs.training import notes, plan
 
 MON = date(2026, 11, 16)
 GOALS = "# Goals\n- Week 1 starts Monday 2026-11-09. Weeks run Monday–Sunday.\n"
@@ -165,6 +165,31 @@ class RunTest(unittest.TestCase):
         self.assertIn("Bench Press (Barbell) 4x5 @ 165 lb", text)
         self.assertIn("(outdoor)", text)
         self.assertNotIn("Checks that failed", text)
+
+    def test_notes_change_the_windows_and_the_sessions_owed_before_the_model_is_asked(self):
+        def parser(text, today):
+            base = dict.fromkeys(("end_date", "start", "end", "minutes", "effort"))
+            return [
+                {**base, "kind": "sick", "date": "2026-11-17", "done": False, "what": "stomach bug"},
+                {**base, "kind": "event", "date": "2026-11-18", "start": "06:00", "end": "08:00",
+                 "done": False, "what": "dentist"},
+            ]  # fmt: skip
+
+        notes.add("x", datetime(2026, 11, 15, 12), self.var, parser)
+        brain = FakeBrain([json.dumps(good_plan())] * 2)
+        plan.run("2026-W47", brain=brain, var=self.var, ctx=ctx())
+        asked = brain.asked[0]
+        self.assertIn("Plan exactly 4 training days.", asked)
+        self.assertIn("Notes from PJ", asked)
+        self.assertIn("2026-11-17 sick", asked)
+        for word in ("stomach bug", "dentist"):
+            self.assertNotIn(word, asked)
+        days = {
+            d["date"]: d for d in json.loads(asked.split("per day:\n")[1].split("\n\nNotes")[0])
+        }
+        self.assertEqual(days["2026-11-17"]["free"], [])
+        self.assertNotIn(["06:00", "08:00"], days["2026-11-18"]["free"])
+        self.assertTrue(all(a >= "08:00" or b <= "06:00" for a, b in days["2026-11-18"]["free"]))
 
     def test_still_failing_plans_are_written_with_their_failures(self):
         bad = json.dumps(good_plan(load=170))

@@ -38,7 +38,9 @@ HELP = (
     "/queue lists what's waiting. /tick checks the board now.\n"
     "Share a Strong export (CSV) or Health workouts (JSON) and I'll save it for the lab.\n"
     "/plan shows this week's training plan; /plan next or /plan 2026-W47 another week's.\n"
-    "/replan redoes this week's training plan from today."
+    "/replan redoes this week's training plan from today; add a note to it "
+    "(/replan dentist Thu 3-5, sick today) and I plan around that.\n"
+    "/note logs one without replanning (/note mowed 2h yesterday); /note undo drops the last."
 )
 # How long a requested drop waits for Dagster to load it before the plan refreshes anyway.
 LOAD_WAIT_S, LOAD_POLL_S = 180, 10
@@ -157,6 +159,20 @@ class Telegram:
             from light_labs.training import deliver
 
             return deliver.show(text.partition(" ")[2], self.text, var=self.drops.parent)
+        if text.split()[:1] in (["/note"], ["/replan"]) and self.drops is not None:
+            from light_labs.training import deliver
+
+            command, _, said = text.partition(" ")
+            said, var = said.strip(), self.drops.parent
+            if command == "/note" and said.lower() == "undo":
+                return deliver.unnote(self.text, var=var)
+            if command == "/note" and not said:
+                return self.text(None, "What should I note? /note mowed 2h yesterday")
+            if said:
+                self.spawn(
+                    lambda: deliver.note(said, self.text, var=var, then_replan=command == "/replan")
+                )
+                return self.text(None, "Reading that; a few seconds.")
         if text in ("/replan", "replan") and self.drops is not None:
             from light_labs.training import deliver
 
