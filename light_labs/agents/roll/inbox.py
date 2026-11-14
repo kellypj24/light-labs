@@ -14,6 +14,7 @@ archive, not the inbox) before Gmail purges it.
 
 import contextlib
 import json
+import threading
 import urllib.error
 from collections import Counter
 from datetime import UTC, datetime
@@ -96,12 +97,13 @@ def rule_text(r):
 
 
 class RollBot(Telegram):
-    """Roll's chat: Approve/Skip on rules, /undo <rule>, /report."""
+    """Roll's chat: Approve/Skip on rules, /undo <rule>, /report, /chores. `chores(apply)`
+    runs the Dependabot chores and returns the summary to text; None when no repos are set."""
 
-    def __init__(self, token, chat_id, root, gmail, opener=None):
+    def __init__(self, token, chat_id, root, gmail, opener=None, chores=None):
         kw = {"opener": opener} if opener else {}
         super().__init__(token, chat_id, root / "telegram.json", **kw)
-        self.root, self.gmail = root, gmail
+        self.root, self.gmail, self.chores, self.job = root, gmail, chores, None
         (root / "applied").mkdir(parents=True, exist_ok=True)
 
     def journal(self, line):
@@ -227,11 +229,31 @@ class RollBot(Telegram):
             return self.text(
                 None, f"Put {n:,} back in the inbox." if n is not None else "Nothing to undo."
             )
+        if text.split()[:1] in (["/chores"], ["chores"]):
+            if not self.chores:
+                return self.text(None, "No repos to look after yet: ROLL_CHORES_REPOS is empty.")
+            dry = "dry" in text.split()[1:]
+            # Claude's reviews take minutes; a thread keeps the rule buttons answering.
+            self.job = threading.Thread(target=self._chores, args=(not dry,), daemon=True)
+            self.job.start()
+            return self.text(
+                None,
+                "On it: Dependabot PRs"
+                + (", dry run" if dry else "")
+                + ". Claude reviews what CI passed, cheapest model first. Summary when done.",
+            )
         if text in ("/report", "report"):
             self.text(None, "Counting your inbox; the report follows in a few minutes.")
             return self.send_report(survey(self.gmail))
         return self.text(
             None,
             "I'm Roll. I clean your inbox with rules you approve: /report for a fresh count, "
-            "/undo <rule> to put a rule's mail back.",
+            "/undo <rule> to put a rule's mail back. /chores looks after Dependabot PRs "
+            "(/chores dry to see what would merge).",
         )
+
+    def _chores(self, apply):
+        try:
+            self.text(None, self.chores(apply))
+        except Exception as e:  # noqa: BLE001 - reported in the chat, like a failed tap
+            self.report_failure(e)

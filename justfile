@@ -94,6 +94,15 @@ dagster-daemon: _dagster-home
     cd analytics && uv run --locked --group orchestration dbt parse --quiet
     DAGSTER_HOME="$PWD/var/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
 
+# Install (or reinstall) Roll's daily Dependabot chores (17:30) as a launchd job
+roll-chores-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    plist=~/Library/LaunchAgents/com.pjkelly.light-labs.roll-chores.plist
+    launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.roll-chores 2>/dev/null || true
+    cp ops/com.pjkelly.light-labs.roll-chores.plist "$plist"
+    launchctl bootstrap gui/$(id -u) "$plist"
+
 # Install (or reinstall) Rush's heartbeat and phone page as launchd jobs
 rush-install:
     #!/usr/bin/env bash

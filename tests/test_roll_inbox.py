@@ -59,6 +59,23 @@ class RollInboxTest(unittest.TestCase):
             "id": "q", "data": data, "message": {"message_id": 9, "chat": {"id": chat}, "text": "rule"}}}]  # fmt: skip
         self.bot.poll_once(None, timeout=0)
 
+    def say(self, text):
+        self.wire.updates = [{"update_id": 1, "message": {"chat": {"id": PJ}, "text": text}}]
+        self.bot.poll_once(None, timeout=0)
+        return [p["text"] for m, p in self.wire.calls if m == "sendMessage"]
+
+    def test_chores_run_off_the_poll_thread_and_text_the_summary(self):
+        self.assertIn("ROLL_CHORES_REPOS is empty", self.say("/chores")[-1])
+        asked = []
+        self.bot.chores = lambda apply: asked.append(apply) or "Roll: chores done."
+        self.assertIn("On it", "".join(self.say("/chores")))
+        self.bot.job.join()
+        self.say("/chores dry")
+        self.bot.job.join()
+        self.assertEqual(asked, [True, False])
+        sent = [p["text"] for m, p in self.wire.calls if m == "sendMessage"]
+        self.assertEqual(sent.count("Roll: chores done."), 2)
+
     def test_every_rule_spares_starred_mail(self):
         for rule_id in inbox.RULES:
             self.assertIn("-is:starred", inbox.search(rule_id))

@@ -795,18 +795,27 @@ def roll_chores(args):
         return roll_chores_fixtures(store, chores)
     if args.cmd == "scorecard":
         rows = chores.scorecard(store)
-        print(f"{'tier':6} {'n':>4} {'agree':>6} {'false yes':>10} {'PJ overruled':>13}")
+        print(f"{'tier':6} {'n':>4} {'agree':>6} {'false yes':>10} {'PJ overruled':>13} "
+              f"{'calls':>6}  settled by")  # fmt: skip
         for tier in ("patch", "minor", "major"):
             r = rows.get(tier)
             if r:
+                by = ", ".join(f"{m} {n}" for m, n in sorted(r["settled"].items()))
                 print(f"{tier:6} {r['n']:>4} {r['agree'] / r['n']:>6.0%} "
-                      f"{r['false_yes']:>10} {r['overruled']:>13}")  # fmt: skip
+                      f"{r['false_yes']:>10} {r['overruled']:>13} {r['calls']:>6}  {by}")  # fmt: skip
+        return
+    if args.all:
+        text = roll.chores_all(args.apply)
+        print(text)
+        if args.text and roll.TELEGRAM_CHAT:
+            roll.bot().text(None, text)
         return
     repo = gitops.Repo(args.repo)
     brain = None if args.no_roll else chores.roll_brain(roll.CHORES_BRAIN)
     run = chores.Chores(
-        repo, store, brain, chores.big_brother(repo.path), apply=args.apply, admin=args.admin
-    )
+        repo, store, brain, chores.big_brother(repo.path), apply=args.apply, admin=args.admin,
+        ladder=roll.CHORES_LADDER,
+    )  # fmt: skip
     try:
         for number, action, note in run.run():
             print(f"#{number:<5} {action:12} {note}")
@@ -1064,6 +1073,10 @@ def main(argv=None):
         "--admin", action="store_true", help="merge past a required review (repo admin)"
     )
     chores_p.add_argument("--no-roll", action="store_true", help="skip Roll's local answer")
+    chores_p.add_argument(
+        "--all", action="store_true", help="every repo in ROLL_CHORES_REPOS (its :admin flags)"
+    )
+    chores_p.add_argument("--text", action="store_true", help="with --all: text PJ the summary")
     rocmd.add_parser("scorecard", help="Roll's chore answers against Claude's, by tier")
     rocmd.add_parser(
         "chores-fixtures", help="Claude-reviewed Dependabot PRs -> dependabot-merge fixtures"
