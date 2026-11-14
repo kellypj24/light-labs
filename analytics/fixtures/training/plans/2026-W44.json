@@ -1,0 +1,133 @@
+{
+ "glance": "fixture week",
+ "days": [
+  {
+   "date": "2026-10-26",
+   "rest": false,
+   "slot": [
+    "15:00",
+    "15:45"
+   ],
+   "type": "run",
+   "outdoor": true,
+   "title": "Easy run",
+   "items": [
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    }
+   ],
+   "why": "fixture"
+  },
+  {
+   "date": "2026-10-27",
+   "rest": false,
+   "slot": [
+    "06:00",
+    "07:00"
+   ],
+   "type": "lift",
+   "outdoor": false,
+   "title": "Strength A",
+   "items": [
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    }
+   ],
+   "why": "fixture"
+  },
+  {
+   "date": "2026-10-28",
+   "rest": false,
+   "slot": [
+    "15:00",
+    "15:45"
+   ],
+   "type": "run",
+   "outdoor": true,
+   "title": "Intervals",
+   "items": [
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    }
+   ],
+   "why": "fixture"
+  },
+  {
+   "date": "2026-10-29",
+   "rest": false,
+   "slot": [
+    "06:00",
+    "07:00"
+   ],
+   "type": "lift",
+   "outdoor": false,
+   "title": "Strength B",
+   "items": [
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    }
+   ],
+   "why": "fixture"
+  },
+  {
+   "date": "2026-10-30",
+   "rest": false,
+   "slot": [
+    "07:00",
+    "08:00"
+   ],
+   "type": "bike",
+   "outdoor": false,
+   "title": "Zone 2 ride",
+   "items": [
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    },
+    {
+     "text": "x"
+    }
+   ],
+   "why": "fixture"
+  },
+  {
+   "date": "2026-10-31",
+   "rest": true,
+   "slot": null,
+   "items": []
+  },
+  {
+   "date": "2026-11-01",
+   "rest": true,
+   "slot": null,
+   "items": []
+  }
+ ],
+ "summary": {}
+}

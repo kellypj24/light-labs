@@ -19,13 +19,16 @@ var/<robot>/queue/ ─────────▶ raw/queue_items ──┤
 var/<robot>/pairs/ ─┬───────▶ raw/shadow_pairs ─┤
 Roll's queue ───────┴─ fit ─▶ raw/calibration_maps┤
 var/training/strong/inbox/ ─▶ raw/strong_sets ──┤
-var/training/health/inbox/ ─▶ raw/health_workouts┘
+var/training/health/inbox/ ─▶ raw/health_workouts┤
+var/training/notes/ ────────▶ raw/training_notes┤
+var/training/plans/*.json ──▶ raw/training_plan_days┘
 ```
 
 Asset keys mirror DuckDB tables: `raw/<table>` for landing, `<schema>/<model>` for dbt.
 Landing assets call the same functions as the CLI (`results.ingest`,
 `results.ingest_health`, `queue_results.ingest`, `claude_results.ingest`,
-`calibration_results.ingest`, `training.strong.ingest`, `training.health.ingest`); Dagster never has its own copy of the logic. `calibration`
+`calibration_results.ingest`, `training.strong.ingest`, `training.health.ingest`, `training.record.ingest_notes`,
+`training.record.ingest_plans`); Dagster never has its own copy of the logic. `calibration`
 also exports `var/calibration/maps.json`, the file robots read instead of DuckDB. Don't add a second path (a script that loads raw.* or runs `dbt build` itself).
 
 ## Adding a raw table

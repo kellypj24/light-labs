@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: int_training_note_days
+    description: One row per counted training note row per day it covers; no note text.
+    columns:
+      - name: note_day_id
+        tests:
+          - unique
+          - not_null
+      - name: note_day
+        description: A day the row covers
+        tests:
+          - not_null
+      - name: minutes
+        description: The row's duration, on its first day only

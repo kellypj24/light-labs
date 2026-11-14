@@ -44,6 +44,9 @@ def fixture_var(root):
     shutil.copytree(ANALYTICS / "fixtures/calibration/roll", Path(root) / "roll")
     shutil.copytree(ANALYTICS / "fixtures/strong", Path(root) / "training/strong/inbox")
     shutil.copytree(ANALYTICS / "fixtures/health", Path(root) / "training/health/inbox")
+    shutil.copytree(ANALYTICS / "fixtures/training/plans", Path(root) / "training/plans")
+    (Path(root) / "training/notes").mkdir()
+    shutil.copy(ANALYTICS / "fixtures/training/notes.jsonl", Path(root) / "training/notes")
     return Path(root)
 
 
@@ -156,6 +159,24 @@ class SensorLogicTest(unittest.TestCase):
         sent.mkdir()
         (pending / "q1.json").rename(sent / "q1.json")
         self.assertNotIn(queue_fingerprint(self.var), {empty, added})
+
+    def test_record_fingerprint_waits_for_notes_and_plans_to_settle(self):
+        from light_labs.orchestration.sensors import record_fingerprint
+
+        self.assertIsNone(record_fingerprint(self.var))
+        notes = self.var / "training/notes/notes.jsonl"
+        notes.parent.mkdir(parents=True)
+        notes.write_text("{}\n")
+        wrote = datetime.fromtimestamp(notes.stat().st_mtime, UTC)
+        self.assertIsNone(record_fingerprint(self.var, now=wrote + timedelta(seconds=30)))
+        settled = record_fingerprint(self.var, now=wrote + timedelta(minutes=3))
+        self.assertIsNotNone(settled)
+        plan = self.var / "training/plans/2026-W47.json"
+        plan.parent.mkdir()
+        plan.write_text("{}")
+        os.utime(plan, (wrote.timestamp() + 1, wrote.timestamp() + 1))
+        later = record_fingerprint(self.var, now=wrote + timedelta(minutes=5))
+        self.assertNotIn(later, {None, settled})
 
     def test_sensors_hold_off_during_a_fight(self):
         from dagster import SkipReason, build_sensor_context
@@ -270,9 +291,22 @@ class FullRunTest(unittest.TestCase):
                     "mart_training_weekly",
                     "mart_training_weekly_breakdown",
                     "mart_lift_progress",
+                    "mart_training_adherence",
                 ):
                     n = con.execute(f"SELECT count(*) FROM marts.{table}").fetchone()[0]
                     self.assertGreater(n, 0, table)
+                # W44: five sessions planned; the lift on the 29th was missed, a sick day.
+                week = con.execute(
+                    "SELECT planned_sessions, completed_sessions, missed_sessions, "
+                    "missed_sick_or_away, sick_days, away_days, adherence_rate "
+                    "FROM marts.mart_training_adherence WHERE iso_week = '2026-W44'"
+                ).fetchone()
+                self.assertEqual(week, (5, 4, 1, 1, 1, 0, 0.8))  # the voided trip isn't counted
+                chores = con.execute(
+                    "SELECT chore_minutes FROM marts.mart_training_weekly "
+                    "WHERE iso_week = '2026-W43'"
+                ).fetchone()
+                self.assertEqual(chores, (90,))
                 n = con.execute("SELECT count(*) FROM staging.stg_strong_sets").fetchone()[0]
                 self.assertEqual(n, 15)
                 flags = con.execute(

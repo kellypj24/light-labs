@@ -141,6 +141,33 @@ def health_workouts(context: AssetExecutionContext) -> None:
     context.add_output_metadata({"files": files, "upserted": upserted, "rows": total})
 
 
+@asset(
+    key=AssetKey(["raw", "training_notes"]),
+    group_name="landing",
+    retry_policy=LOCKED,
+    description="PJ's notes about his week (`/note` in Rush's chat), from "
+    "var/training/notes/notes.jsonl (`lab training ingest-notes`). Snapshot replace.",
+)
+def training_notes(context: AssetExecutionContext) -> None:
+    from light_labs.training import record
+
+    context.add_output_metadata({"rows": record.ingest_notes(var=config.VAR)})
+
+
+@asset(
+    key=AssetKey(["raw", "training_plan_days"]),
+    group_name="landing",
+    retry_policy=LOCKED,
+    description="Each day of the weekly plans, from var/training/plans/*.json "
+    "(`lab training ingest-plans`). Snapshot replace.",
+)
+def training_plan_days(context: AssetExecutionContext) -> None:
+    from light_labs.training import record
+
+    files, rows = record.ingest_plans(var=config.VAR)
+    context.add_output_metadata({"files": files, "rows": rows})
+
+
 class Translator(DagsterDbtTranslator):
     """dbt models grouped by layer: staging, intermediate, marts."""
 
@@ -163,5 +190,7 @@ LANDING = [
     calibration,
     strong_sets,
     health_workouts,
+    training_notes,
+    training_plan_days,
 ]
 ALL_ASSETS = [*LANDING, analytics]

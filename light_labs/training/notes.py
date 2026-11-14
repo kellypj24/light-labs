@@ -8,7 +8,10 @@ What a row does to the plan (`apply`), all of it in code:
 
 - start and end on an upcoming day: that time leaves the day's free windows.
 - sick: the day has no free windows and the week owes one session fewer per sick day.
-- chore, ache, travel: handed to the planner as context (kind, date, minutes, effort).
+  Loads repeat last time's, in that week and the one after (`held`).
+- travel, upcoming: its days have no free windows. The sessions owed stay, capped at the
+  days that still have one.
+- chore, ache: handed to the planner as context (kind, date, minutes, effort).
 
 The raw text and each row's `what` stay on this machine. The planner's Claude call gets
 kinds, dates and durations only, as the `training/plan` gate source declares. In work
@@ -170,20 +173,26 @@ def _append(record, var=None):
         f.write(json.dumps(record) + "\n")
 
 
-def load(var=None):
-    """Notes in order, newest state: voided ones dropped, late readings folded in."""
+def history(file):
+    """Every note in a notes.jsonl, in order, late readings folded in, each with `voided`."""
     notes = {}
-    p = path(var)
-    for line in p.read_text().splitlines() if p.exists() else []:
+    file = Path(file)
+    for line in file.read_text().splitlines() if file.exists() else []:
         r = json.loads(line)
         if "void" in r:
-            notes.pop(r["void"], None)
+            if r["void"] in notes:
+                notes[r["void"]]["voided"] = True
         elif "read" in r:
             if r["read"] in notes:
                 notes[r["read"]] = {**notes[r["read"]], "rows": r["rows"], "model": r["model"]}
         else:
-            notes[r["id"]] = r
+            notes[r["id"]] = {**r, "voided": False}
     return list(notes.values())
+
+
+def load(var=None):
+    """The notes that stand: `history` without the voided ones."""
+    return [n for n in history(path(var)) if not n["voided"]]
 
 
 def add(text, now=None, var=None, parser=None, replan=False, defer=None):
@@ -253,22 +262,33 @@ def _span(row):
 def apply(ctx, rows, train, subtract):
     """(ctx with busy times and sick days out of the free windows, sessions owed,
     context lines for the planner). `subtract` is plan.subtract."""
-    busy, sick = {}, set()
+    busy, sick, away = {}, set(), set()
     for r in rows:
         if r["kind"] == "sick":
             sick.update(_span(r))
+        elif r["kind"] == "travel":
+            away.update(_span(r))
         elif r["start"] and not r["done"]:
             busy.setdefault(r["date"], []).append([r["start"], r["end"]])
     days = []
     for d in ctx["days"]:
-        free = [] if d["date"] in sick else d["free"]
+        free = [] if d["date"] in sick | away else d["free"]
         for window in busy.get(d["date"], []):
             free = subtract(free, window)
         days.append({**d, "free": free})
     dates = {d["date"] for d in days}
     owed = max(0, train - len(sick & dates))
     owed = min(owed, sum(1 for d in days if d["free"]))
-    return {**ctx, "days": days}, owed, [line(r) for r in rows if r["kind"] != "event"]
+    lines = [line(r) for r in rows if r["kind"] != "event"]
+    if held(rows):
+        lines.append("Loads are held at last time's: a sick day this week or last.")
+    return {**ctx, "days": days}, owed, lines
+
+
+def held(rows):
+    """Loads repeat instead of progressing: a sick day in the rows `rows_for` returns
+    (the planned week and the one before)."""
+    return any(r["kind"] == "sick" for r in rows)
 
 
 def line(row):
@@ -297,7 +317,13 @@ def echo(rows):
         when = _day(r["date"]) + (f" to {_day(r['end_date'])}" if r["end_date"] else "")
         size = f", {r['minutes']} min" if r["minutes"] else ""
         if r["kind"] == "sick":
-            out.append(f"{when}: sick ({r['what']}). No session; the week owes one fewer per day.")
+            out.append(
+                f"{when}: sick ({r['what']}). No session; the week owes one fewer per day "
+                "and loads repeat."
+            )
+        elif r["kind"] == "travel":
+            state = "noted" if r["done"] else "no sessions those days"
+            out.append(f"{when}: away ({r['what']}); {state}")
         elif r["start"] and not r["done"]:
             out.append(f"{when} {r['start']}–{r['end']} busy ({r['what']})")
         else:

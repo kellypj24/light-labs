@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: mart_training_adherence
+    description: One row per planned ISO week, planned sessions against logged ones, with the week's notes.
+    columns:
+      - name: week_start
+        description: Monday of the ISO week
+        tests:
+          - unique
+          - not_null
+      - name: iso_week
+        description: e.g. 2026-W47
+      - name: planned_sessions
+        description: Days the plan has a session on
+      - name: due_sessions
+        description: Planned sessions whose day has come
+      - name: completed_sessions
+        description: Planned days with any logged session that date
+      - name: missed_sessions
+        description: Due sessions with nothing logged that date
+      - name: missed_sick_or_away
+        description: Missed sessions on a day a note marks sick or travel
+      - name: unplanned_training_days
+        description: Rest days with a logged session
+      - name: sick_days
+        description: Days of the week a note marks sick
+      - name: away_days
+        description: Days of the week a note marks travel
+      - name: ache_notes
+        description: Ache notes on days of the week
+      - name: chore_minutes
+        description: Minutes of chores noted on days of the week
+      - name: adherence_rate
+        description: completed / due; NULL before the first session is due

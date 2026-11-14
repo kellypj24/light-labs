@@ -128,7 +128,20 @@ class ApplyTest(unittest.TestCase):
         out, owed, lines = self.apply([row(kind="sick", end_day="sun")], train=3)
         self.assertEqual([d["free"] for d in out["days"][:2]], [[], []])
         self.assertEqual(owed, 1)
-        self.assertEqual(lines, ["2026-11-14 to 2026-11-15 sick"])
+        self.assertEqual(lines[0], "2026-11-14 to 2026-11-15 sick")
+
+    def test_upcoming_travel_days_have_no_windows_but_the_sessions_stay_owed(self):
+        out, owed, lines = self.apply([row(kind="travel", end_day="sun")], train=1)
+        self.assertEqual([d["free"] for d in out["days"][:2]], [[], []])
+        self.assertEqual(owed, 1)
+        self.assertEqual(lines, ["2026-11-14 to 2026-11-15 travel upcoming"])
+        self.assertIn("no sessions those days", notes.echo([row(kind="travel", end_day="sun")]))
+
+    def test_a_sick_day_holds_the_loads(self):
+        self.assertTrue(notes.held([row(kind="sick")]))
+        self.assertFalse(notes.held([row(kind="ache"), row(kind="travel")]))
+        _, _, lines = self.apply([row(kind="sick")])
+        self.assertIn("Loads are held", lines[-1])
 
     def test_owed_never_exceeds_the_days_that_have_a_window(self):
         _, owed, _ = self.apply([], train=5)
@@ -153,6 +166,7 @@ class ApplyTest(unittest.TestCase):
         self.assertIn("Thu Nov 19 15:00–17:00 busy (dentist)", text)
         self.assertIn("Fri Nov 13: mowed (chore, 120 min, moderate, done)", text)
         self.assertIn("Sat Nov 14: sick (cold). No session", text)
+        self.assertIn("loads repeat", text)
         self.assertIn("/note undo", text)
         self.assertIn("couldn't find anything", notes.echo([]))
 

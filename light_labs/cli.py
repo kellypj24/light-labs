@@ -157,6 +157,19 @@ def training_ingest_health(args):
     print(f"db: {results.DB}")
 
 
+def training_ingest_notes(args):
+    from light_labs.training import record
+
+    print(f"loaded {record.ingest_notes(args.jsonl)} note rows into raw.training_notes")
+
+
+def training_ingest_plans(args):
+    from light_labs.training import record
+
+    files, rows = record.ingest_plans(args.json)
+    print(f"loaded {rows} plan days from {files} plans into raw.training_plan_days")
+
+
 def training_send(args):
     from light_labs.agents import rush
     from light_labs.training import deliver
@@ -1025,6 +1038,12 @@ def main(argv=None):
     tcmd.add_parser(
         "ingest-health", help="upsert Health workouts exports into raw.health_workouts"
     ).add_argument("json", nargs="*", help="exports to load (default: the inbox's drops)")
+    tcmd.add_parser("ingest-notes", help="reload raw.training_notes from PJ's notes").add_argument(
+        "jsonl", nargs="?", help="a notes file (default: var/training/notes/)"
+    )
+    tcmd.add_parser(
+        "ingest-plans", help="reload raw.training_plan_days from the plans' JSON"
+    ).add_argument("json", nargs="*", help="plan files (default: var/training/plans/)")
     claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
     ccmd = claude_p.add_subparsers(dest="cmd", required=True)
     cingest = ccmd.add_parser(
