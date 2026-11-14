@@ -154,17 +154,38 @@ def with_assumed_work(ctx, assume=ASSUME_WORK):
 # --- inputs ----------------------------------------------------------------------------
 
 
+LOCK_WAIT, LOCK_STEP = 180, 5  # seconds; a Dagster job holds the write lock for minutes
+
+
+def _connect(db=None, wait=LOCK_WAIT, sleep=None):
+    """var/lab.duckdb read-only. DuckDB refuses a reader while another process has the
+    file open for writing (a Dagster job), so wait for the writer instead of failing."""
+    import time
+
+    import duckdb
+
+    sleep = sleep or time.sleep
+    path, waited = str(db or config.VAR / "lab.duckdb"), 0
+    while True:
+        try:
+            return duckdb.connect(path, read_only=True)
+        except duckdb.IOException as e:
+            if "lock" not in str(e).lower() or waited >= wait:
+                raise
+            sleep(LOCK_STEP)
+            waited += LOCK_STEP
+
+
 def read_marts(db=None):
     """(lift rows of the last 26 weeks, last 6 weeks of load) from var/lab.duckdb,
     read-only."""
-    import duckdb
 
     def rows(con, sql):
         cur = con.execute(sql)
         cols = [c[0] for c in cur.description]
         return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
 
-    with duckdb.connect(str(db or config.VAR / "lab.duckdb"), read_only=True) as con:
+    with _connect(db) as con:
         lifts = rows(
             con,
             "SELECT * FROM marts.mart_lift_progress "
@@ -182,9 +203,7 @@ def read_marts(db=None):
 
 def done_days(start, before, db=None):
     """Training days logged in the week starting `start`, before `before`."""
-    import duckdb
-
-    with duckdb.connect(str(db or config.VAR / "lab.duckdb"), read_only=True) as con:
+    with _connect(db) as con:
         return con.execute(
             "SELECT count(DISTINCT session_date) FROM intermediate.int_training_sessions "
             "WHERE session_date >= ? AND session_date < ?",

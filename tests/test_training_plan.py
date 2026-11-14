@@ -185,5 +185,43 @@ class GateTest(unittest.TestCase):
         self.assertEqual(gate.carries(plan.SOURCE), set())
 
 
+class ConnectTest(unittest.TestCase):
+    def setUp(self):
+        import duckdb
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.db = Path(tmp.name) / "lab.duckdb"
+        duckdb.connect(str(self.db)).close()
+        self.duckdb, self.real = duckdb, duckdb.connect
+
+    def locked(self, times):
+        left = [times]
+
+        def connect(path, read_only=False):
+            if left[0]:
+                left[0] -= 1
+                raise self.duckdb.IOException("IO Error: Could not set lock on file")
+            return self.real(path, read_only=read_only)
+
+        return mock.patch.object(self.duckdb, "connect", connect)
+
+    def test_waits_for_a_writer_to_finish(self):
+        naps = []
+        with self.locked(2), plan._connect(self.db, sleep=naps.append) as con:
+            self.assertEqual(con.execute("SELECT 1").fetchone()[0], 1)
+        self.assertEqual(naps, [plan.LOCK_STEP] * 2)
+
+    def test_gives_up_after_the_wait(self):
+        naps = []
+        with self.locked(99), self.assertRaises(self.duckdb.IOException):
+            plan._connect(self.db, wait=plan.LOCK_STEP * 3, sleep=naps.append)
+        self.assertEqual(len(naps), 3)
+
+    def test_other_io_errors_are_not_retried(self):
+        with self.assertRaises(self.duckdb.IOException):
+            plan._connect(self.db.parent / "missing.duckdb", sleep=self.fail)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -183,10 +183,13 @@ def tick(send, now=None, planner=None, var=None):
             for kind, asked in state["requested"].items()
             if _arrived(newest[kind], datetime.fromisoformat(asked)) and loaded(kind, var)
         ]
-        for kind in arrived:
-            del state["requested"][kind]
-        if arrived and refresh(state, now, send, planner):
-            done.append(f"refreshed after {', '.join(arrived)}")
+        if arrived:
+            state.pop("error", None)
+            if refresh(state, now, send, planner):
+                done.append(f"refreshed after {', '.join(arrived)}")
+            if "error" not in state:  # a failed refresh keeps the request, so the next tick retries
+                for kind in arrived:
+                    del state["requested"][kind]
 
         missing = stale(newest, now)
         nxt = week_context.week_start(today=now.date())
