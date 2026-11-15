@@ -67,6 +67,10 @@ _Updated 2026-11-14._
   `share_digest: true`. `lab radar doctor` passes. Run Radar commands with `uv run lab
   radar ...` from the checkout: the bare `lab` tool install is unlocked (DuckDB 1.5.6,
   can't read the 2.0 database).
+- Python is pinned (`.python-version`, 3.13). `just pins` and CI fail on a project without
+  a pin or a Docker/CI version that differs; `lab python status --all` audits every
+  checkout in `~`; `python-next.yml` runs the tests on the next minor weekly
+  (docs/ci-cd.md).
 - Plans live in `docs/plans/<slug>.md`; finished ones move to
   `docs/archive/YYYY-MM-DD-<slug>.md` (claude-toolkit `plan-archive` skill).
 

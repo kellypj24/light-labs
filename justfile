@@ -13,7 +13,11 @@ check:
 
 # `test-all` runs every test module once; the two project checks then skip the modules
 # they would run again on their own.
-_check: hooks test-all evals-check-scoped (analytics-check "skip") (dagster-check "skip")
+_check: pins hooks test-all evals-check-scoped (analytics-check "skip") (dagster-check "skip")
+
+# Every project pinned to a Python version; Docker and CI agree with it (light_labs/pins.py)
+pins:
+    uv run --locked python -m light_labs.pins .
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:

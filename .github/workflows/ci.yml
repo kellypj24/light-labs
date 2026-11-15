@@ -89,6 +89,8 @@ jobs:
           enable-cache: false
       - name: Sync
         run: uv sync
+      - name: Python pins
+        run: uv run python -m light_labs.pins .
       - name: Unit tests
         run: uv run python -m unittest discover -s tests -t . -v
 
