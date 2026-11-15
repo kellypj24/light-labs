@@ -28,15 +28,44 @@ class GitError(RuntimeError):
     pass
 
 
+# A connection to GitHub that dropped: worth another try. Anything else fails at once.
+TRANSIENT = re.compile(
+    r"connection reset by|could not read from remote repository|connection timed out"
+    r"|i/o timeout|tls handshake timeout|could not resolve host|unexpected eof"
+    r"|http 50[234]|bad gateway|service unavailable",
+    re.IGNORECASE,
+)
+RETRIES, RETRY_WAIT = 3, 3  # tries; seconds before the second, doubled before the third
+NETWORK_GIT = ("fetch", "push", "pull", "ls-remote")
+
+
+def _talks_to_github(cmd):
+    if cmd[0] == "gh":
+        return True
+    return (
+        cmd[0] == "git" and next((a for a in cmd[1:] if not a.startswith("-")), "") in NETWORK_GIT
+    )
+
+
 class Repo:
-    def __init__(self, path=".", run=subprocess.run):
+    def __init__(self, path=".", run=subprocess.run, sleep=time.sleep):
         self.path = Path(path)
         self._run = run
+        self._sleep = sleep
 
     def sh(self, *cmd, check=True, env=None):
-        done = self._run(
-            list(cmd), cwd=self.path, capture_output=True, text=True, check=False, env=env
-        )
+        """Run `cmd` here. A `gh` call or a git fetch/push/pull that fails on a dropped
+        connection is tried again (RETRIES in all); callers of a call that changes
+        something on GitHub check what happened when it still fails (`land`, `ship`)."""
+        tries = RETRIES if _talks_to_github(cmd) else 1
+        for attempt in range(tries):
+            done = self._run(
+                list(cmd), cwd=self.path, capture_output=True, text=True, check=False, env=env
+            )
+            failed = (done.stderr or "") + (done.stdout or "") if done.returncode else ""
+            if not failed or attempt == tries - 1 or not TRANSIENT.search(failed):
+                break
+            self._sleep(RETRY_WAIT * 2**attempt)
         if check and done.returncode:
             raise GitError(f"{' '.join(cmd[:3])}: {(done.stderr or done.stdout).strip()}")
         return done.stdout.strip()
@@ -321,7 +350,14 @@ def ship(repo, message=None, title=None, body=None, check=None, out=sys.stdout):
     if body is None:
         commit_body = repo.git("log", "-1", "--format=%b").strip()
         body = f"## Summary\n{commit_body}\n\n## Test plan\n- `{' '.join(check)}`\n"
-    url = repo.gh("pr", "create", "--title", title or subject, "--body", body).splitlines()[-1]
+    try:
+        url = repo.gh("pr", "create", "--title", title or subject, "--body", body).splitlines()[-1]
+    except GitError:
+        # A dropped connection can lose the answer to a create that went through.
+        existing = repo.gh_json("pr", "list", "--head", branch, "--json", "number,url")
+        if not existing:
+            raise
+        url = existing[0]["url"]
     out.write(f"pr: {url}\n")
     label_prs(repo, [url.rsplit("/", 1)[-1]], out=out)
     return url
@@ -414,7 +450,14 @@ def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
         out.write(f"green ({len(checks)} checks)\n")
     # Merge and delete the branch on GitHub only: `gh pr merge --delete-branch` also
     # switches this checkout to main, which git refuses while another worktree has it.
-    repo.gh("pr", "merge", str(pr), "--squash")
+    try:
+        repo.gh("pr", "merge", str(pr), "--squash")
+    except GitError:
+        # A dropped connection can lose the answer to a merge that went through (#141):
+        # carry on with the rest of the landing instead of stopping half way.
+        state = repo.gh_json("pr", "view", str(pr), "--json", "state") or {}
+        if state.get("state") != "MERGED":
+            raise
     head = info["headRefName"]
     repo.gh("api", "-X", "DELETE", f"repos/{{owner}}/{{repo}}/git/refs/heads/{head}", check=False)
     main = repo.main_branch()
