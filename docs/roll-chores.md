@@ -44,7 +44,9 @@ rung whose MERGE stands alone (patch: haiku, minor: sonnet, major: opus).
 | HOLD | final, except from the bottom rung, whose HOLD is checked by the next one before it costs PJ's time |
 | ESCALATE, no verdict, or a failed call | the next rung is asked; from the top rung it is a HOLD for PJ |
 
-Rungs don't see each other's answers. Every rung asked is recorded on the queue item
+The PR's notes are cut at 3,000 characters; the prompt says a cut is not a reason to
+ESCALATE (the first dry run sent ruff patch bumps to opus over it), and that `deps-dev`
+with green CI is routine. Rungs don't see each other's answers. Every rung asked is recorded on the queue item
 (`ladder`: model, verdict, question, why, critique of Roll, seconds, cost), and
 `big_brother` is the rung that decided.
 
