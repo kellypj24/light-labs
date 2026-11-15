@@ -9,6 +9,9 @@ hardening plan, sized for a small public repo with one owner.
 It runs every test module once (`just test-all`, with the analytics and orchestration
 groups), so `analytics-check` and `dagster-check` skip the modules they run when called
 on their own. The mock eval runs use `-concurrency 4`, here and in CI; fights keep 1.
+When another heavy job holds the lock or the machine is busy, `just check` waits up to
+20 minutes for it (`lab heavy run --wait 20 check`) and then refuses; it never waits out work
+hours, and a kill switch stopping a running check is still a failure.
 `just install-hooks` makes them run on every commit. A hook that would rewrite a file fails
 instead of fixing, so CI can't pass on an auto-fix.
 

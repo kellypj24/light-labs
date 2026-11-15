@@ -66,6 +66,10 @@ class Busy(RuntimeError):
     """The machine is not fit to start a heavy job."""
 
 
+class Closed(Busy):
+    """Work hours: waiting would mean waiting for the evening."""
+
+
 class Overheated(RuntimeError):
     """A running heavy job was stopped by a kill switch."""
 
@@ -344,12 +348,12 @@ def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY
         yield guard
         return
     r = read()
-    why = too_busy(r, busy_processes())
+    why, closed = too_busy(r, busy_processes()), False
     if not why and name not in WORK_HOURS_OK and workhours.working():
-        why = "work hours (LAB_WORK_HOURS)"
+        why, closed = "work hours (LAB_WORK_HOURS)", True
     if why:
         if not force:
-            raise Busy(f"{why}; wait, or pass --force <reason>")
+            raise (Closed if closed else Busy)(f"{why}; wait, or pass --force <reason>")
         print(f"heavy: starting {name} anyway ({why}): {force}", flush=True)
     rec = acquire(name, lock, var=str(config.VAR), swap_start=r["swap_mb"], detail=detail or {})
     outcome = "failed"
@@ -375,9 +379,30 @@ def job(name, force="", on_stop=None, read=reading, lock=None, every=WATCH_EVERY
         release(lock)
 
 
-def run(name, cmd, force=""):
+WAIT_EVERY = 15  # seconds between tries while a job waits its turn
+
+
+def run(name, cmd, force="", wait=0, sleep=time.sleep, **job_kw):
     """Run `cmd` as heavy job `name`; a critical reading interrupts its process group,
-    then terminates it 60 s later. Returns its exit code."""
+    then terminates it 60 s later. Returns its exit code. With `wait` (seconds), a job
+    that finds the lock held or the machine busy tries again every WAIT_EVERY until it
+    can start; Busy when the wait runs out. Work hours are never waited out."""
+    deadline, told = time.monotonic() + wait, None
+    while True:
+        try:
+            return _run_once(name, cmd, force, **job_kw)
+        except Closed:
+            raise
+        except Busy as e:
+            if time.monotonic() >= deadline:
+                raise Busy(f"{e} (waited {wait // 60:.0f} min)" if wait else str(e)) from None
+            if str(e) != told:
+                told = str(e)
+                print(f"heavy: {name} is waiting: {told.split(';')[0]}", flush=True)
+            sleep(WAIT_EVERY)
+
+
+def _run_once(name, cmd, force, **job_kw):
     proc = None
 
     def stop(why):
@@ -389,7 +414,8 @@ def run(name, cmd, force=""):
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGTERM)
 
-    with job(name, force=force, on_stop=stop, detail={"cmd": " ".join(cmd)[:200]}) as guard:
+    detail = {"cmd": " ".join(cmd)[:200]}
+    with job(name, force=force, on_stop=stop, detail=detail, **job_kw) as guard:
         proc = subprocess.Popen(cmd, start_new_session=True)
         try:
             code = proc.wait()
