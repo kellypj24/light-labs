@@ -8,12 +8,9 @@
   <key>Label</key><string>com.pjkelly.light-labs.rush-remote</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/uv</string>
-    <string>run</string>
-    <string>--no-sync</string>
-    <string>--project</string>
-    <string>/Users/pjkelly/.light-labs/lab/current</string>
-    <string>lab</string>
+    <!-- The release's own entry point, not `uv run` on the current link: uv caches the
+         interpreter it found at that path and keeps starting the release before. -->
+    <string>/Users/pjkelly/.light-labs/lab/current/.venv/bin/lab</string>
     <string>rush</string>
     <string>remote</string>
   </array>
