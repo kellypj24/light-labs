@@ -68,12 +68,25 @@ class Repo:
 # --- status -----------------------------------------------------------------------------
 
 
+def latest_checks(rollup):
+    """The rollup with only the newest run of each check. A run a later push or event
+    superseded stays in the rollup as CANCELLED beside the run that replaced it; GitHub
+    judges the newest, and so do we."""
+    newest = {}
+    for i, c in enumerate(rollup or []):
+        name = c.get("name") or c.get("context")
+        key = (c.get("workflowName"), name) if name and c.get("startedAt") else i
+        if key not in newest or c["startedAt"] >= newest[key]["startedAt"]:
+            newest[key] = c
+    return list(newest.values())
+
+
 def checks_state(rollup):
     """pass / fail / pending / none from a PR's statusCheckRollup."""
     if not rollup:
         return "none"
     states = []
-    for c in rollup:
+    for c in latest_checks(rollup):
         if c.get("status") not in (None, "COMPLETED"):
             states.append("pending")
             continue
@@ -99,7 +112,7 @@ def _check_name(c):
 
 def failing_checks(rollup):
     """Names of the checks in a statusCheckRollup that failed."""
-    return [_check_name(c) for c in rollup or [] if checks_state([c]) == "fail"]
+    return [_check_name(c) for c in latest_checks(rollup) if checks_state([c]) == "fail"]
 
 
 def worktrees(repo):
@@ -336,10 +349,24 @@ def failure_report(repo, checks):
         m = re.search(r"/actions/runs/(\d+)", c.get("link", ""))
         if m:
             log = repo.gh("run", "view", m.group(1), "--log-failed", check=False)
-            tail = [line.split("\t")[-1] for line in log.splitlines()[-30:]]
-            lines += [f"--- {c['name']} (run {m.group(1)}), last lines:", *tail]
+            lines += [f"--- {c['name']} (run {m.group(1)}):", *failed_lines(log)]
             break
     return "\n".join(lines)
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_STAMP = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ")
+
+
+def failed_lines(log, before=40, after=3):
+    """The part of a failed job's log that says why: the lines up to the first
+    `##[error]`. The end of the log is the job's cleanup steps (a fixer handed only
+    those could not see the terraform error 400 lines up). No marker: the last lines."""
+    text = [_STAMP.sub("", _ANSI.sub("", line.split("\t")[-1])) for line in log.splitlines()]
+    at = next((i for i, line in enumerate(text) if line.startswith("##[error]")), None)
+    if at is None:
+        return text[-30:]
+    return text[max(0, at - before) : at + after]
 
 
 class Landed(NamedTuple):

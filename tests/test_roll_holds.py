@@ -97,6 +97,7 @@ class HoldsTest(unittest.TestCase):
     def test_each_hold_is_texted_once_and_merge_is_offered_only_on_green(self):
         self.hold()
         h = self.holds(FakeRepo())
+        self.hold("main changed 1 file(s) in t/ since CI ran; rebasing")
         self.assertEqual((h.present_new(), h.present_new()), (1, 0))
         text, buttons = self.sent[0]
         self.assertIn("pj/de#7", text)

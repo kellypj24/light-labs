@@ -140,7 +140,11 @@ class Holds:
 
     def present_new(self):
         """Text each hold PJ has not been shown; the count."""
-        fresh = [i for i in self.open() if not i.get("messages")]
+        # A hold for a rebase settles itself: the next run decides the rebased PR.
+        fresh = [
+            i for i in self.open()
+            if not i.get("messages") and not str(i["escalate"]).startswith("main changed")
+        ]  # fmt: skip
         for item in fresh:
             self.present(item)
         return len(fresh)

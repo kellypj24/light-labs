@@ -147,6 +147,16 @@ class ChoresTest(unittest.TestCase):
         self.assertEqual(self.brother.models, [])
         self.assertEqual(self.store.pending()[0]["escalate"], "CI fail")
 
+    def test_a_code_hold_that_no_longer_applies_is_decided_again_at_the_same_head(self):
+        red = pr(158, "Bump a from 1.0.0 to 1.0.1 in /a", checks=RED)
+        self.chores(FakeRepo([red])).run()
+        green = pr(158, "Bump a from 1.0.0 to 1.0.1 in /a")  # CI re-ran, same head
+        self.assertEqual(self.chores(FakeRepo([green])).run()[0][1], "merged")
+        self.assertEqual(self.store.pending(), [])
+        held = pr(9, "Bump b from 1.0.0 to 1.0.1 in /t")
+        self.chores(FakeRepo([held]), raw="HOLD: sure?\nwhy: x\nroll: y").run()
+        self.assertEqual(self.chores(FakeRepo([held])).run()[0][1], "pending")  # Claude's hold
+
     def test_transient_states_record_nothing(self):
         busy = pr(5, "Bump a from 1.0.0 to 1.0.1 in /t", checks=[{"status": "IN_PROGRESS"}])
         unknown = pr(6, "Bump b from 1.0.0 to 1.0.1 in /u")
