@@ -19,6 +19,11 @@ audience: [auto]
    (on red it prints the failing job's log tail), squash-merges on GitHub and deletes the
    branch there. Locally it moves to `main` (detached at `origin/main` when another
    worktree has `main`) and deletes the branch unless another worktree has it open.
+   Landing from a worktree, it fast-forwards the main checkout when that is on `main`
+   with no tracked changes; otherwise it says "NOT updated" and exits non-zero, as it
+   does when a redeploy fails (each target is tried; retry with `lab deploy <target>`).
+   In the lab it also names each running service the merge left on old code, with the
+   command that restarts it. Run that command; nothing restarts a service for you.
 4. Where things stand: `lab git status`, one call, not `git status`/`log`/`branch`/
    `worktree list` or `gh pr view`/`checks`. It fetches, then shows this checkout
    (branch, changes, ahead/behind main and upstream, last commit, its PR), every other

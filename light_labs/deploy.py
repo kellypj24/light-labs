@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,6 +37,22 @@ RESTART = {"hermes": ("hermes", "gateway", "restart")}
 LOCAL_FILES = (".env", "light_labs/agents/rush/memory.md")
 STAMP = "DEPLOYED.json"
 KEEP = 3
+# `git fetch` over SSH drops now and then; wait 2 s, then 4 s, before giving up.
+FETCH_TRIES, FETCH_WAIT = 3, 2
+# Long-running launchd jobs that run the main checkout: a merge touching `paths` leaves
+# them on the old code until `restart`. Rush's hourly tick is a new process each time.
+SERVICES = {
+    "rush-remote": {
+        "label": "com.pjkelly.light-labs.rush-remote",
+        "paths": ("light_labs/",),
+        "restart": "launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.rush-remote",
+    },
+    "dagster": {
+        "label": "com.pjkelly.light-labs.dagster",
+        "paths": ("light_labs/", "analytics/"),
+        "restart": "just dagster-restart",
+    },
+}
 
 
 class DeployError(RuntimeError):
@@ -50,18 +67,36 @@ def _run(*cmd, cwd=None):
     return done.stdout
 
 
+def _fetch(source, sleep=time.sleep):
+    for attempt in range(FETCH_TRIES):
+        try:
+            return _run("git", "-C", source, "fetch", "-q", "origin")
+        except DeployError:
+            if attempt == FETCH_TRIES - 1:
+                raise
+            sleep(FETCH_WAIT * 2**attempt)
+
+
 def deployed(target):
     """The stamp of <target>/current, or None before the first deploy."""
     stamp = Path(target) / "current" / STAMP
     return json.loads(stamp.read_text()) if stamp.exists() else None
 
 
-def deploy(target, ref="main", source=config.REPO, sync=True, restart=None, out=sys.stdout):
+def deploy(
+    target,
+    ref="main",
+    source=config.REPO,
+    sync=True,
+    restart=None,
+    out=sys.stdout,
+    sleep=time.sleep,
+):
     """Export origin/<ref> into a release, install it, point current at it, then run
     `restart` if the commit changed. Returns the stamp."""
     target, source = Path(target), Path(source)
     before = deployed(target)
-    _run("git", "-C", source, "fetch", "-q", "origin")
+    _fetch(source, sleep)
     sha = _run("git", "-C", source, "rev-parse", "--verify", f"origin/{ref}^{{commit}}")
     sha = sha.decode().strip()
     release = target / "releases" / sha[:12]
@@ -117,13 +152,52 @@ def _prune(target, keep):
 
 
 def redeploy_main(main, out=sys.stdout, **kw):
-    """After a merge to main: redeploy every target that tracks it. Returns the names."""
-    done = []
+    """After a merge to main: redeploy every target that tracks it. Returns the names.
+    One target failing doesn't stop the others; DeployError then names each that failed."""
+    done, failed = [], []
     for name, target in TARGETS.items():
         stamp = deployed(target)
         if stamp and stamp["ref"] == main:
-            deploy(target, main, restart=RESTART.get(name), out=out, **kw)
-            done.append(name)
+            try:
+                deploy(target, main, restart=RESTART.get(name), out=out, **kw)
+            except DeployError as e:
+                failed.append(f"{name}: {e} (retry: `lab deploy {name}`)")
+            else:
+                done.append(name)
         elif stamp:
             out.write(f"{name} stays on {stamp['ref']} ({stamp['sha'][:12]})\n")
+    if failed:
+        raise DeployError("; ".join(failed))
     return done
+
+
+def running_since(label, run=subprocess.run):
+    """When launchd job `label`'s process started, or None when it isn't running."""
+    listed = run(["launchctl", "list", label], capture_output=True, text=True, check=False)
+    pid = next(
+        (
+            line.split("=")[1].strip(" ;")
+            for line in listed.stdout.splitlines()
+            if line.strip().startswith('"PID"')
+        ),
+        None,
+    )
+    if listed.returncode or not pid:
+        return None
+    started = run(["ps", "-o", "lstart=", "-p", pid], capture_output=True, text=True, check=False)
+    try:
+        return datetime.strptime(" ".join(started.stdout.split()), "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        return None
+
+
+def stale_services(files, run=subprocess.run):
+    """[(name, started, restart command)] for the running services a merge of `files`
+    left on the old code."""
+    out = []
+    for name, service in SERVICES.items():
+        if any(f.startswith(service["paths"]) for f in files):
+            since = running_since(service["label"], run)
+            if since:
+                out.append((name, since, service["restart"]))
+    return out

@@ -209,6 +209,16 @@ class RemoteTest(unittest.TestCase):
         self.assertIn("asks about 3pm", body)
         self.assertIn("authuser=me@x#all/t1", body)
 
+    def test_a_redirect_header_never_carries_a_line_break(self):
+        sent = []
+        h = handler(self.remote).__new__(handler(self.remote))
+        h.send_response = lambda code: None
+        h.send_header = lambda k, v: sent.append((k, v))
+        h.end_headers = lambda: None
+        h.wfile = mock.Mock()
+        h._send(303, "", location="/task/a\r\nSet-Cookie: x=1")
+        self.assertEqual(dict(sent)["Location"], "/task/aSet-Cookie: x=1")
+
     def test_training_page_renders_a_week_and_links_the_others(self):
         self.remote.training_var = Path(self.tmp.name)
         self.assertIn("No plans yet", self.call("/training")[1])

@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 MAIN_NAMES = ("main", "master")
 
@@ -341,6 +342,11 @@ def failure_report(repo, checks):
     return "\n".join(lines)
 
 
+class Landed(NamedTuple):
+    files: list  # paths the PR changed
+    synced: bool  # the main checkout is on the merged commit
+
+
 def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
     info = repo.gh_json("pr", "view", str(pr), "--json", "state,headRefName,title,files")
     if info["state"] != "OPEN":
@@ -375,7 +381,35 @@ def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
     where = repo.branch() or f"origin/{main}, detached ({main} is checked out in {held})"
     gone = f"kept {head} (checked out in {kept})" if kept else f"deleted {head}"
     out.write(f"on {where}; {gone}\n")
-    return [f["path"] for f in info.get("files", [])]
+    synced = sync_main_checkout(repo, main, out)
+    return Landed([f["path"] for f in info.get("files", [])], synced)
+
+
+def sync_main_checkout(repo, main, out=sys.stdout):
+    """Fast-forward the repo's first checkout to origin/<main> after a land from another
+    worktree, when it has <main> checked out and no tracked changes. Things run from that
+    checkout, so one left behind runs the old code: say so and return False."""
+    first = repo.git("worktree", "list", "--porcelain").split("\n\n")[0]
+    path = Path(first.splitlines()[0].partition(" ")[2]).resolve()
+    if path == Path(repo.git("rev-parse", "--show-toplevel")).resolve():
+        return repo.branch() == main  # this checkout: fast-forwarded above when on main
+    there = type(repo)(path)
+    branch = there.branch()
+    if branch != main:
+        out.write(f"main checkout {path} is on {branch or 'a detached HEAD'}: NOT updated\n")
+        return False
+    if there.git("status", "--porcelain", "--untracked-files=no"):
+        out.write(f"main checkout {path} has uncommitted changes: NOT updated\n")
+        return False
+    try:
+        there.git("merge", "-q", "--ff-only", f"origin/{main}")
+    except GitError as e:
+        out.write(f"main checkout {path}: NOT updated ({e})\n")
+        return False
+    out.write(
+        f"main checkout {path}: fast-forwarded to {there.git('rev-parse', '--short', 'HEAD')}\n"
+    )
+    return True
 
 
 def _worktree_of(repo, branch):

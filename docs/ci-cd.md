@@ -6,6 +6,9 @@ hardening plan, sized for a small public repo with one owner.
 ## Local == CI
 
 `just check` runs the same pre-commit hooks, unit tests and eval-harness checks as CI, at the same versions.
+It runs every test module once (`just test-all`, with the analytics and orchestration
+groups), so `analytics-check` and `dagster-check` skip the modules they run when called
+on their own. The mock eval runs use `-concurrency 4`, here and in CI; fights keep 1.
 `just install-hooks` makes them run on every commit. A hook that would rewrite a file fails
 instead of fixing, so CI can't pass on an auto-fix.
 
@@ -14,6 +17,7 @@ instead of fixing, so CI can't pass on an auto-fix.
 | pre-commit-hooks | trailing whitespace, missing EOF newline, bad YAML/TOML/JSON, merge markers, files over 512 KB, private keys |
 | ruff (check + format --check) | lint and formatting |
 | zizmor | insecure GitHub Actions workflows: template injection, over-broad permissions, credential persistence |
+| never-committed | a staged path under `var/`, a `.env`, a `memory.md` or a DuckDB file (`lab git ship` stages with `git add -A`) |
 | gitleaks | secrets anywhere in git history, via `scripts/gitleaks.sh` (pinned version, pinned SHA-256) |
 
 ## Workflow (`.github/workflows/ci.yml`)
