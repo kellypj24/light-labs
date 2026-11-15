@@ -25,12 +25,12 @@ _Updated 2026-11-14._
   haiku first (`docs/roll-chores.md`), every rung recorded. `/chores` in Roll's chat and
   `lab roll chores --all` cover `ROLL_CHORES_REPOS`. Holds are texted with Fix it / Merge /
   Leave; a fix runs on sonnet then opus, PJ's replies are turns of the same review, and a
-  fixed PR merges only on his tap. Not yet run on a live PR. Setup still to do by PJ:
-  `ROLL_CHORES_REPOS=~/data-engineering:admin,~/light-labs` in `.env`, `just
-  roll-chores-install`, restart `rush-remote`.
-- data-engineering Dependabot backlog (28 open) is Roll's chores training set: PJ runs
-  `lab roll chores -C ~/data-engineering --apply --admin` daily until clear (one merge
-  per directory per run, 10 a day); each run grows the record, `lab roll chores-fixtures`
+  fixed PR merges only on his tap. Live since 2026-11-14: `ROLL_CHORES_REPOS` set
+  (data-engineering with `:admin`), daily run at 17:30 (`roll-chores` LaunchAgent). First
+  live run merged 10, all settled at haiku>sonnet. First live `Fix it` (data-engineering #371,
+  airbyte provider 1.3): opus pushed `86f1908`, CI green, waiting on PJ's Merge tap.
+- data-engineering Dependabot backlog is Roll's chores training set: the daily run works
+  it down (one merge per directory per run, 10 a day); each run grows the record, `lab roll chores-fixtures`
   turns it into the `dependabot-merge` stage (24 fixtures from the record so far).
 - Claude Code usage lands in `raw.claude_records` daily and feeds the `mart_claude_*`
   marts; credentials are redacted on ingest (#70).
