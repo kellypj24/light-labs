@@ -27,6 +27,9 @@ audience: [auto]
    nothing and exits non-zero), `land` deploys that commit and restarts the phone page and the Dagster daemon (not during a Dagster
    run: then it prints the command to run later). `lab deploy lab --rollback` goes back
    one release.
+   `lab git` tries a GitHub call again when the connection drops (three tries). When the
+   answer to a merge or a PR create was lost, `land` and `ship` look at what GitHub has
+   and carry on from there, so a rerun is safe either way.
 4. Where things stand: `lab git status`, one call, not `git status`/`log`/`branch`/
    `worktree list` or `gh pr view`/`checks`. It fetches, then shows this checkout
    (branch, changes, ahead/behind main and upstream, last commit, its PR), every other

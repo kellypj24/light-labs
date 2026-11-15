@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 from light_labs import gitops
 
@@ -178,6 +179,58 @@ class TidyTest(RepoCase):
         self.assertNotIn("feature/done", sh(self.path, "git", "ls-remote", "--heads", "origin"))
 
 
+class RetryTest(unittest.TestCase):
+    """Repo.sh tries a GitHub call again when the connection dropped, and only then."""
+
+    RESET = 'Post "https://api.github.com/graphql": read tcp 1.2.3.4:5->6.7.8.9:443: read: connection reset by peer'
+
+    def repo(self, *results):
+        left, self.ran, self.naps = list(results), [], []
+
+        def run(cmd, **kw):
+            self.ran.append(cmd)
+            code, text = left.pop(0)
+            return mock.Mock(
+                returncode=code, stdout="" if code else text, stderr=text if code else ""
+            )
+
+        return gitops.Repo(".", run=run, sleep=self.naps.append)
+
+    def test_a_dropped_connection_is_tried_again(self):
+        repo = self.repo(
+            (1, self.RESET), (128, "fatal: Could not read from remote repository."), (0, "ok")
+        )
+        self.assertEqual(repo.gh("pr", "checks", "9"), "ok")
+        self.assertEqual((len(self.ran), self.naps), (3, [3, 6]))
+        repo = self.repo(
+            (128, "ssh: connect to host github.com port 22: Connection timed out"), (0, "")
+        )
+        repo.git("push", "-q", "-u", "origin", "HEAD")
+        self.assertEqual(len(self.ran), 2)
+
+    def test_it_gives_up_after_the_last_try(self):
+        repo = self.repo(*[(1, self.RESET)] * gitops.RETRIES)
+        with self.assertRaisesRegex(gitops.GitError, "connection reset by peer"):
+            repo.gh("pr", "merge", "9", "--squash")
+        self.assertEqual(len(self.ran), gitops.RETRIES)
+
+    def test_other_failures_and_local_git_fail_at_once(self):
+        repo = self.repo((1, "GraphQL: Pull request is not mergeable"))
+        with self.assertRaises(gitops.GitError):
+            repo.gh("pr", "merge", "9")
+        repo = self.repo((1, "error: connection reset by a hook"))  # not a call to GitHub
+        with self.assertRaises(gitops.GitError):
+            repo.git("commit", "-m", "x")
+        repo = self.repo((1, self.RESET))
+        self.assertEqual(repo.git("-C", "x", "status", check=False), "")
+        self.assertEqual((len(self.ran), self.naps), (1, []))
+
+    def test_an_unchecked_call_is_retried_too(self):
+        repo = self.repo((1, self.RESET), (0, "[]"))
+        self.assertEqual(repo.gh("pr", "list", check=False), "[]")
+        self.assertEqual(len(self.ran), 2)
+
+
 class ShipTest(RepoCase):
     def test_refuses_on_main_and_without_a_message(self):
         with self.assertRaisesRegex(gitops.GitError, "branch first"):
@@ -207,6 +260,25 @@ class ShipTest(RepoCase):
         create = next(c for c in self.repo.calls if c[:2] == ("pr", "create"))
         self.assertEqual(create[create.index("--title") + 1], "feat: x")
         self.assertIn("Why.", create[create.index("--body") + 1])
+
+    def test_a_create_whose_answer_was_lost_finds_the_pr(self):
+        sh(self.path, "git", "checkout", "-q", "-b", "feature/x")
+        (self.path / "new").write_text("x")
+        listed = ["[]", '[{"number": 7, "url": "https://github.com/o/r/pull/7"}]']
+        self.repo.responses[("pr", "list")] = lambda args: (
+            listed.pop(0) if len(listed) > 1 else listed[0]
+        )
+
+        def create(args):
+            raise gitops.GitError("gh pr create: connection reset by peer")
+
+        self.repo.responses[("pr", "create")] = create
+        url = gitops.ship(self.repo, "feat: x", check=["true"], out=io.StringIO())
+        self.assertEqual(url, "https://github.com/o/r/pull/7")
+        listed[:] = ["[]"]  # the create never reached GitHub: the error stands
+        sh(self.path, "git", "commit", "-q", "--allow-empty", "-m", "more")
+        with self.assertRaisesRegex(gitops.GitError, "connection reset"):
+            gitops.ship(self.repo, "feat: y", check=["true"], out=io.StringIO())
 
 
 class LandTest(RepoCase):
@@ -275,21 +347,33 @@ class LandTest(RepoCase):
             gitops.wait_for_main_ci(self.repo, "abc", timeout=0, sleep=lambda s: None)
         )
 
-    def land_from(self, path):
+    def land_from(self, path, lost=None):
         """Land feature/x from `path` with GitHub faked: merge squashes it into origin's main,
-        the API call deletes origin's branch."""
+        the API call deletes origin's branch. `lost`: the merge call fails on a dropped
+        connection, "after" the merge went through or "before" it reached GitHub."""
         repo = FakeGh(path)
         repo.responses = self.repo.responses
-        self.repo.responses[("pr", "view")] = (
-            '{"state": "OPEN", "headRefName": "feature/x", "files": []}'
-        )
+        merged = []
+
+        def view(args):
+            if args[-1] == "state":
+                return json.dumps({"state": "MERGED" if merged else "OPEN"})
+            if args[-1] == "mergeCommit":
+                return "{}"
+            return '{"state": "OPEN", "headRefName": "feature/x", "files": []}'
+
+        self.repo.responses[("pr", "view")] = view
 
         def merge(args):
-            clone = self.path.parent / "github"
-            sh(self.path.parent, "git", "clone", "-q", str(self.remote), str(clone))
-            sh(clone, "git", "merge", "-q", "--squash", "origin/feature/x")
-            sh(clone, "git", "-c", "user.name=gh", "-c", "user.email=g@h", "commit", "-qm", "x")
-            sh(clone, "git", "push", "-q", "origin", "main")
+            if lost != "before":
+                clone = self.path.parent / "github"
+                sh(self.path.parent, "git", "clone", "-q", str(self.remote), str(clone))
+                sh(clone, "git", "merge", "-q", "--squash", "origin/feature/x")
+                sh(clone, "git", "-c", "user.name=gh", "-c", "user.email=g@h", "commit", "-qm", "x")
+                sh(clone, "git", "push", "-q", "origin", "main")
+                merged.append(1)
+            if lost:
+                raise gitops.GitError("gh pr merge: read: connection reset by peer")
 
         self.repo.responses[("pr", "merge")] = merge
         self.repo.responses[("api", "-X")] = lambda args: sh(
@@ -347,6 +431,22 @@ class LandTest(RepoCase):
         self.assert_gone()
         # The merge commit: GitHub's when it says, else what origin/main has reached.
         self.assertEqual(self.landed.sha, sh(self.path, "git", "rev-parse", "origin/main"))
+
+    def test_a_merge_whose_answer_was_lost_still_finishes_the_landing(self):
+        self.branch("feature/x", push=True)
+        sh(self.path, "git", "checkout", "-q", "feature/x")
+        repo, out = self.land_from(self.path, lost="after")
+        self.assertIn("merged #9", out)
+        self.assertEqual(repo.branch(), "main")
+        self.assertEqual(sh(self.path, "git", "log", "-1", "--format=%s"), "x")
+        self.assert_gone()
+
+    def test_a_merge_that_never_reached_github_fails(self):
+        self.branch("feature/x", push=True)
+        sh(self.path, "git", "checkout", "-q", "feature/x")
+        with self.assertRaisesRegex(gitops.GitError, "connection reset"):
+            self.land_from(self.path, lost="before")
+        self.assertIn("feature/x", sh(self.path, "git", "ls-remote", "--heads", "origin"))
 
     def test_a_branch_open_in_another_worktree_is_kept(self):
         self.branch("feature/x", push=True)
