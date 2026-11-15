@@ -98,7 +98,7 @@ def cmd_heavy(args):
     if not cmd:
         sys.exit("lab heavy run <job> -- <command>")
     try:
-        sys.exit(heavy.run(args.job, cmd, force=args.force))
+        sys.exit(heavy.run(args.job, cmd, force=args.force, wait=args.wait * 60))
     except heavy.Busy as e:
         sys.exit(f"heavy: not starting {args.job}: {e}")
 
@@ -1010,6 +1010,13 @@ def parser():
     hrun_p = hcmd.add_parser("run", help="run a command as a heavy job: lab heavy run fight -- ...")
     hrun_p.add_argument("job", help="name in the lock: fight, check, ...")
     hrun_p.add_argument("--force", default="", metavar="REASON", help="start on a busy machine")
+    hrun_p.add_argument(
+        "--wait",
+        type=float,
+        default=0,
+        metavar="MINUTES",
+        help="wait this long for the lock or a busy machine instead of refusing",
+    )
     hrun_p.add_argument("command", nargs=argparse.REMAINDER)
     queue_p = sub.add_parser("queue", help="robots' approval queues in DuckDB")
     qcmd = queue_p.add_subparsers(dest="cmd", required=True)

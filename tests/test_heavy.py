@@ -144,6 +144,37 @@ class JobTest(unittest.TestCase):
             with heavy.job("fight", force="PJ said so", read=lambda: COOL, lock=self.lock):
                 self.assertEqual(heavy.holder(self.lock)["job"], "fight")
 
+    def test_a_waiting_job_starts_once_the_lock_is_free(self):
+        heavy.acquire("fight", self.lock)
+        naps = []
+
+        def nap(seconds):
+            naps.append(seconds)
+            if len(naps) == 2:
+                heavy.release(self.lock)
+
+        code = heavy.run("check", ["true"], wait=600, sleep=nap, read=lambda: COOL, lock=self.lock)
+        self.assertEqual((code, naps), (0, [heavy.WAIT_EVERY] * 2))
+        self.assertIsNone(heavy.holder(self.lock))
+
+    def test_a_wait_runs_out_and_work_hours_are_not_waited_out(self):
+        heavy.acquire("fight", self.lock)
+        with self.assertRaisesRegex(heavy.Busy, r"fight .* \(waited 0 min\)"):
+            heavy.run("check", ["true"], wait=1e-9, read=lambda: COOL, lock=self.lock)
+        with self.assertRaisesRegex(heavy.Busy, "fight") as refused:
+            heavy.run("check", ["true"], read=lambda: COOL, lock=self.lock)
+        self.assertNotIn("waited", str(refused.exception))
+        heavy.release(self.lock)
+        naps = []
+        with (
+            mock.patch.object(heavy.workhours, "working", return_value=True),
+            self.assertRaises(heavy.Closed),
+        ):
+            heavy.run(
+                "fight", ["true"], wait=600, sleep=naps.append, read=lambda: COOL, lock=self.lock
+            )
+        self.assertEqual(naps, [])
+
     def test_refuses_a_busy_machine_unless_forced(self):
         busy = heavy.job("fight", read=lambda: at(load_1=14.0), lock=self.lock)
         with self.assertRaisesRegex(heavy.Busy, "load 14.0"), busy:

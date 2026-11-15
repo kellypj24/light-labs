@@ -38,8 +38,10 @@ _Updated 2026-11-14._
   daily at 08:00 (`hermes cron list`).
 - Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
   `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
-  memory; Dagster's sensors skip while it is held. A container VM blocks only above 50%
-  CPU, so an idle Docker Desktop doesn't. `lab heavy status` before starting one;
+  memory; Dagster's sensors skip while it is held. `just check` waits up to 20 minutes
+  for the lock or a busy machine before refusing (`lab heavy run --wait`); the others
+  refuse at once. A container VM blocks only above 50% CPU, so an idle Docker Desktop
+  doesn't. `lab heavy status` before starting one;
   `lab heavy watch` or Rush's `/lab` page follow one live. Both list loaded Ollama
   models (size, time to unload): a model is wired memory and the usual cause of a pressure
   pause outside any heavy job (Rush's hourly mail triage loads `qwen2.5:14b`).
@@ -127,8 +129,7 @@ _Updated 2026-11-14._
 
 - Harness, from the 2026-11-14 review: (8) run Rush, the remote page, Dagster and
   Roll's chores from `lab deploy` releases, so a merge goes live only on deploy;
-  (9) a path-scoped or parallel local check, and a heavy job that queues instead of
-  refusing; (10) redeploy only after main's CI is green, or require PRs up to date.
+  (9) a path-scoped or parallel local check (the waiting heavy job is built); (10) redeploy only after main's CI is green, or require PRs up to date.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today

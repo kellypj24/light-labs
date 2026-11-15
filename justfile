@@ -6,9 +6,10 @@ export DBT_PROFILES_DIR := justfile_directory() / "analytics"
 default: check
 
 # Pre-commit hooks (hygiene, ruff, zizmor, gitleaks) + unit tests, as a heavy job
-# (`lab heavy`: refuses a busy machine, holds ~/.cache/light-labs/heavy.lock; a no-op in CI)
+# (`lab heavy`: holds ~/.cache/light-labs/heavy.lock; waits up to 20 minutes for another
+# heavy job or a busy machine, then refuses; a no-op in CI)
 check:
-    uv run --locked lab heavy run check -- just _check
+    uv run --locked lab heavy run --wait 20 check -- just _check
 
 # `test-all` runs every test module once; the two project checks then skip the modules
 # they would run again on their own.
