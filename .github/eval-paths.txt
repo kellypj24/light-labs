@@ -15,4 +15,5 @@ light_labs/config.py
 light_labs/core/
 light_labs/evals/
 pyproject.toml
+scripts/eval-paths.sh
 uv.lock

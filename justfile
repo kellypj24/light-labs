@@ -13,7 +13,7 @@ check:
 
 # `test-all` runs every test module once; the two project checks then skip the modules
 # they would run again on their own.
-_check: hooks test-all evals-check (analytics-check "skip") (dagster-check "skip")
+_check: hooks test-all evals-check-scoped (analytics-check "skip") (dagster-check "skip")
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
@@ -35,6 +35,20 @@ install-hooks:
 fix:
     uvx ruff@0.17.0 check --fix .
     uvx ruff@0.17.0 format .
+
+# evals-check when this branch changes a path in .github/eval-paths.txt: the question
+# CI's Changes job asks of a PR. Committed, uncommitted and untracked files all count;
+# with nothing changed against origin/main (or no origin/main) it runs.
+evals-check-scoped:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    base=$(git merge-base HEAD origin/main 2>/dev/null) || base=""
+    files=$( [ -z "$base" ] || { git diff --name-only "$base"; git ls-files --others --exclude-standard; } )
+    if [ -z "$files" ] || echo "$files" | scripts/eval-paths.sh; then
+        just evals-check
+    else
+        echo "evals-check skipped: nothing under .github/eval-paths.txt changed (CI skips it too)"
+    fi
 
 # Eval harness: format, vet, unit tests, and a smoke run against the mock contestant
 evals-check:
