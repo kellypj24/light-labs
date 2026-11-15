@@ -157,8 +157,11 @@ class Holds:
             green = (item.get("facts") or {}).get("checks") == "pass"
         head = f"{t['repo']}#{t['pr']}: {item['context']}"
         text = f"{head}\n{note}" if note else f"Roll: on hold. {head}\nWhy: {item['escalate']}"
+        fixed = any(d.get("commit") for d in item.get("dialogue") or [])
         buttons = []
-        if spent:
+        if green and fixed:
+            pass  # the fix is in and CI passed: merge it, leave it, or reply for a change
+        elif spent:
             buttons.append((f"Try {self.top}", f"hold:top:{item['id']}"))
             text += (
                 "\n\nOr open Heeler and tell Auto: "
@@ -166,6 +169,7 @@ class Holds:
             )
         else:
             buttons.append(("Fix it", f"hold:fix:{item['id']}"))
+        spent = spent and not (green and fixed)
         if green:
             buttons.append(("Merge", f"hold:merge:{item['id']}"))
         buttons.append(("Leave", f"hold:leave:{item['id']}"))
@@ -233,13 +237,17 @@ class Holds:
             if self.turns_today() >= DAILY_CAP:
                 return self.present(item, f"Roll: {DAILY_CAP} Claude turns in 24 hours, my cap. "
                                     "Tomorrow, or finish it in Heeler.", spent=True)  # fmt: skip
+            pr = repo.gh_json("pr", "view", str(item["target"]["pr"]), "--json", FIELDS)
+            if pr["state"] != "OPEN":
+                return self.send(f"Roll: #{pr['number']} is {pr['state'].lower()} already.", [])
+            fixed = any(d.get("commit") for d in item.get("dialogue") or [])
+            if not asked and fixed and chores.facts(pr)["checks"] == "pass":
+                return self.present(item, "Roll: the fix is in and CI is green. Merge it, or "
+                                    "reply to this message to ask for a change.", green=True)  # fmt: skip
             if not asked and auto >= MAX_ATTEMPTS:
                 return self.present(item, f"Roll: {MAX_ATTEMPTS} attempts and not merged.",
                                     spent=True)  # fmt: skip
             model = self.top if top else self.ladder[min(auto, len(self.ladder) - 1)]
-            pr = repo.gh_json("pr", "view", str(item["target"]["pr"]), "--json", FIELDS)
-            if pr["state"] != "OPEN":
-                return self.send(f"Roll: #{pr['number']} is {pr['state'].lower()} already.", [])
             kind, text, ask, commit = self._ask(repo, item, pr, model, auto=not asked)
             item = self.store.get(item_id)
             said = f"claude:{model} {kind.lower()}: {text}" + (f"\nQuestion: {ask}" if ask else "")

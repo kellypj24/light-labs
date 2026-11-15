@@ -112,7 +112,12 @@ class HoldsTest(unittest.TestCase):
         self.assertEqual(self.claude.models, ["sonnet"])
         self.assertIn(("git", "push", "-q", "origin", "HEAD:dependabot/b"), repo.calls)
         self.assertIn("CI is green", self.sent[-1][0])
-        self.assertEqual(self.sent[-1][1], ["Fix it", "Merge", "Leave"])
+        self.assertEqual(self.sent[-1][1], ["Merge", "Leave"])
+        repo.checks = GREEN
+        self.holds(repo).turn(item["id"])  # a second tap on a fixed, green PR asks nobody
+        self.assertEqual(self.claude.models, [])
+        self.assertIn("the fix is in", self.sent[-1][0])
+        self.assertEqual(self.sent[-1][1], ["Merge", "Leave"])
         now = self.store.get(item["id"])
         self.assertEqual(now["target"]["head"], "sha1")
         (turn,) = now["dialogue"]

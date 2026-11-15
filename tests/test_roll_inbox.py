@@ -106,6 +106,18 @@ class RollInboxTest(unittest.TestCase):
         self.assertIn("That one is settled already.", sent)
         self.assertEqual(self.bot.buttons("x", [("Fix it", "hold:fix:ab12")]), len(self.wire.calls))
 
+    def test_a_tap_too_old_to_acknowledge_still_counts(self):
+        wire = self.wire
+
+        def opener(req, timeout=None):
+            if req.full_url.endswith("/answerCallbackQuery"):
+                raise OSError("HTTP Error 400: Bad Request")
+            return wire(req, timeout)
+
+        self.bot.opener = opener
+        self.press("apply:promotions-30d")
+        self.assertEqual(len(self.gmail.relabels), 1)
+
     def test_every_rule_spares_starred_mail(self):
         for rule_id in inbox.RULES:
             self.assertIn("-is:starred", inbox.search(rule_id))

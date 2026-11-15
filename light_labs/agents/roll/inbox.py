@@ -118,6 +118,12 @@ class RollBot(Telegram):
             }
         return self.call("sendMessage", **params)["message_id"]
 
+    def _ack(self, q):
+        """Stop the button's spinner. Telegram refuses this (400) for a tap older than a
+        few seconds, which is every tap made while the Mac slept; the tap still counts."""
+        with contextlib.suppress(OSError):
+            self.call("answerCallbackQuery", callback_query_id=q["id"], text="On it")
+
     def _spawn(self, work):
         """Claude's reviews take minutes; a thread keeps the chat answering."""
 
@@ -241,11 +247,11 @@ class RollBot(Telegram):
                 return None
             action, _, rule_id = (q.get("data") or "").partition(":")
             if action == "hold" and self.holds:
-                self.call("answerCallbackQuery", callback_query_id=q["id"], text="On it")
+                self._ack(q)
                 return self._hold(*rule_id.split(":", 1))
             if rule_id not in RULES:
                 return None
-            self.call("answerCallbackQuery", callback_query_id=q["id"], text="On it")
+            self._ack(q)
             msg = q.get("message", {})
             if action == "apply":
                 n = self.apply(rule_id)
