@@ -870,7 +870,8 @@ def cmd_python(args):
         sys.exit(1 if result["errors"] else 0)
     canonical = Path(pins.__file__).read_text()
     failed = False
-    for repo in sorted(p.parent for p in Path.home().glob("*/.git")):
+    # A worktree's .git is a file; it is its repo's branch, not another repo to pin.
+    for repo in sorted(p.parent for p in Path.home().glob("*/.git") if p.is_dir()):
         if not any(Path(f).name == "pyproject.toml" for f in pins.tracked(repo)):
             continue
         result = pins.audit(repo, newest=newest)
