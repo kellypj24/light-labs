@@ -172,12 +172,15 @@ def audit(root, newest=None, today=None):
                 errors.append(f"{name}: Python {v} is not a pin, a floor or the next minor")
     # With no version named, CI runs the pin (uv reads .python-version).
     ran |= set(pins.values())
+    untested = {}
     for where, low in sorted(floors.items()):
         if where in pins and low < pins[where] and low not in ran:
-            warnings.append(
-                f"{where}: requires-python floor {show(low)} is never run "
-                f"(pin {show(pins[where])}); nothing shows it still works"
-            )
+            untested.setdefault((low, pins[where]), []).append(where)
+    for (low, pin), places in sorted(untested.items()):
+        warnings.append(
+            f"requires-python floor {show(low)} is never run (pin {show(pin)}), so nothing "
+            f"shows it still works: {', '.join(places)}"
+        )
     return {"pins": {k: show(v) for k, v in pins.items()}, "errors": errors, "warnings": warnings}
 
 
