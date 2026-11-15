@@ -78,7 +78,10 @@ commit of `origin`, exported with `git archive` and installed with `uv sync --lo
 | `hermes` (`~/.hermes/lab`) | Hermes's lab MCP server | `hermes gateway restart` |
 | `radar` (docs/radar.md) | Radar's scheduled sync and digest | none |
 
-The `lab` jobs set `LAB_VAR` to the checkout's `var/`, so data, logs and `var/lab.duckdb`
+The `lab` jobs start `current/.venv/bin/lab` itself (its shebang names that release's
+interpreter). `uv run --project <target>/current` is not safe there: uv caches the
+interpreter it found at that path and goes on starting the release before; Hermes's
+`--directory` resolves the link first and is unaffected. The `lab` jobs set `LAB_VAR` to the checkout's `var/`, so data, logs and `var/lab.duckdb`
 stay where they were; `.env` and Rush's `memory.md` are linked from the main checkout.
 A branch open in the checkout, or a merge not yet deployed, never reaches a service.
 

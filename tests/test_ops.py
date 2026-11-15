@@ -30,8 +30,9 @@ class LaunchdJobsTest(unittest.TestCase):
         )
         for _, job in self.jobs():
             argv = job["ProgramArguments"]
-            if "lab" in argv:
-                args = argv[argv.index("lab") + 1 :]
+            names = [Path(a).name for a in argv]
+            if "lab" in names:
+                args = argv[names.index("lab") + 1 :]
                 try:
                     with redirect_stderr(io.StringIO()) as err:
                         cli.parser().parse_args(args)
@@ -55,8 +56,15 @@ class LaunchdJobsTest(unittest.TestCase):
                 self.assertNotIn(f"{PJ_HOME}/light-labs", argv)  # never the live checkout
                 env = job["EnvironmentVariables"]
                 self.assertEqual(env["LAB_VAR"], f"{PJ_HOME}/light-labs/var")
-                # A release's environment is built once at deploy; a tick never installs.
-                self.assertTrue("--no-sync" in argv or env.get("UV_NO_SYNC") == "1", argv)
+                # `lab` jobs start the release's entry point itself: `uv run` on the
+                # `current` link starts the release before (uv caches the interpreter by
+                # path). Dagster's recipe runs uv from inside the release and never syncs.
+                if "uv" in [Path(a).name for a in argv]:
+                    self.fail(f"uv run on the current link: {argv}")
+                if Path(argv[0]).name == "just":
+                    self.assertEqual(env.get("UV_NO_SYNC"), "1")
+                else:
+                    self.assertIn(f"{current}/.venv/bin/lab", argv)
 
     def test_the_services_a_merge_reports_are_the_keep_alive_jobs(self):
         keep_alive = {job["Label"] for _, job in self.jobs() if job.get("KeepAlive")}
