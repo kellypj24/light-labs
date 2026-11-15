@@ -79,6 +79,9 @@ def request_host(value):
 ID = re.compile(r"(?=[^.]*[A-Za-z0-9])[A-Za-z0-9_.:-]{1,200}")
 
 
+AFTER_KEEP = 20  # redirects waiting to be followed; one browser, so a handful at most
+
+
 def path_parts(raw_path):
     """The path's segments, or None when a second segment isn't a plain id."""
     parts = urlparse(raw_path).path.strip("/").split("/")
@@ -325,9 +328,20 @@ class Remote:
         self.tick = tick  # callable running one heartbeat
         self.usage_db = None  # var/lab.duckdb; tests point it elsewhere
         self.training_var = None  # var/; tests point it elsewhere
+        self.after = {}  # redirect token -> (path to show, flash), newest last
         self.ticking = threading.Lock()
         self.lab_lock = threading.Lock()
         self.lab_cache = (float("-inf"), None)
+
+    def came_back(self, path, flash):
+        """Where a POST's redirect goes: /after/<token>. The Location header holds only
+        that random token, never text from the request (response splitting); the page and
+        the flash wait here for the browser's GET."""
+        token = secrets.token_urlsafe(8)
+        self.after[token] = (path, flash)
+        for old in list(self.after)[:-AFTER_KEEP]:
+            del self.after[old]
+        return f"/after/{token}"
 
     # --- actions
     def approve(self, item_id, text):
@@ -566,8 +580,7 @@ def handler(remote):
             data = body.encode()
             self.send_response(code)
             if location:
-                # A header value never holds a line break (response splitting).
-                self.send_header("Location", "".join(location.splitlines()))
+                self.send_header("Location", location)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Security-Policy", CSP)
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -583,7 +596,11 @@ def handler(remote):
             parts = path_parts(self.path)
             if parts is None:
                 return self._send(404, page("Not found", "<p>Not found.</p>"))
-            flash = parse_qs(urlparse(self.path).query).get("done", [None])[0]
+            flash = None
+            if len(parts) == 2 and parts[0] == "after":
+                # A followed redirect shows its page once; a reload falls back to the queue.
+                back, flash = remote.after.pop(parts[1], ("/", None))
+                parts = path_parts(back)
             try:
                 if parts == [""]:
                     body = remote.queue_page()
@@ -669,7 +686,7 @@ def handler(remote):
                     done, back = f"Rejected {parts[1]}", "/"
                 elif len(parts) == 2 and parts[0] == "comment" and text.strip():
                     remote.comment(parts[1], text)
-                    done, back = "Posted", f"/task/{quote(parts[1], safe='')}"
+                    done, back = "Posted", f"/task/{parts[1]}"
                 elif len(parts) == 2 and parts[0] == "reply" and text.strip():
                     remote.reply(parts[1], text)
                     done, back = "Sent", "/inbox"
@@ -679,7 +696,7 @@ def handler(remote):
                 return self._send(404, page("Gone", "<p>Already handled.</p>"))
             except OSError as e:
                 return self._send(502, page("Edge unreachable", f"<p>{esc(str(e))}</p>"))
-            self._send(303, "", location=f"{back}?done={quote(done, safe='')}")
+            self._send(303, "", location=remote.came_back(back, done))
 
     return Handler
 
