@@ -859,6 +859,29 @@ def roll_chores(args):
         print("Roll sat this one out (a fight is running, work hours, or no brain set)")
 
 
+def cmd_python(args):
+    """Python pins for one repo (exit 1 on an error) or, with --all, every checkout in ~."""
+    from light_labs import pins
+
+    newest = pins.newest_stable()
+    if not args.all:
+        result = pins.audit(args.repo, newest=newest)
+        pins.report(Path(args.repo).resolve(), result)
+        sys.exit(1 if result["errors"] else 0)
+    canonical = Path(pins.__file__).read_text()
+    failed = False
+    for repo in sorted(p.parent for p in Path.home().glob("*/.git")):
+        if not any(Path(f).name == "pyproject.toml" for f in pins.tracked(repo)):
+            continue
+        result = pins.audit(repo, newest=newest)
+        copy = repo / ".github/scripts/check_python_pins.py"
+        if copy.is_file() and copy.read_text() != canonical:
+            result["errors"].append(f"{copy.relative_to(repo)} differs from light_labs/pins.py")
+        pins.report(repo, result)
+        failed = failed or bool(result["errors"])
+    sys.exit(1 if failed else 0)
+
+
 def cmd_git(args):
     from light_labs import gitops
 
@@ -983,6 +1006,16 @@ def parser():
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
     sub.add_parser("mcp", help="serve the lab over MCP on stdio (read-only; for Hermes)")
+    python_p = sub.add_parser("python", help="Python version pins (any repo)")
+    pycmd = python_p.add_subparsers(dest="cmd", required=True)
+    pins_p = pycmd.add_parser(
+        "status",
+        help="pins, Docker and CI versions that differ, and what lags (light_labs/pins.py)",
+    )
+    pins_p.add_argument("-C", dest="repo", default=".", help="repository (default: cwd)")
+    pins_p.add_argument(
+        "--all", action="store_true", help="every git checkout in ~ with a pyproject.toml"
+    )
     deploy_p = sub.add_parser("deploy", help="run a service from a fixed commit of origin")
     deploy_p.add_argument("target", choices=["hermes", "radar"])
     deploy_p.add_argument("--ref", default="main", help="branch on origin (default: main)")
@@ -1213,7 +1246,7 @@ def main(argv=None):
     if args.robot == "radar":
         raise SystemExit(radar_cli.run(args))
     if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board",
-                      "heavy"):  # fmt: skip
+                      "heavy", "python"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude", "calibration", "training"):

@@ -49,6 +49,23 @@ Hardening applied to every workflow:
   sync, at well under a minute.
 - `timeout-minutes` on every job; superseded PR runs are cancelled.
 
+## Python version (`.python-version`, `light_labs/pins.py`)
+
+`.python-version` pins the interpreter (major.minor) for uv, CI and every worktree;
+`requires-python` stays the supported floor. `just pins` (part of `just check`, and a step
+in the Tests job) fails when a `pyproject.toml` has no pin above it, the pin falls outside
+`requires-python`, a Dockerfile's Python differs from it (unless the line above its `FROM`
+says `# pin-exempt: <reason>`), or a workflow names a Python that is neither the pin, the
+floor nor the next minor. It warns about end-of-life versions, a pin two minors behind the
+newest stable, and a floor nothing runs.
+
+`lab python status --all` runs the same audit over every checkout in `~` and flags a
+repo's own copy (`.github/scripts/check_python_pins.py`, for repos that can't depend on
+the lab) that has drifted from `light_labs/pins.py`.
+
+Moving the pin: `python-next.yml` runs the unit tests weekly on the minor after the pin.
+When it is green, change `.python-version`, `uv lock`, and the CI matrix in one PR.
+
 ## Claude review (`claude-code-review.yml`, `claude.yml`)
 
 | Workflow | Runs |
