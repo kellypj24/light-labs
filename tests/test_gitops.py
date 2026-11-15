@@ -434,6 +434,21 @@ class ChecksStateTest(unittest.TestCase):
     def test_rollup(self):
         ok = {"status": "COMPLETED", "conclusion": "SUCCESS"}
         self.assertEqual(gitops.checks_state([]), "none")
+        log = "\n".join(
+            f"job\tUNKNOWN STEP\t2026-11-09T09:16:18.1Z {line}"
+            for line in ["setup", "\x1b[31mError: Invalid resource type", "##[error]exit 1",
+                         *["cleanup"] * 50]
+        )  # fmt: skip
+        got = gitops.failed_lines(log)
+        self.assertEqual(got[:3], ["setup", "Error: Invalid resource type", "##[error]exit 1"])
+        self.assertEqual(len(got), 5)
+        self.assertEqual(len(gitops.failed_lines("a\tb\tno marker")), 1)
+        run = {"name": "title", "workflowName": "PR title", "status": "COMPLETED"}
+        old = {**run, "conclusion": "CANCELLED", "startedAt": "2026-11-08T18:45:24Z"}
+        new = {**run, "conclusion": "SUCCESS", "startedAt": "2026-11-08T18:46:25Z"}
+        self.assertEqual(gitops.checks_state([old, new]), "pass")  # superseded, not failed
+        self.assertEqual(gitops.failing_checks([new, old]), [])
+        self.assertEqual(gitops.checks_state([{**new, "conclusion": "FAILURE"}, old]), "fail")
         self.assertEqual(gitops.checks_state([ok]), "pass")
         self.assertEqual(gitops.checks_state([ok, {"status": "IN_PROGRESS"}]), "pending")
         bad = {"status": "COMPLETED", "conclusion": "FAILURE"}

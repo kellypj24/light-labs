@@ -237,7 +237,7 @@ class Chores:
         merged_dirs, out = set(), []
         for pr in sorted(prs, key=lambda p: p["number"]):
             f = facts(pr)
-            if (f["number"], f["head"]) in decided:
+            if (f["number"], f["head"]) in decided and not self.cleared(f):
                 out.append((f["number"], "pending", "decided at this commit; waiting on PJ"))
                 continue
             if f["directory"] in merged_dirs:
@@ -329,6 +329,24 @@ class Chores:
             if (call == "MERGE" and (i >= floor or confirmed)) or (call == "HOLD" and i):
                 break
         return rungs
+
+    def cleared(self, f):
+        """True when the hold on this PR at this head was code's (CI red, not mergeable,
+        main moved) and code no longer holds it: CI was re-run, or main stopped moving.
+        Those holds are resolved and the PR is decided again. A hold big brother made, or
+        one with a fix on it, stays PJ's."""
+        mine = [
+            i for i in self.store.pending()
+            if i.get("kind") == KIND and i["target"] == {"repo": self.name, "pr": f["number"],
+                                                         "head": f["head"]}
+        ]  # fmt: skip
+        if not mine or transient(f) or blocked(f) or self.stale(f):
+            return False
+        if any((i.get("big_brother") or {}).get("model") or i.get("dialogue") for i in mine):
+            return False
+        for i in mine:
+            self.store.resolve(i["id"], "rejected", reason=TRANSIENT_REASON)
+        return True
 
     def foreign(self, f):
         """Why a PR someone else pushed to never merges here, or None: with a commit from
