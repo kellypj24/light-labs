@@ -29,6 +29,10 @@ class DeployCase(unittest.TestCase):
         self.commit("app.py", "v1")
         (self.src / ".env").write_text("LAB_EDGE=x\n")
         self.target = root / "deployed"
+        # No test restarts a real service: one that tests a restart names its own command.
+        restarts = mock.patch.dict(deploy.RESTART, {}, clear=True)
+        restarts.start()
+        self.addCleanup(restarts.stop)
 
     def commit(self, name, text, branch="main"):
         (self.src / name).write_text(text)
@@ -186,7 +190,10 @@ class DeployCase(unittest.TestCase):
         self.deploy()
         verified = self.commit("app.py", "v2")
         newer = self.commit("app.py", "v3")  # merged while v2's CI ran; not verified yet
-        with mock.patch.dict(deploy.TARGETS, {"hermes": self.target}, clear=True):
+        with (
+            mock.patch.dict(deploy.TARGETS, {"hermes": self.target}, clear=True),
+            mock.patch.dict(deploy.RESTART, {}, clear=True),  # never the real gateway
+        ):
             out = io.StringIO()
             deploy.redeploy_main("main", out=out, sha=verified, source=self.src, sync=False)
             self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
