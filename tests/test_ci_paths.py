@@ -40,6 +40,21 @@ class EvalPathsTest(unittest.TestCase):
         missing = [f for f in files if not any(f.startswith(p) for p in listed)]
         self.assertEqual(missing, [], f"add these to {PATHS.name}")
 
+    def test_the_shared_script_answers_for_ci_and_the_local_check(self):
+        script = config.REPO / "scripts" / "eval-paths.sh"
+
+        def needed(*names):
+            done = subprocess.run([script], input="\n".join(names) + "\n", text=True, check=False)
+            return done.returncode == 0
+
+        self.assertTrue(needed("docs/training.md", "light_labs/core/gate.py"))
+        self.assertTrue(needed("uv.lock"))
+        self.assertFalse(needed("docs/training.md", "light_labs/training/notes.py", "STATUS.md"))
+        self.assertFalse(needed("docs/evals/readme.md"))  # a prefix, anchored at the start
+        self.assertFalse(needed("uvxlock"))  # the dot is a dot
+        for user in (".github/workflows/ci.yml", "justfile"):
+            self.assertIn("scripts/eval-paths.sh", (config.REPO / user).read_text())
+
     def test_listed_paths_exist(self):
         for p in prefixes():
             self.assertTrue((config.REPO / p).exists(), p)

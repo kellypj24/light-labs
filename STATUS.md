@@ -129,7 +129,7 @@ _Updated 2026-11-14._
 
 - Harness, from the 2026-11-14 review: (8) run Rush, the remote page, Dagster and
   Roll's chores from `lab deploy` releases, so a merge goes live only on deploy;
-  (9) a path-scoped or parallel local check (the waiting heavy job is built); (10) redeploy only after main's CI is green, or require PRs up to date.
+  (9) done as decided: the local check skips the eval harness when CI would; (10) redeploy only after main's CI is green, or require PRs up to date.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today
