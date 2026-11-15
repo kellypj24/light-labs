@@ -90,7 +90,7 @@ queue *args="":
 # Dagster's analytics_job, recorded in var/dagster beside the sensors' runs
 analytics: _dagster-home
     cd analytics && uv run --locked --group orchestration dbt parse --quiet
-    DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster job execute -m light_labs.orchestration -j analytics_job
+    DAGSTER_HOME="${LAB_VAR:-$PWD/var}/dagster" uv run --locked --group orchestration dagster job execute -m light_labs.orchestration -j analytics_job
 
 # dbt lint and build on the synthetic fixtures in a throwaway database (same as CI)
 analytics-check tests="run":
@@ -117,12 +117,12 @@ analytics-check tests="run":
 # Dagster UI (http://127.0.0.1:3000). The sensors run in the daemon, not here.
 dagster: _dagster-home
     cd analytics && uv run --locked --group orchestration dbt parse --quiet
-    DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster-webserver -m light_labs.orchestration -p 3000
+    DAGSTER_HOME="${LAB_VAR:-$PWD/var}/dagster" uv run --locked --group orchestration dagster-webserver -m light_labs.orchestration -p 3000
 
 # The daemon that ticks the sensors; launchd runs this (ops/com.pjkelly.light-labs.dagster.plist)
 dagster-daemon: _dagster-home
     cd analytics && uv run --locked --group orchestration dbt parse --quiet
-    DAGSTER_HOME="$PWD/var/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
+    DAGSTER_HOME="${LAB_VAR:-$PWD/var}/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
 
 # Install (or reinstall) Roll's daily Dependabot chores (17:30) as a launchd job
 roll-chores-install:
@@ -144,8 +144,9 @@ rush-install:
         launchctl bootstrap gui/$(id -u) "$plist"
     done
 
-# Install and start the daemon's launchd job
+# Install (or reinstall) and start the daemon's launchd job
 dagster-install: _dagster-home
+    launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.dagster 2>/dev/null || true
     cp ops/com.pjkelly.light-labs.dagster.plist ~/Library/LaunchAgents/
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.dagster.plist
 
@@ -166,8 +167,9 @@ resume +jobs="rush":
 bots:
     @scripts/bots.sh status all
 
+# var/ is the checkout's, or LAB_VAR's when a deployed release runs these recipes
 _dagster-home:
-    mkdir -p var/dagster && cp ops/orchestration/dagster.yaml var/dagster/
+    mkdir -p "${LAB_VAR:-var}/dagster" && cp ops/orchestration/dagster.yaml "${LAB_VAR:-var}/dagster/"
 
 # Definitions load, invariants hold, and a full run over the fixtures builds
 dagster-check tests="run":

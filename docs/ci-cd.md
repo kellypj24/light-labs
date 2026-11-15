@@ -66,6 +66,29 @@ the lab) that has drifted from `light_labs/pins.py`.
 Moving the pin: `python-next.yml` runs the unit tests weekly on the minor after the pin.
 When it is green, change `.python-version`, `uv lock`, and the CI matrix in one PR.
 
+## Deploys (`lab deploy`, `light_labs/deploy.py`)
+
+Nothing scheduled runs the checkout. Each target is a directory of releases, one per
+commit of `origin`, exported with `git archive` and installed with `uv sync --locked`;
+`current` points at the live one and the last 3 are kept.
+
+| Target | Runs | Restart on a new commit |
+|---|---|---|
+| `lab` (`~/.light-labs/lab`) | Rush's hourly tick and phone page, the Dagster daemon, Roll's chores (`ops/*.plist`) | The phone page; the Dagster daemon unless a run is in progress. The tick and chores are a new process each time |
+| `hermes` (`~/.hermes/lab`) | Hermes's lab MCP server | `hermes gateway restart` |
+| `radar` (docs/radar.md) | Radar's scheduled sync and digest | none |
+
+The `lab` jobs set `LAB_VAR` to the checkout's `var/`, so data, logs and `var/lab.duckdb`
+stay where they were; `.env` and Rush's `memory.md` are linked from the main checkout.
+A branch open in the checkout, or a merge not yet deployed, never reaches a service.
+
+`lab git land` redeploys every target on `main` after a merge and exits non-zero when one
+fails. `lab deploy <target> --ref <branch>` tries a branch; `lab deploy <target> --rollback`
+goes back to the release before the current one, until the next deploy.
+
+Changing a plist: `just rush-install`, `just roll-chores-install` or `just dagster-install`
+copies it from the checkout and reloads the job.
+
 ## Claude review (`claude-code-review.yml`, `claude.yml`)
 
 | Workflow | Runs |

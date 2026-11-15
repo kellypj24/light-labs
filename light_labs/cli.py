@@ -905,8 +905,12 @@ def cmd_git(args):
                 except deploy.DeployError as e:
                     print(f"redeploy failed: {e}")
                     problems.append("a redeploy failed")
-                for name, since, restart in deploy.stale_services(landed.files):
-                    print(f"{name} has run the old code since {since:%b %-d %H:%M}: `{restart}`")
+                if deploy.deployed(deploy.TARGETS["lab"]) is None:
+                    # Before `lab deploy lab`: the services still run the main checkout.
+                    for name, since, restart in deploy.stale_services(landed.files):
+                        print(
+                            f"{name} has run the old code since {since:%b %-d %H:%M}: `{restart}`"
+                        )
             if problems:
                 sys.exit(f"lab git land: merged, but {' and '.join(problems)}")
         elif args.cmd == "tidy":
@@ -935,10 +939,14 @@ def _is_lab(repo):
 def cmd_deploy(args):
     from light_labs import deploy
 
+    target, restart = deploy.TARGETS[args.target], deploy.RESTART.get(args.target)
     try:
-        deploy.deploy(
-            deploy.TARGETS[args.target], args.ref, restart=deploy.RESTART.get(args.target)
-        )
+        if args.rollback:
+            deploy.rollback(target, restart=restart)
+        else:
+            deploy.deploy(
+                target, args.ref, restart=restart, groups=deploy.GROUPS.get(args.target, ())
+            )
     except deploy.DeployError as e:
         sys.exit(f"lab deploy {args.target}: {e}")
 
@@ -1017,8 +1025,11 @@ def parser():
         "--all", action="store_true", help="every git checkout in ~ with a pyproject.toml"
     )
     deploy_p = sub.add_parser("deploy", help="run a service from a fixed commit of origin")
-    deploy_p.add_argument("target", choices=["hermes", "radar"])
+    deploy_p.add_argument("target", choices=["lab", "hermes", "radar"])
     deploy_p.add_argument("--ref", default="main", help="branch on origin (default: main)")
+    deploy_p.add_argument(
+        "--rollback", action="store_true", help="switch back to the release before this one"
+    )
     sub.add_parser("skills", help="list skills, their audience and which robots carry them")
     evals_p = sub.add_parser("evals", help="eval results in DuckDB (var/lab.duckdb)")
     ecmd = evals_p.add_subparsers(dest="cmd", required=True)

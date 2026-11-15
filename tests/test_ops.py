@@ -43,6 +43,17 @@ class LaunchdJobsTest(unittest.TestCase):
             else:
                 self.fail(f"unknown kind of job: {argv}")
 
+    def test_each_job_runs_the_deployed_release_against_the_checkouts_var(self):
+        current = str(deploy.TARGETS["lab"] / "current")
+        for _, job in self.jobs():
+            argv = job["ProgramArguments"]
+            self.assertTrue(any(a == current or a.startswith(current + "/") for a in argv), argv)
+            self.assertNotIn("/Users/pjkelly/light-labs", argv)  # never the live checkout
+            env = job["EnvironmentVariables"]
+            self.assertEqual(env["LAB_VAR"], "/Users/pjkelly/light-labs/var")
+            # A release's environment is built once at deploy; a tick never installs.
+            self.assertTrue("--no-sync" in argv or env.get("UV_NO_SYNC") == "1", argv)
+
     def test_the_services_a_merge_reports_are_the_keep_alive_jobs(self):
         keep_alive = {job["Label"] for _, job in self.jobs() if job.get("KeepAlive")}
         self.assertEqual({s["label"] for s in deploy.SERVICES.values()}, keep_alive)

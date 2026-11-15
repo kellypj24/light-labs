@@ -52,8 +52,9 @@ A new dbt model needs no orchestration change: `dbt parse` puts it in the manife
   That's safe only because they launch landing + dbt jobs, never a fight; a sensor that
   launches anything heavier starts `STOPPED` and PJ turns it on. Schedules set
   `execution_timezone="UTC"`.
-- After merging orchestration changes, `just dagster-restart`: the daemon keeps the code
-  it started with.
+- The daemon runs the deployed release (`lab deploy lab`), not the checkout. `lab git
+  land` redeploys and restarts it; when a run is in progress it says so instead, and
+  `just dagster-restart` once the run ends loads the new code.
 - Every sensor returns `SkipReason` while `live_fight()` finds a fight: one heavy job at
   a time on the laptop.
 - Make requests idempotent: a cursor for "what I've already handled", and a `run_key`

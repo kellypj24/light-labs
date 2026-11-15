@@ -278,7 +278,7 @@ every dbt node as an asset, built with `dbt build`. `just analytics` executes
 ```bash
 just dagster-install   # once: the daemon under launchd, so the sensors tick
 just dagster           # UI at http://127.0.0.1:3000; state in var/dagster
-just dagster-restart   # after merging orchestration changes
+just dagster-restart   # after a deploy that found a run in progress
 ```
 
 | Sensor | Runs | When |
