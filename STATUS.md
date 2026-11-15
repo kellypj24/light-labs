@@ -15,6 +15,10 @@ _Updated 2026-11-14._
   personal mail waits for 17:00. Outside work hours each local model unloads when its
   step ends. Rush ticks at :07. `RUSH_MAIL_MODEL=llama3.1:8b` in `.env` meanwhile (one
   ~5 GB model per tick instead of 8b + 14b).
+- Scheduled jobs (Rush's tick and phone page, Dagster, Roll's chores) run the `lab`
+  release in `~/.light-labs/lab`, not the checkout (`lab deploy lab`, docs/ci-cd.md
+  Deploys); data stays in the checkout's `var/`. `lab git land` deploys each merge;
+  `lab deploy lab --rollback` goes back one release.
 - Rush (DLN-100) live under launchd: hourly tick, board and mail triage, Telegram and the
   tailnet remote page. Escalations drafted by Auto, approved by PJ. muse's LOOP thread
   (`task_fb2e059c5a8bd362`) muted 2026-11-09: 73 of ~88 drafts since 11-03, all rejected.
@@ -131,9 +135,8 @@ _Updated 2026-11-14._
   effort, and an upcoming chore counts once its day passes without a "done". Weight by
   effort, or require a done note? Not decided.
 
-- Harness, from the 2026-11-14 review: (8) run Rush, the remote page, Dagster and
-  Roll's chores from `lab deploy` releases, so a merge goes live only on deploy;
-  (9) done as decided: the local check skips the eval harness when CI would; (10) redeploy only after main's CI is green, or require PRs up to date.
+- Harness, from the 2026-11-14 review: (10) redeploy only after main's CI is green
+  (decided 2026-11-15, not built yet).
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today

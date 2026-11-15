@@ -8,6 +8,11 @@ release. Branch work in the checkout can't reach them; only a deploy can.
     lab deploy hermes                 origin/main
     lab deploy hermes --ref my-branch a branch, until main is deployed again
     lab deploy radar                  Radar's scheduled jobs (no service to restart)
+    lab deploy lab                    Rush's tick and phone page, Dagster, Roll's chores
+    lab deploy lab --rollback         back to the release before the current one
+
+The `lab` target's launchd jobs (ops/*.plist) run <target>/current with LAB_VAR pointing at
+the checkout's var/, so data stays where it was and only the code comes from a release.
 
 `lab git land` redeploys a target that tracks main. A target on a branch stays put.
 A deploy that changes the commit restarts the target's service (RESTART), since a running
@@ -27,13 +32,15 @@ from pathlib import Path
 from light_labs import config
 
 TARGETS = {
+    # Rush (hourly tick, phone page), the Dagster daemon and Roll's chores: ops/*.plist.
+    "lab": Path.home() / ".light-labs" / "lab",
     "hermes": Path.home() / ".hermes" / "lab",
     # Relationship Radar's scheduled sync and digest (light_labs/radar/schedule.py).
     "radar": Path.home() / ".relationship-radar" / "lab",
 }
-# The gateway drains in-flight runs, then launchd starts it on the new release.
-RESTART = {"hermes": ("hermes", "gateway", "restart")}
-# Git-ignored files a release reads from the checkout; linked so edits there stay live.
+# Dependency groups a target's release installs on top of the project's own.
+GROUPS = {"lab": ("orchestration",)}
+# Git-ignored files a release reads from the main checkout; linked so edits there stay live.
 LOCAL_FILES = (".env", "light_labs/agents/rush/memory.md")
 STAMP = "DEPLOYED.json"
 KEEP = 3
@@ -53,6 +60,31 @@ SERVICES = {
         "restart": "just dagster-restart",
     },
 }
+
+
+def restart_lab(out=sys.stdout, run=subprocess.run, ps=None):
+    """Put the `lab` target's long-running jobs on the new release. The phone page
+    restarts; the Dagster daemon too unless a run is in progress (a restart would kill
+    it), in which case this says how to do it later. A job launchd hasn't loaded is left."""
+    from light_labs.core import heavy
+
+    running = any(heavy.busy_kind(line) == "Dagster run" for line in heavy.processes(ps)[0])
+    for name, service in SERVICES.items():
+        if running_since(service["label"], run) is None:
+            out.write(f"{name}: not running, left alone\n")
+        elif name == "dagster" and running:
+            out.write(f"dagster: a run is in progress; `{service['restart']}` when it ends\n")
+        else:
+            target = f"gui/{os.getuid()}/{service['label']}"
+            done = run(["launchctl", "kickstart", "-k", target], capture_output=True, check=False)
+            if done.returncode:
+                raise DeployError(f"could not restart {name}: `{service['restart']}`")
+            out.write(f"restarted: {name}\n")
+
+
+# What a deploy that changes the commit runs: a command, or a function of `out`.
+# The Hermes gateway drains in-flight runs, then launchd starts it on the new release.
+RESTART = {"hermes": ("hermes", "gateway", "restart"), "lab": restart_lab}
 
 
 class DeployError(RuntimeError):
@@ -83,6 +115,32 @@ def deployed(target):
     return json.loads(stamp.read_text()) if stamp.exists() else None
 
 
+def _restart(restart, out):
+    if callable(restart):
+        restart(out)
+        return "services"
+    _run(*restart)
+    return " ".join(restart)
+
+
+def _main_checkout(source):
+    """The repo's first checkout: where .env and Rush's memory live. `source` may be a
+    worktree of it, which has neither."""
+    listed = _run("git", "-C", source, "worktree", "list", "--porcelain").decode()
+    return Path(listed.splitlines()[0].partition(" ")[2])
+
+
+def _link_local(release, source):
+    """Link LOCAL_FILES from the main checkout into `release`, replacing a missing or
+    dangling link (a release built from a worktree that has since been removed)."""
+    home = _main_checkout(source)
+    for rel in LOCAL_FILES:
+        link = release / rel
+        if (home / rel).exists() and not link.exists():
+            link.unlink(missing_ok=True)
+            link.symlink_to(home / rel)
+
+
 def deploy(
     target,
     ref="main",
@@ -91,6 +149,7 @@ def deploy(
     restart=None,
     out=sys.stdout,
     sleep=time.sleep,
+    groups=(),
 ):
     """Export origin/<ref> into a release, install it, point current at it, then run
     `restart` if the commit changed. Returns the stamp."""
@@ -104,10 +163,11 @@ def deploy(
         _run("rm", "-rf", release)
         release.mkdir(parents=True)
         try:
-            _build(release, sha, source, sync)
+            _build(release, sha, source, sync, groups)
         except BaseException:
             _run("rm", "-rf", release)
             raise
+    _link_local(release, source)
     stamp = {"ref": ref, "sha": sha, "deployed_at": datetime.now(UTC).isoformat(timespec="seconds")}
     (release / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
     link = target / "current.new"
@@ -117,26 +177,58 @@ def deploy(
     _prune(target, keep=release)
     out.write(f"deployed {ref} {sha[:12]} -> {target / 'current'}\n")
     if restart and (before or {}).get("sha") != sha:
-        try:
-            _run(*restart)
-        except (DeployError, OSError) as e:
-            raise DeployError(f"deployed {sha[:12]}, but `{' '.join(restart)}` failed: {e}") from e
-        out.write(f"restarted: {' '.join(restart)}\n")
+        _restart_after(restart, sha, out)
     return stamp
 
 
-def _build(release, sha, source, sync):
+def _restart_after(restart, sha, out):
+    try:
+        what = _restart(restart, out)
+    except (DeployError, OSError) as e:
+        name = "the restart" if callable(restart) else f"`{' '.join(restart)}`"
+        raise DeployError(f"deployed {sha[:12]}, but {name} failed: {e}") from e
+    if not callable(restart):
+        out.write(f"restarted: {what}\n")
+
+
+def rollback(target, restart=None, out=sys.stdout):
+    """Point <target>/current at the release deployed before it, and restart. The next
+    deploy (or `lab git land`, for a target on main) moves it forward again."""
+    target = Path(target)
+    current = (target / "current").resolve()
+
+    def when(p):
+        return json.loads((p / STAMP).read_text())["deployed_at"]
+
+    older = [
+        p
+        for p in (target / "releases").iterdir()
+        if (p / STAMP).exists() and p.resolve() != current and when(p) < when(current)
+    ]
+    if not older:
+        raise DeployError("no earlier release to go back to")
+    release = max(older, key=when)
+    link = target / "current.new"
+    link.unlink(missing_ok=True)
+    link.symlink_to(release.relative_to(target))
+    os.replace(link, target / "current")
+    stamp = json.loads((release / STAMP).read_text())
+    out.write(f"rolled back to {stamp['ref']} {stamp['sha'][:12]} -> {target / 'current'}\n")
+    if restart:
+        _restart_after(restart, stamp["sha"], out)
+    return stamp
+
+
+def _build(release, sha, source, sync, groups=()):
     archive = _run("git", "-C", source, "archive", "--format=tar", sha)
     with tempfile.TemporaryFile() as tmp:
         tmp.write(archive)
         tmp.seek(0)
         with tarfile.open(fileobj=tmp) as tar:
             tar.extractall(release, filter="data")
-    for rel in LOCAL_FILES:
-        if (source / rel).exists():
-            (release / rel).symlink_to(source / rel)
     if sync:
-        _run("uv", "sync", "--locked", "--no-dev", "--project", release)
+        extra = [arg for group in groups for arg in ("--group", group)]
+        _run("uv", "sync", "--locked", "--no-dev", *extra, "--project", release)
 
 
 def _prune(target, keep):
@@ -159,7 +251,14 @@ def redeploy_main(main, out=sys.stdout, **kw):
         stamp = deployed(target)
         if stamp and stamp["ref"] == main:
             try:
-                deploy(target, main, restart=RESTART.get(name), out=out, **kw)
+                deploy(
+                    target,
+                    main,
+                    restart=RESTART.get(name),
+                    out=out,
+                    groups=GROUPS.get(name, ()),
+                    **kw,
+                )
             except DeployError as e:
                 failed.append(f"{name}: {e} (retry: `lab deploy {name}`)")
             else:

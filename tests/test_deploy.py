@@ -107,6 +107,81 @@ class DeployCase(unittest.TestCase):
         self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
         self.assertTrue(marker.exists())
 
+    def test_a_deploy_from_a_worktree_links_the_main_checkouts_files(self):
+        wt = self.src.parent / "wt"
+        sh(self.src, "git", "worktree", "add", "-q", "--detach", str(wt))
+        deploy.deploy(self.target, source=wt, sync=False, out=io.StringIO())
+        env = self.target / "current" / ".env"
+        self.assertEqual(env.resolve(), (self.src / ".env").resolve())
+        # A link left dangling by an older deploy is repaired on the next one.
+        env.unlink()
+        env.symlink_to(wt / ".env")
+        self.assertFalse(env.exists())
+        deploy.deploy(self.target, source=wt, sync=False, out=io.StringIO())
+        self.assertEqual(env.read_text(), "LAB_EDGE=x\n")
+
+    def test_a_targets_groups_are_installed_with_the_release(self):
+        real, synced = deploy._run, []
+
+        def run(*cmd, cwd=None):
+            if cmd[:2] == ("uv", "sync"):
+                synced.append(cmd)
+                return b""
+            return real(*cmd, cwd=cwd)
+
+        with mock.patch.object(deploy, "_run", run):
+            deploy.deploy(
+                self.target, source=self.src, out=io.StringIO(), groups=("orchestration",)
+            )
+        self.assertEqual(
+            synced[0][2:7], ("--locked", "--no-dev", "--group", "orchestration", "--project")
+        )
+
+    def test_rollback_goes_to_the_release_before_and_restarts(self):
+        self.deploy()
+        with self.assertRaisesRegex(deploy.DeployError, "no earlier release"):
+            deploy.rollback(self.target, out=io.StringIO())
+        self.commit("app.py", "v2")
+        with mock.patch.object(deploy, "datetime") as clock:  # stamps a second apart
+            clock.now.return_value.isoformat.return_value = "2099-01-01T00:00:00+00:00"
+            self.deploy()
+        self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
+        restarted, out = [], io.StringIO()
+        stamp = deploy.rollback(self.target, restart=restarted.append, out=out)
+        self.assertEqual((self.target / "current" / "app.py").read_text(), "v1")
+        self.assertEqual(restarted, [out])
+        self.assertIn(f"rolled back to main {stamp['sha'][:12]}", out.getvalue())
+        self.deploy()  # the next deploy of main moves forward again
+        self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
+
+    def lab_restart(self, ps, loaded=("rush-remote", "dagster")):
+        calls = []
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            out = ""
+            if cmd[:2] == ["launchctl", "list"]:
+                name = cmd[2].rsplit(".", 1)[1]
+                out = '{\n\t"PID" = 77;\n};\n' if name in loaded else "{\n};\n"
+            elif cmd[0] == "ps":
+                out = "Mon Nov  9 21:27:23 2026\n"
+            return mock.Mock(returncode=0, stdout=out)
+
+        out = io.StringIO()
+        deploy.restart_lab(out, run=run, ps=ps)
+        return [c[3].rsplit(".", 1)[1] for c in calls if c[:2] == ["launchctl", "kickstart"]], out
+
+    def test_the_lab_restart_spares_a_dagster_run_and_unloaded_jobs(self):
+        idle = "  1  0.0 /usr/bin/python3 dagster-daemon run\n"
+        self.assertEqual(self.lab_restart(idle)[0], ["rush-remote", "dagster"])
+        busy = idle + " 9  50.0 /x/python -m dagster api execute_run {}\n"
+        kicked, out = self.lab_restart(busy)
+        self.assertEqual(kicked, ["rush-remote"])
+        self.assertIn("a run is in progress; `just dagster-restart`", out.getvalue())
+        kicked, out = self.lab_restart(idle, loaded=("dagster",))
+        self.assertEqual(kicked, ["dagster"])
+        self.assertIn("rush-remote: not running, left alone", out.getvalue())
+
     def test_one_failed_target_does_not_stop_the_next(self):
         self.deploy()
         other = self.target.parent / "other"

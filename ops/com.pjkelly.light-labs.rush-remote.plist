@@ -10,8 +10,9 @@
   <array>
     <string>/opt/homebrew/bin/uv</string>
     <string>run</string>
+    <string>--no-sync</string>
     <string>--project</string>
-    <string>/Users/pjkelly/light-labs</string>
+    <string>/Users/pjkelly/.light-labs/lab/current</string>
     <string>lab</string>
     <string>rush</string>
     <string>remote</string>
@@ -19,6 +20,7 @@
   <!-- launchd's PATH lacks /usr/local/bin, where the tailscale CLI lives. -->
   <key>EnvironmentVariables</key>
   <dict>
+    <key>LAB_VAR</key><string>/Users/pjkelly/light-labs/var</string>
     <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>RunAtLoad</key><true/>

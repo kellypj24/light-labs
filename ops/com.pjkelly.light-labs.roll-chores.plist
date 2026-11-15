@@ -12,8 +12,9 @@
     <string>-i</string>
     <string>/opt/homebrew/bin/uv</string>
     <string>run</string>
+    <string>--no-sync</string>
     <string>--project</string>
-    <string>/Users/pjkelly/light-labs</string>
+    <string>/Users/pjkelly/.light-labs/lab/current</string>
     <string>lab</string>
     <string>roll</string>
     <string>chores</string>
@@ -24,6 +25,7 @@
   <!-- launchd's PATH lacks gh and claude. -->
   <key>EnvironmentVariables</key>
   <dict>
+    <key>LAB_VAR</key><string>/Users/pjkelly/light-labs/var</string>
     <key>PATH</key><string>/Users/pjkelly/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>StartCalendarInterval</key>

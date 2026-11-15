@@ -22,8 +22,10 @@ audience: [auto]
    Landing from a worktree, it fast-forwards the main checkout when that is on `main`
    with no tracked changes; otherwise it says "NOT updated" and exits non-zero, as it
    does when a redeploy fails (each target is tried; retry with `lab deploy <target>`).
-   In the lab it also names each running service the merge left on old code, with the
-   command that restarts it. Run that command; nothing restarts a service for you.
+   In the lab the scheduled jobs run the `lab` release, not a checkout: `land` deploys
+   the merge and restarts the phone page and the Dagster daemon (not during a Dagster
+   run: then it prints the command to run later). `lab deploy lab --rollback` goes back
+   one release.
 4. Where things stand: `lab git status`, one call, not `git status`/`log`/`branch`/
    `worktree list` or `gh pr view`/`checks`. It fetches, then shows this checkout
    (branch, changes, ahead/behind main and upstream, last commit, its PR), every other
