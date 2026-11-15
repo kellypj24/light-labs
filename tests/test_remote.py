@@ -180,7 +180,7 @@ class RemoteTest(unittest.TestCase):
         self.assertTrue(remote_mod.ID.fullmatch("msg_01.Ab-c:9"))
         self.assertFalse(remote_mod.ID.fullmatch("..."))
 
-    def test_redirect_location_is_quoted(self):
+    def test_a_redirect_flash_names_the_item_without_it_reaching_the_header(self):
         item = self.store.enqueue("reply", {"to": ["muse"]}, "d", "ctx")
         req = urllib.request.Request(
             f"{self.base}/reject/{item['id']}",
@@ -189,8 +189,10 @@ class RemoteTest(unittest.TestCase):
         req.add_header("Tailscale-User-Login", PJ)
         with self.assertRaises(urllib.error.HTTPError) as e:
             urllib.request.build_opener(NoRedirect).open(req)
-        self.assertEqual(e.exception.headers["Location"], f"/?done=Rejected%20{item['id']}")
+        location = e.exception.headers["Location"]
         e.exception.close()
+        self.assertNotIn(item["id"], location)
+        self.assertIn(f"Rejected {item['id']}", self.call(location)[1])
 
     def test_tick_runs_in_the_background(self):
         self.assertEqual(self.call("/tick", {"token": self.remote.token})[0], 303)
@@ -209,15 +211,29 @@ class RemoteTest(unittest.TestCase):
         self.assertIn("asks about 3pm", body)
         self.assertIn("authuser=me@x#all/t1", body)
 
-    def test_a_redirect_header_never_carries_a_line_break(self):
-        sent = []
-        h = handler(self.remote).__new__(handler(self.remote))
-        h.send_response = lambda code: None
-        h.send_header = lambda k, v: sent.append((k, v))
-        h.end_headers = lambda: None
-        h.wfile = mock.Mock()
-        h._send(303, "", location="/task/a\r\nSet-Cookie: x=1")
-        self.assertEqual(dict(sent)["Location"], "/task/aSet-Cookie: x=1")
+    def test_a_redirect_carries_a_token_and_shows_its_page_once(self):
+        req = urllib.request.Request(
+            self.base + "/comment/t1",
+            data=urllib.parse.urlencode({"token": self.remote.token, "text": "hi"}).encode(),
+            headers={"Tailscale-User-Login": PJ},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.build_opener(NoRedirect).open(req)
+        location = e.exception.headers["Location"]
+        e.exception.close()
+        self.assertRegex(location, r"^/after/[A-Za-z0-9_-]{8,}$")
+        self.assertNotIn("t1", location)  # nothing from the request reaches the header
+        code, body = self.call(location)
+        self.assertEqual(code, 200)
+        self.assertIn('<div class="flash">Posted</div>', body)
+        self.assertNotIn("flash", self.call(location)[1].split("<main>")[1][:40])  # once only
+
+    def test_old_redirect_tokens_are_dropped(self):
+        first = self.remote.came_back("/", "one")
+        for i in range(remote_mod.AFTER_KEEP):
+            self.remote.came_back("/", str(i))
+        self.assertEqual(len(self.remote.after), remote_mod.AFTER_KEEP)
+        self.assertNotIn(first.rsplit("/", 1)[1], self.remote.after)
 
     def test_training_page_renders_a_week_and_links_the_others(self):
         self.remote.training_var = Path(self.tmp.name)
