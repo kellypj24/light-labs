@@ -225,6 +225,56 @@ class LandTest(RepoCase):
         self.assertIn("AssertionError: 1 != 2", out.getvalue())
         self.assertFalse(any(c[:2] == ("pr", "merge") for c in self.repo.calls))
 
+    def answers(self, key, *replies):
+        """`gh <key...>` answers each reply in turn, then repeats the last."""
+        left = list(replies)
+
+        def answer(args):
+            reply = left.pop(0) if len(left) > 1 else left[0]
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        self.repo.responses[key] = answer
+
+    def test_checks_not_reported_yet_are_waited_for(self):
+        self.answers(
+            ("pr", "checks"),
+            gitops.GitError("gh pr checks: no checks reported on the 'feature/x' branch"),
+            '[{"name": "Tests", "bucket": "pending", "link": ""}]',
+            '[{"name": "Tests", "bucket": "pass", "link": ""}]',
+        )
+        naps = []
+        checks = gitops.wait_for_checks(self.repo, 9, sleep=naps.append)
+        self.assertEqual((checks[0]["bucket"], len(naps)), ("pass", 2))
+        self.answers(("pr", "checks"), gitops.GitError("gh pr checks: HTTP 502"))
+        with self.assertRaisesRegex(gitops.GitError, "502"):
+            gitops.wait_for_checks(self.repo, 9, sleep=naps.append)
+
+    def test_main_ci_is_waited_for_on_the_merge_commit(self):
+        self.answers(
+            ("run", "list"),
+            "[]",
+            '[{"status": "in_progress", "conclusion": ""}]',
+            '[{"status": "completed", "conclusion": "success"}]',
+        )
+        naps = []
+        self.assertEqual(gitops.wait_for_main_ci(self.repo, "abc123", sleep=naps.append), "success")
+        self.assertEqual(len(naps), 2)
+        asked = next(c for c in self.repo.calls if c[:2] == ("run", "list"))
+        self.assertEqual(asked[asked.index("--commit") + 1], "abc123")
+        self.assertIn("push", asked)
+        self.answers(("run", "list"), '[{"status": "completed", "conclusion": "cancelled"}]')
+        self.assertEqual(gitops.wait_for_main_ci(self.repo, "abc123"), "cancelled")
+
+    def test_main_ci_that_never_appears_or_never_ends_is_none(self):
+        self.answers(("run", "list"), "[]")
+        self.assertIsNone(gitops.wait_for_main_ci(self.repo, "abc", appear=0, sleep=lambda s: None))
+        self.answers(("run", "list"), '[{"status": "queued", "conclusion": ""}]')
+        self.assertIsNone(
+            gitops.wait_for_main_ci(self.repo, "abc", timeout=0, sleep=lambda s: None)
+        )
+
     def land_from(self, path):
         """Land feature/x from `path` with GitHub faked: merge squashes it into origin's main,
         the API call deletes origin's branch."""
@@ -295,6 +345,8 @@ class LandTest(RepoCase):
         self.assertEqual(sh(self.path, "git", "log", "-1", "--format=%s"), "x")
         self.assertIn("on main; deleted feature/x", out)
         self.assert_gone()
+        # The merge commit: GitHub's when it says, else what origin/main has reached.
+        self.assertEqual(self.landed.sha, sh(self.path, "git", "rev-parse", "origin/main"))
 
     def test_a_branch_open_in_another_worktree_is_kept(self):
         self.branch("feature/x", push=True)

@@ -82,8 +82,11 @@ The `lab` jobs set `LAB_VAR` to the checkout's `var/`, so data, logs and `var/la
 stay where they were; `.env` and Rush's `memory.md` are linked from the main checkout.
 A branch open in the checkout, or a merge not yet deployed, never reaches a service.
 
-`lab git land` redeploys every target on `main` after a merge and exits non-zero when one
-fails. `lab deploy <target> --ref <branch>` tries a branch; `lab deploy <target> --rollback`
+After a merge `lab git land` waits for CI's push run on the merge commit (the post-merge
+backstop) and then redeploys every target on `main` to that commit, not to whatever
+`main` has reached since. Red, cancelled (a newer merge replaced a queued run) or
+missing CI deploys nothing and exits non-zero, as does a failed deploy; a target already
+at or past the commit is left. `--no-wait` skips both waits. `lab deploy <target> --ref <branch>` tries a branch; `lab deploy <target> --rollback`
 goes back to the release before the current one, until the next deploy.
 
 Changing a plist: `just rush-install`, `just roll-chores-install` or `just dagster-install`

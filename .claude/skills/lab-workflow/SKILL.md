@@ -22,8 +22,9 @@ audience: [auto]
    Landing from a worktree, it fast-forwards the main checkout when that is on `main`
    with no tracked changes; otherwise it says "NOT updated" and exits non-zero, as it
    does when a redeploy fails (each target is tried; retry with `lab deploy <target>`).
-   In the lab the scheduled jobs run the `lab` release, not a checkout: `land` deploys
-   the merge and restarts the phone page and the Dagster daemon (not during a Dagster
+   In the lab the scheduled jobs run the `lab` release, not a checkout: once main's own
+   CI is green on the merge commit (about 3 more minutes; red or cancelled deploys
+   nothing and exits non-zero), `land` deploys that commit and restarts the phone page and the Dagster daemon (not during a Dagster
    run: then it prints the command to run later). `lab deploy lab --rollback` goes back
    one release.
 4. Where things stand: `lab git status`, one call, not `git status`/`log`/`branch`/

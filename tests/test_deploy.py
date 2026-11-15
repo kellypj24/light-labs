@@ -29,6 +29,10 @@ class DeployCase(unittest.TestCase):
         self.commit("app.py", "v1")
         (self.src / ".env").write_text("LAB_EDGE=x\n")
         self.target = root / "deployed"
+        # No test restarts a real service: one that tests a restart names its own command.
+        restarts = mock.patch.dict(deploy.RESTART, {}, clear=True)
+        restarts.start()
+        self.addCleanup(restarts.stop)
 
     def commit(self, name, text, branch="main"):
         (self.src / name).write_text(text)
@@ -181,6 +185,32 @@ class DeployCase(unittest.TestCase):
         kicked, out = self.lab_restart(idle, loaded=("dagster",))
         self.assertEqual(kicked, ["dagster"])
         self.assertIn("rush-remote: not running, left alone", out.getvalue())
+
+    def test_a_redeploy_takes_the_verified_commit_not_what_main_reached_since(self):
+        self.deploy()
+        verified = self.commit("app.py", "v2")
+        newer = self.commit("app.py", "v3")  # merged while v2's CI ran; not verified yet
+        with (
+            mock.patch.dict(deploy.TARGETS, {"hermes": self.target}, clear=True),
+            mock.patch.dict(deploy.RESTART, {}, clear=True),  # never the real gateway
+        ):
+            out = io.StringIO()
+            deploy.redeploy_main("main", out=out, sha=verified, source=self.src, sync=False)
+            self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
+            deploy.redeploy_main("main", out=out, sha=newer, source=self.src, sync=False)
+            self.assertEqual((self.target / "current" / "app.py").read_text(), "v3")
+            # v2's land finishing late doesn't take the target backwards.
+            done = deploy.redeploy_main("main", out=out, sha=verified, source=self.src, sync=False)
+        self.assertEqual(done, [])
+        self.assertIn(f"hermes is already at or past {verified[:12]}", out.getvalue())
+        self.assertEqual((self.target / "current" / "app.py").read_text(), "v3")
+
+    def test_a_commit_that_is_not_on_the_branch_is_refused(self):
+        self.deploy()
+        stray = self.commit("app.py", "branch", branch="feature/x")
+        sh(self.src, "git", "reset", "-q", "--hard", "origin/main")
+        with self.assertRaisesRegex(deploy.DeployError, "is not on origin/main"):
+            deploy.deploy(self.target, source=self.src, sync=False, out=io.StringIO(), sha=stray)
 
     def test_one_failed_target_does_not_stop_the_next(self):
         self.deploy()

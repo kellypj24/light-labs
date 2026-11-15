@@ -125,30 +125,28 @@ dagster-daemon: _dagster-home
     DAGSTER_HOME="${LAB_VAR:-$PWD/var}/dagster" exec uv run --locked --group orchestration dagster-daemon run -m light_labs.orchestration
 
 # Install (or reinstall) Roll's daily Dependabot chores (17:30) as a launchd job
-roll-chores-install:
+roll-chores-install: (_reload "roll-chores")
+
+# Unload a launchd job, wait until launchd has let go of it (loading at once fails with
+# "Bootstrap failed: 5" for a KeepAlive job), copy its plist from ops/ and load it
+_reload job:
     #!/usr/bin/env bash
     set -euo pipefail
-    plist=~/Library/LaunchAgents/com.pjkelly.light-labs.roll-chores.plist
-    launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.roll-chores 2>/dev/null || true
-    cp ops/com.pjkelly.light-labs.roll-chores.plist "$plist"
-    launchctl bootstrap gui/$(id -u) "$plist"
+    label=com.pjkelly.light-labs.{{job}}
+    domain=gui/$(id -u)
+    launchctl bootout "$domain/$label" 2>/dev/null || true
+    for _ in $(seq 40); do
+        launchctl print "$domain/$label" >/dev/null 2>&1 || break
+        sleep 0.5
+    done
+    cp "ops/$label.plist" ~/Library/LaunchAgents/
+    launchctl bootstrap "$domain" ~/Library/LaunchAgents/"$label.plist"
 
 # Install (or reinstall) Rush's heartbeat and phone page as launchd jobs
-rush-install:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for job in rush rush-remote; do
-        plist=~/Library/LaunchAgents/com.pjkelly.light-labs.$job.plist
-        launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.$job 2>/dev/null || true
-        cp ops/com.pjkelly.light-labs.$job.plist "$plist"
-        launchctl bootstrap gui/$(id -u) "$plist"
-    done
+rush-install: (_reload "rush") (_reload "rush-remote")
 
 # Install (or reinstall) and start the daemon's launchd job
-dagster-install: _dagster-home
-    launchctl bootout gui/$(id -u)/com.pjkelly.light-labs.dagster 2>/dev/null || true
-    cp ops/com.pjkelly.light-labs.dagster.plist ~/Library/LaunchAgents/
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pjkelly.light-labs.dagster.plist
+dagster-install: _dagster-home (_reload "dagster")
 
 # Restart the daemon so it loads changed orchestration code
 dagster-restart:
