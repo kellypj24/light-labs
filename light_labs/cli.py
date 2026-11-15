@@ -872,16 +872,20 @@ def cmd_git(args):
             check = args.check.split() if args.check else None
             gitops.ship(repo, message, title=args.title, body=body, check=check)
         elif args.cmd == "land":
-            files = gitops.land(repo, args.pr, wait=not args.no_wait)
+            landed = gitops.land(repo, args.pr, wait=not args.no_wait)
+            problems = [] if landed.synced else ["the main checkout was not updated"]
             if _is_lab(repo):
                 from light_labs import deploy
 
                 try:
                     deploy.redeploy_main(repo.main_branch())
                 except deploy.DeployError as e:
-                    print(f"merged, but the redeploy failed: {e}")
-            if any(f.startswith("light_labs/orchestration/") for f in files):
-                print("orchestration changed: `just dagster-restart` to load it")
+                    print(f"redeploy failed: {e}")
+                    problems.append("a redeploy failed")
+                for name, since, restart in deploy.stale_services(landed.files):
+                    print(f"{name} has run the old code since {since:%b %-d %H:%M}: `{restart}`")
+            if problems:
+                sys.exit(f"lab git land: merged, but {' and '.join(problems)}")
         elif args.cmd == "tidy":
             gitops.tidy(repo, apply=args.apply, stale_days=args.stale_days)
         elif args.cmd == "labels":
@@ -973,7 +977,8 @@ def cmd_board(args):
         print(f"posted {item['id']} ({item.get('result_id')})")
 
 
-def main(argv=None):
+def parser():
+    """The whole `lab` command line; tests check the launchd jobs' commands against it."""
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
@@ -1192,7 +1197,11 @@ def main(argv=None):
     reject_p.add_argument("id")
     reject_p.add_argument("--reason", help="why, for the queue analytics")
     radar_cli.register(sub)
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
 
     if args.robot == "radar":
         raise SystemExit(radar_cli.run(args))

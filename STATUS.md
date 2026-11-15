@@ -99,8 +99,11 @@ _Updated 2026-11-14._
    minutes count in the load.
    Work calendar not shared yet (weekdays 08:00–17:00 assumed busy). The Claude desktop task keeps planning until two lab plans
    in a row pass review; then it's retired.
-6. Harness and CI/CD review (PJ, 2026-11-14): reviewed; `just check` medians 245 s and
-   the CI eval job 174 s. Ten recommendations with PJ; none built yet.
+6. Harness and CI/CD review (PJ, 2026-11-14): recommendations 1–7 built (redeploy retry
+   and per-target isolation, `land` fast-forwards the main checkout and names stale
+   services, mock evals at `-concurrency 4`, one pass over the tests locally,
+   `tests/test_ops.py`, the `never-committed` hook, the Location header fix).
+   8–10 are in Open decisions.
 
 ## Open decisions
 
@@ -121,6 +124,11 @@ _Updated 2026-11-14._
 - Training notes: chore minutes count in the load minute for minute, whatever the
   effort, and an upcoming chore counts once its day passes without a "done". Weight by
   effort, or require a done note? Not decided.
+
+- Harness, from the 2026-11-14 review: (8) run Rush, the remote page, Dagster and
+  Roll's chores from `lab deploy` releases, so a merge goes live only on deploy;
+  (9) a path-scoped or parallel local check, and a heavy job that queues instead of
+  refusing; (10) redeploy only after main's CI is green, or require PRs up to date.
 
 - Dependabot PR #58 (dbt-core 1.12.6, dev only; no security alerts open).
 - Eval storage: keep results indefinitely under `var/evals/<stage>/<run_id>.*` (today

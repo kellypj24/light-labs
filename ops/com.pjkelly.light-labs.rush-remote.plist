@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Rush's phone page on 127.0.0.1:8787. Install with `just rush-install`; publish to the
-     tailnet with `tailscale serve --bg --http 80 http://127.0.0.1:8787`. -->
+     tailnet with `tailscale serve` (docs/rush-phone.md). No double hyphen in here: XML
+     forbids it inside a comment, and tests/test_ops.py parses this file. -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.pjkelly.light-labs.rush-remote</string>

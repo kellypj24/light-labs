@@ -246,7 +246,7 @@ class LandTest(RepoCase):
             self.path, "git", "push", "-q", "origin", "--delete", "feature/x"
         )
         out = io.StringIO()
-        gitops.land(repo, 9, wait=False, out=out)
+        self.landed = gitops.land(repo, 9, wait=False, out=out)
         return repo, out.getvalue()
 
     def assert_gone(self):
@@ -262,6 +262,30 @@ class LandTest(RepoCase):
         self.assertEqual(sh(wt, "git", "log", "-1", "--format=%s"), "x")
         self.assertIn("detached (main is checked out in", out)
         self.assert_gone()
+        # ...and that checkout, where things run from, is brought up to the merge.
+        self.assertIn(": fast-forwarded to", out)
+        self.assertTrue(self.landed.synced)
+        self.assertEqual(sh(self.path, "git", "log", "-1", "--format=%s"), "x")
+
+    def test_a_main_checkout_with_changes_or_on_a_branch_is_left_and_reported(self):
+        self.branch("feature/x", push=True)
+        wt = self.path.parent / "wt"
+        sh(self.path, "git", "worktree", "add", "-q", str(wt), "feature/x")
+        tracked = next(p for p in self.path.iterdir() if p.is_file())
+        tracked.write_text("edited")
+        _, out = self.land_from(wt)
+        self.assertIn("has uncommitted changes: NOT updated", out)
+        self.assertFalse(self.landed.synced)
+        self.assertEqual(tracked.read_text(), "edited")
+
+    def test_a_main_checkout_on_another_branch_is_reported(self):
+        self.branch("feature/x", push=True)
+        wt = self.path.parent / "wt"
+        sh(self.path, "git", "worktree", "add", "-q", str(wt), "feature/x")
+        sh(self.path, "git", "checkout", "-q", "-b", "feature/other")
+        _, out = self.land_from(wt)
+        self.assertIn("is on feature/other: NOT updated", out)
+        self.assertFalse(self.landed.synced)
 
     def test_lands_onto_main_when_it_is_free(self):
         self.branch("feature/x", push=True)

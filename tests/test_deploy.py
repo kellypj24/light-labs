@@ -107,6 +107,62 @@ class DeployCase(unittest.TestCase):
         self.assertEqual((self.target / "current" / "app.py").read_text(), "v2")
         self.assertTrue(marker.exists())
 
+    def test_one_failed_target_does_not_stop_the_next(self):
+        self.deploy()
+        other = self.target.parent / "other"
+        deploy.deploy(other, source=self.src, sync=False, out=io.StringIO())
+        self.commit("app.py", "v2")
+        real = deploy.deploy
+
+        def flaky(target, *args, **kw):
+            if target == self.target:
+                raise deploy.DeployError("git fetch: Connection reset")
+            return real(target, *args, **kw)
+
+        with (
+            mock.patch.dict(deploy.TARGETS, {"hermes": self.target, "radar": other}, clear=True),
+            mock.patch.object(deploy, "deploy", flaky),
+            self.assertRaisesRegex(deploy.DeployError, r"hermes: .*retry: `lab deploy hermes`"),
+        ):
+            deploy.redeploy_main("main", out=io.StringIO(), source=self.src, sync=False)
+        self.assertEqual((other / "current" / "app.py").read_text(), "v2")
+        self.assertEqual((self.target / "current" / "app.py").read_text(), "v1")
+
+    def test_a_dropped_fetch_is_retried(self):
+        real, calls, naps = deploy._run, [], []
+
+        def run(*cmd, cwd=None):
+            if "fetch" in cmd:
+                calls.append(cmd)
+                if len(calls) < 3:
+                    raise deploy.DeployError("git fetch: Connection reset by peer")
+            return real(*cmd, cwd=cwd)
+
+        with mock.patch.object(deploy, "_run", run):
+            deploy.deploy(
+                self.target, source=self.src, sync=False, out=io.StringIO(), sleep=naps.append
+            )
+            self.assertEqual(naps, [2, 4])
+        always = mock.patch.object(deploy, "_run", side_effect=deploy.DeployError("reset"))
+        with always as failing, self.assertRaises(deploy.DeployError):
+            deploy._fetch(self.src, sleep=lambda s: None)
+        self.assertEqual(failing.call_count, deploy.FETCH_TRIES)
+
+    def test_stale_services_are_the_running_ones_the_merge_touched(self):
+        def run(cmd, **kw):
+            out = ""
+            if cmd[:2] == ["launchctl", "list"]:
+                out = '{\n\t"PID" = 4242;\n};\n' if cmd[2].endswith("dagster") else "{\n};\n"
+            elif cmd[0] == "ps":
+                out = "Mon Nov  9 21:27:23 2026\n"
+            return mock.Mock(returncode=0, stdout=out)
+
+        stale = deploy.stale_services(["analytics/models/x.sql", "docs/a.md"], run)
+        self.assertEqual(
+            [(n, f"{t:%b %-d %H:%M}") for n, t, _ in stale], [("dagster", "Nov 9 21:27")]
+        )
+        self.assertEqual(deploy.stale_services(["docs/a.md"], run), [])
+
     def test_restarts_only_when_the_commit_changes(self):
         marker = self.target / "restarted"
         self.deploy(restart=("touch", str(marker)))

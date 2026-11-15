@@ -566,7 +566,8 @@ def handler(remote):
             data = body.encode()
             self.send_response(code)
             if location:
-                self.send_header("Location", location)
+                # A header value never holds a line break (response splitting).
+                self.send_header("Location", "".join(location.splitlines()))
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Security-Policy", CSP)
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -668,7 +669,7 @@ def handler(remote):
                     done, back = f"Rejected {parts[1]}", "/"
                 elif len(parts) == 2 and parts[0] == "comment" and text.strip():
                     remote.comment(parts[1], text)
-                    done, back = "Posted", f"/task/{parts[1]}"
+                    done, back = "Posted", f"/task/{quote(parts[1], safe='')}"
                 elif len(parts) == 2 and parts[0] == "reply" and text.strip():
                     remote.reply(parts[1], text)
                     done, back = "Sent", "/inbox"

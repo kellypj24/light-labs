@@ -29,6 +29,13 @@ repos:
 
   - repo: local
     hooks:
+      # `lab git ship` stages with `git add -A`; .gitignore is the only other thing
+      # between these and a commit (CLAUDE.md: they describe other people's systems).
+      - id: never-committed
+        name: var/, .env, memory.md and DuckDB files stay out of git
+        entry: "Never commit var/, .env, memory.md or a DuckDB file:"
+        language: fail
+        files: '(^|/)var/|(^|/)\.env$|(^|/)memory\.md$|\.duckdb(\.wal)?$'
       - id: gitleaks
         name: gitleaks (full history)
         entry: scripts/gitleaks.sh

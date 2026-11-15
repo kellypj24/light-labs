@@ -10,7 +10,9 @@ default: check
 check:
     uv run --locked lab heavy run check -- just _check
 
-_check: hooks test evals-check analytics-check dagster-check
+# `test-all` runs every test module once; the two project checks then skip the modules
+# they would run again on their own.
+_check: hooks test-all evals-check (analytics-check "skip") (dagster-check "skip")
 
 # Every pre-commit hook over every file, untracked ones included (--all-files skips them)
 hooks:
@@ -18,6 +20,11 @@ hooks:
 
 test:
     uv run --locked python -m unittest discover -s tests -t .
+
+# Every test module, the ones that need the analytics and orchestration groups included
+test-all:
+    cd analytics && uv run --locked --group orchestration dbt parse --quiet
+    uv run --locked --group orchestration python -m unittest discover -s tests -t .
 
 # Install the hooks so they run on every local commit
 install-hooks:
@@ -33,13 +40,13 @@ evals-check:
     test -z "$(gofmt -l evals)" || (gofmt -l evals && exit 1)
     go -C evals vet ./...
     go -C evals test ./...
-    go -C evals run . -contestants mock -samples 1 -out "$(mktemp -d)" > /dev/null
+    go -C evals run . -concurrency 4 -contestants mock -samples 1 -out "$(mktemp -d)" > /dev/null
     # dbt-model's mock answers with each reference: every reference must build and match
-    go -C evals run . -stage dbt-model -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
+    go -C evals run . -concurrency 4 -stage dbt-model -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
     # commit-message's mock answers with each reference: every reference must pass every check
-    go -C evals run . -stage commit-message -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
+    go -C evals run . -concurrency 4 -stage commit-message -contestants mock -samples 1 -min-pass 1 -out "$(mktemp -d)" > /dev/null
     # mail-keep wiring: every fixture loads and runs (the mock answers no class: keep/unsure)
-    go -C evals run . -stage mail-keep -contestants mock -samples 1 -out "$(mktemp -d)" > /dev/null
+    go -C evals run . -concurrency 4 -stage mail-keep -contestants mock -samples 1 -out "$(mktemp -d)" > /dev/null
 
 # Boss fight with real models. Runs locally only; one at a time on a laptop.
 # Results land in var/evals/*.jsonl and are loaded into var/lab.duckdb.
@@ -67,7 +74,7 @@ analytics: _dagster-home
     DAGSTER_HOME="$PWD/var/dagster" uv run --locked --group orchestration dagster job execute -m light_labs.orchestration -j analytics_job
 
 # dbt lint and build on the synthetic fixtures in a throwaway database (same as CI)
-analytics-check:
+analytics-check tests="run":
     #!/usr/bin/env bash
     set -euo pipefail
     tmp="$(mktemp -d)"
@@ -83,7 +90,9 @@ analytics-check:
     uv run --locked --group analytics sqlfluff lint models macros
     DUCKDB_PATH="$tmp/lab.duckdb" uv run --locked --group analytics dbt build --quiet
     cd ..
-    uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend tests.test_commit_message tests.test_calibrate
+    if [ "{{tests}}" = run ]; then
+        uv run --locked --group analytics python -m unittest tests.test_dbt_model tests.test_autosend tests.test_commit_message tests.test_calibrate
+    fi
     LAB_VAR="$tmp" uv run --locked lab evals runs
 
 # Dagster UI (http://127.0.0.1:3000). The sensors run in the daemon, not here.
@@ -142,7 +151,7 @@ _dagster-home:
     mkdir -p var/dagster && cp ops/orchestration/dagster.yaml var/dagster/
 
 # Definitions load, invariants hold, and a full run over the fixtures builds
-dagster-check:
+dagster-check tests="run":
     cd analytics && uv run --locked --group orchestration dbt parse --quiet
     uv run --locked --group orchestration dagster definitions validate -m light_labs.orchestration 2>&1 | grep -q "Validation successful"
-    uv run --locked --group orchestration python -m unittest tests.test_orchestration
+    [ "{{tests}}" != run ] || uv run --locked --group orchestration python -m unittest tests.test_orchestration
