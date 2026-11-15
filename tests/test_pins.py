@@ -70,6 +70,9 @@ class PinsTest(unittest.TestCase):
         self.assertIn("floor 3.10 is end-of-life", warnings)
         self.assertIn("pinned to 3.12, 2 minors behind 3.14", warnings)
         self.assertIn("floor 3.10 is never run (pin 3.12)", warnings)
+        self.project("b/", requires=">=3.10", pin="3.12")
+        (line,) = [w for w in self.audit()["warnings"] if "never run" in w]
+        self.assertTrue(line.endswith(": ., b"))  # one line per floor, not per project
         self.assertFalse(pins.end_of_life((3, 11), TODAY))
         self.assertEqual(self.audit()["errors"], [])
 
