@@ -42,8 +42,8 @@ class FakeRepo:
 
     def git(self, *args, check=True):
         self.calls.append(("git", *args))
-        if args[0] == "status":
-            return "\n".join(f" M {p}" for p in (self.edits.pop(0) if self.edits else []))
+        if args[0] == "diff":
+            return "\n".join(self.edits.pop(0) if self.edits else [])
         if args[0] == "push":
             self.pushed += 1
         if args[0] == "rev-parse":

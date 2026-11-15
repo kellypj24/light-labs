@@ -291,12 +291,14 @@ class Holds:
                 except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
                     kind, text, ask = "STUCK", f"the call failed: {str(e)[:300]}", ""
                 work = self.repo(tree)
-                files = [line[3:] for line in work.git("status", "--porcelain").splitlines()]
+                # Not `status --porcelain`: Repo.sh strips its output, which cut the first
+                # path's first letter and let a first path under .github/ past PROTECTED.
+                work.git("add", "-A")
+                files = work.git("diff", "--cached", "--name-only").splitlines()
                 if files and any(PROTECTED.search(p) for p in files):
                     kind, text = "STUCK", f"its fix changed protected files ({', '.join(files)})"
                 elif files and kind == "FIXED":
                     subject = f"fix(deps): {text.splitlines()[0][:70].rstrip('. ')}"
-                    work.git("add", "-A")
                     work.git("commit", "-q", "-m", f"{subject}\n\n{text}\n\n"
                              f"By claude:{model} for Roll (light-labs) on PJ's ask.")  # fmt: skip
                     work.git("push", "-q", "origin", f"HEAD:{f['branch']}")
