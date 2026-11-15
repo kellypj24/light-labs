@@ -334,11 +334,36 @@ def wait_for_checks(repo, pr, timeout=1800, every=20, sleep=time.sleep):
     """The PR's checks once none is pending (or the timeout passes)."""
     deadline = time.monotonic() + timeout
     while True:
-        checks = repo.gh_json("pr", "checks", str(pr), "--json", "name,bucket,link")
+        try:
+            checks = repo.gh_json("pr", "checks", str(pr), "--json", "name,bucket,link")
+        except GitError as e:
+            if "no checks reported" not in str(e):
+                raise
+            checks = []  # just pushed: GitHub hasn't started them yet
         if checks and all(c["bucket"] != "pending" for c in checks):
             return checks
         if time.monotonic() > deadline:
             raise GitError(f"#{pr}: checks still pending after {timeout // 60} min")
+        sleep(every)
+
+
+def wait_for_main_ci(
+    repo, sha, workflow="ci.yml", timeout=1800, appear=180, every=20, sleep=time.sleep
+):
+    """The conclusion ("success", "failure", "cancelled", ...) of `workflow`'s push run on
+    commit `sha`, once it completes. None when no run appears within `appear` seconds or it
+    is still going at `timeout`. A newer merge can cancel a run that was still queued."""
+    start = time.monotonic()
+    while True:
+        runs = repo.gh_json(
+            "run", "list", "--workflow", workflow, "--commit", sha, "--event", "push",
+            "--json", "status,conclusion",
+        )  # fmt: skip
+        if runs and runs[0]["status"] == "completed":
+            return runs[0]["conclusion"]
+        waited = time.monotonic() - start
+        if waited > (timeout if runs else appear):
+            return None
         sleep(every)
 
 
@@ -372,6 +397,7 @@ def failed_lines(log, before=40, after=3):
 class Landed(NamedTuple):
     files: list  # paths the PR changed
     synced: bool  # the main checkout is on the merged commit
+    sha: str  # the merge commit on main
 
 
 def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
@@ -409,7 +435,9 @@ def land(repo, pr, wait=True, out=sys.stdout, sleep=time.sleep):
     gone = f"kept {head} (checked out in {kept})" if kept else f"deleted {head}"
     out.write(f"on {where}; {gone}\n")
     synced = sync_main_checkout(repo, main, out)
-    return Landed([f["path"] for f in info.get("files", [])], synced)
+    merged = repo.gh_json("pr", "view", str(pr), "--json", "mergeCommit") or {}
+    sha = (merged.get("mergeCommit") or {}).get("oid") or repo.git("rev-parse", f"origin/{main}")
+    return Landed([f["path"] for f in info.get("files", [])], synced, sha)
 
 
 def sync_main_checkout(repo, main, out=sys.stdout):

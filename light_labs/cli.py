@@ -900,11 +900,25 @@ def cmd_git(args):
             if _is_lab(repo):
                 from light_labs import deploy
 
-                try:
-                    deploy.redeploy_main(repo.main_branch())
-                except deploy.DeployError as e:
-                    print(f"redeploy failed: {e}")
-                    problems.append("a redeploy failed")
+                # Deploy the merge only once main's own CI has passed on it: two PRs that
+                # were each green on an older main can still break it together.
+                ci = "success"
+                if not args.no_wait:
+                    print(f"main {landed.sha[:7]}: waiting for CI ... ", end="", flush=True)
+                    ci = gitops.wait_for_main_ci(repo, landed.sha)
+                    print({"success": "green", None: "no finished run"}.get(ci, ci))
+                if ci == "success":
+                    try:
+                        deploy.redeploy_main(repo.main_branch(), sha=landed.sha)
+                    except deploy.DeployError as e:
+                        print(f"redeploy failed: {e}")
+                        problems.append("a redeploy failed")
+                else:
+                    print("NOT deployed: services stay on the release they have")
+                    problems.append(
+                        f"main's CI is not green on {landed.sha[:7]}, so nothing was deployed "
+                        "(`lab deploy <target>` deploys main by hand)"
+                    )
                 if deploy.deployed(deploy.TARGETS["lab"]) is None:
                     # Before `lab deploy lab`: the services still run the main checkout.
                     for name, since, restart in deploy.stale_services(landed.files):

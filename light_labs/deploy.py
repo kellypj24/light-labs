@@ -109,6 +109,16 @@ def _fetch(source, sleep=time.sleep):
             sleep(FETCH_WAIT * 2**attempt)
 
 
+def _is_ancestor(source, older, newer):
+    """`older` is `newer` or one of its ancestors."""
+    done = subprocess.run(
+        ["git", "-C", str(source), "merge-base", "--is-ancestor", older, newer],
+        capture_output=True,
+        check=False,
+    )
+    return done.returncode == 0
+
+
 def deployed(target):
     """The stamp of <target>/current, or None before the first deploy."""
     stamp = Path(target) / "current" / STAMP
@@ -150,14 +160,18 @@ def deploy(
     out=sys.stdout,
     sleep=time.sleep,
     groups=(),
+    sha=None,
 ):
-    """Export origin/<ref> into a release, install it, point current at it, then run
-    `restart` if the commit changed. Returns the stamp."""
+    """Export origin/<ref> (or `sha`, a commit on it) into a release, install it, point
+    current at it, then run `restart` if the commit changed. Returns the stamp."""
     target, source = Path(target), Path(source)
     before = deployed(target)
     _fetch(source, sleep)
-    sha = _run("git", "-C", source, "rev-parse", "--verify", f"origin/{ref}^{{commit}}")
-    sha = sha.decode().strip()
+    head = _run("git", "-C", source, "rev-parse", "--verify", f"origin/{ref}^{{commit}}")
+    head = head.decode().strip()
+    if sha and not _is_ancestor(source, sha, head):
+        raise DeployError(f"{sha[:12]} is not on origin/{ref}")
+    sha = sha or head
     release = target / "releases" / sha[:12]
     if not (release / STAMP).exists():  # no stamp: never built, or a build that failed
         _run("rm", "-rf", release)
@@ -243,13 +257,17 @@ def _prune(target, keep):
             _run("rm", "-rf", old)
 
 
-def redeploy_main(main, out=sys.stdout, **kw):
+def redeploy_main(main, out=sys.stdout, sha=None, source=config.REPO, **kw):
     """After a merge to main: redeploy every target that tracks it. Returns the names.
-    One target failing doesn't stop the others; DeployError then names each that failed."""
+    With `sha` (the merge whose CI passed), deploy that commit, not whatever main has
+    reached since, and leave a target already at or past it. One target failing doesn't
+    stop the others; DeployError then names each that failed."""
     done, failed = [], []
     for name, target in TARGETS.items():
         stamp = deployed(target)
-        if stamp and stamp["ref"] == main:
+        if stamp and stamp["ref"] == main and sha and _is_ancestor(source, sha, stamp["sha"]):
+            out.write(f"{name} is already at or past {sha[:12]}\n")
+        elif stamp and stamp["ref"] == main:
             try:
                 deploy(
                     target,
@@ -257,6 +275,8 @@ def redeploy_main(main, out=sys.stdout, **kw):
                     restart=RESTART.get(name),
                     out=out,
                     groups=GROUPS.get(name, ()),
+                    sha=sha,
+                    source=source,
                     **kw,
                 )
             except DeployError as e:
