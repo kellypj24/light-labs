@@ -219,6 +219,17 @@ class DeliverTest(unittest.TestCase):
         self.assertTrue(all(len(p) <= deliver.TELEGRAM_LIMIT for p in parts))
         self.assertEqual("\n\n".join(parts), text)
 
+    def test_a_failed_replan_says_so_once_and_promises_no_retry(self):
+        self.fresh()
+        self.tick(SUN.replace(hour=19))
+        self.phone.texts.clear()
+        self.planner.fail = True
+        deliver.replan(self.phone, now=SUN.replace(hour=22), planner=self.planner, var=self.var)
+        self.assertEqual(
+            self.phone.texts,
+            ["Couldn't plan 2026-W47: no free windows. Send /replan to try again."],
+        )
+
     def test_replan_and_send(self):
         self.fresh()
         self.tick(SUN.replace(hour=19))

@@ -48,6 +48,11 @@ _STRONG = re.compile(r"^strong-(\d{4}-\d{2}-\d{2})\.csv$")
 _HEALTH = re.compile(r"^health-(\d{4}-\d{2}-\d{2}-\d{6})\.json$")
 
 
+# What a failed plan's text ends with: the hourly tick retries, a /replan does not.
+RETRY_TICK = "I'll try again next hour."
+RETRY_ASK = "Send /replan to try again."
+
+
 def home(var=None):
     return Path(var or config.VAR) / "training"
 
@@ -185,12 +190,12 @@ def _week_key(start):
     return f"{year}-W{num:02d}"
 
 
-def _plan(state, start, send, planner, lead, from_date=None, built_without=()):
+def _plan(state, start, send, planner, lead, from_date=None, built_without=(), retry=RETRY_TICK):
     key = _week_key(start)
     try:
         path, fails = planner(key, from_date=from_date)
     except Exception as e:  # noqa: BLE001 - any failure is texted, and retried next tick
-        send(None, f"Couldn't plan {key}: {e}. I'll try again next hour.")
+        send(None, f"Couldn't plan {key}: {e}. {retry}")
         state["error"] = {"week": key, "at": datetime.now().isoformat(timespec="minutes")}
         return False
     if built_without:
@@ -207,18 +212,20 @@ def _plan(state, start, send, planner, lead, from_date=None, built_without=()):
     return True
 
 
-def refresh(state, now, send, planner):
+def refresh(state, now, send, planner, retry=RETRY_TICK):
     """Replan after a requested file: next week whole before it starts, else this week's
-    remaining days (from today before noon, else tomorrow)."""
+    remaining days (from today before noon, else tomorrow). True when a plan was sent,
+    False when planning failed (texted, with `retry`), None when no day is left."""
     nxt = week_context.week_start(today=now.date())
     if _week_key(nxt) in state["sent"]:
-        return _plan(state, nxt, send, planner, "Updated plan:")
+        return _plan(state, nxt, send, planner, "Updated plan:", retry=retry)
     this = nxt - timedelta(days=7)
     start_from = now.date() if now.hour < 12 else now.date() + timedelta(days=1)
     if start_from > this + timedelta(days=6):
-        return False
+        return None
     from_date = start_from if start_from > this else None
-    return _plan(state, this, send, planner, "Updated plan for the rest of the week:", from_date)
+    lead = "Updated plan for the rest of the week:"
+    return _plan(state, this, send, planner, lead, from_date, retry=retry)
 
 
 def note(text, send, now=None, var=None, parser=None, planner=None, then_replan=False):
@@ -312,7 +319,7 @@ def replan(send, now=None, planner=None, var=None):
         planner = plan.run
     now = now or datetime.now()
     with _locked(var) as state:
-        if not refresh(state, now, send, planner):
+        if refresh(state, now, send, planner, retry=RETRY_ASK) is None:
             send(None, "Nothing left to plan this week.")
 
 

@@ -14,11 +14,12 @@
     <string>rush</string>
     <string>remote</string>
   </array>
-  <!-- launchd's PATH lacks /usr/local/bin, where the tailscale CLI lives. -->
+  <!-- launchd's PATH lacks /usr/local/bin, where the tailscale CLI lives, and
+       ~/.local/bin, where claude lives (/replan and /note plan through it). -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>LAB_VAR</key><string>/Users/pjkelly/light-labs/var</string>
-    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PATH</key><string>/Users/pjkelly/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
