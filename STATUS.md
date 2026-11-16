@@ -107,8 +107,10 @@ _Updated 2026-11-14._
    Notes and plan days land in DuckDB (`training_record_job`); planned vs done is
    `mart_training_adherence`. A sick day holds loads, travel days are blocked, chore
    minutes count in the load.
-   Lift days follow Strong (`plan.habit`): at most the logged 2 lifts × 4 sets, taken
-   from the `Mix` workouts longest since done.
+   Lift days follow Strong (`plan.habit`): at most the logged 2 lifts × 4 sets, each
+   one `Mix` template from the pool (the 8 longest since done), ordered by pattern
+   balance and leg placement, not sequence. PJ is open to changing, adding and renaming
+   templates from the history later; not started.
    Work calendar not shared yet (weekdays 08:00–17:00 assumed busy). The Claude desktop task keeps planning until two lab plans
    in a row pass review; then it's retired.
 6. Harness and CI/CD review (PJ, 2026-11-14): recommendations 1–7 built (redeploy retry

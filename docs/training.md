@@ -109,9 +109,15 @@ windows, outdoor runs in outdoor hours, loads from the table, lift sessions no l
 the shape) get one retry, then are listed at the bottom of the plan.
 
 The shape comes from Strong's last 26 weeks (`plan.habit`): the median lifts per workout
-and working sets per lift are the ceiling for every lift day, and the named workouts
-longest since done (`Mix 1B`, `Mix 2A`, …) are handed to the model as the week's lift
-sessions. Changing the routine in Strong changes the plan; nothing is configured.
+and working sets per lift are the ceiling for every lift day. A lift day is one template
+(a named Strong workout, `Mix 1A` … `Mix 8B`) from the pool: the half of the templates
+longest since done. The pool is not a sequence. The model orders it by rules in `SYSTEM`:
+push, pull and lower body across the week; no movement pattern on two lift days in a row;
+squat, lunge, hinge and power templates away from the day before intervals or the long
+session, two a week at most; then longest since done. `check` fails a lift day that is
+not exactly one pool template, or a template used twice. A template returns only after
+half the others have been done, so all of them cycle. Changing the routine in Strong
+changes the plan; nothing is configured.
 
 Until the work calendar is in `TRAINING_CALENDARS`, weekdays 08:00–17:00 count as busy;
 set `TRAINING_ASSUME_WORK=` (empty) in `.env` once it is.
