@@ -91,7 +91,7 @@ class NumbersTest(unittest.TestCase):
             lift("Squat (Barbell)", w1, 165, 5, "squat"),
             lift("Squat (Barbell)", w2, 170, 4, "squat"),  # short of 5 → repeat
             lift("Pull Up", w2, 0, 3, "vertical_pull", bodyweight=True),
-            lift("Box Squat (Barbell)", MON - timedelta(weeks=20), 45, 5, "squat"),  # stale
+            lift("Box Squat (Barbell)", MON - timedelta(weeks=30), 45, 5, "squat"),  # stale
         ]
         rows = {r["exercise"]: r for r in plan.progression(lifts, MON, is_deload=False)}
         self.assertEqual(
@@ -114,6 +114,28 @@ class NumbersTest(unittest.TestCase):
         ]
         rows = {r["exercise"]: r["load_lb"] for r in plan.progression(lifts, MON, is_deload=True)}
         self.assertEqual(rows, {"Bench Press (Barbell)": 150, "Bicep Curl (Dumbbell)": 27.5})
+
+    def test_habit_is_the_logged_session_and_the_rotation_oldest_first(self):
+        def workout(n, name, day, *exercises, sets=4):
+            return [
+                {"workout_id": n, "workout_name": name, "workout_date": day, "exercise": e,
+                 "working_sets": sets}
+                for e in exercises
+            ]  # fmt: skip
+
+        d = date(2026, 8, 1)
+        rows = (
+            workout(1, "Mix 1A", d, "Bench Press (Dumbbell)", "Bulgarian Split Squat")
+            + workout(2, "Mix 1B", d + timedelta(days=5), "Pull Up", "Skullcrusher (Dumbbell)")
+            + workout(3, "Mix 2A", d + timedelta(days=9), "Squat (Barbell)", "Shrug (Barbell)")
+            + workout(4, "Mix 1A", d + timedelta(days=90), "Bench Press (Dumbbell)", "Dip", "Curl")
+        )
+        h = plan.habit(rows)
+        self.assertEqual((h["lifts"], h["sets"]), (2, 4))
+        self.assertEqual([w["workout"] for w in h["next"]], ["Mix 1B", "Mix 2A", "Mix 1A"])
+        self.assertEqual(h["next"][0]["lifts"], ["Pull Up", "Skullcrusher (Dumbbell)"])
+        self.assertEqual(h["next"][2]["lifts"], ["Bench Press (Dumbbell)", "Curl", "Dip"])
+        self.assertIsNone(plan.habit([]))
 
     def test_assumed_work_hours_leave_weekends(self):
         c = plan.with_assumed_work(ctx(), "08:00-17:00")
@@ -140,6 +162,16 @@ class CheckTest(unittest.TestCase):
         self.assertIn("outdoor hours", fails)
         self.assertIn("the table says 165", fails)
 
+    def test_a_lift_session_larger_than_the_habit_fails(self):
+        p = good_plan()
+        shape = {"lifts": 2, "sets": 4, "next": []}
+        self.assertEqual(plan.check(p, ctx(), self.table, shape=shape), [])
+        bench = p["days"][0]["items"][0]
+        p["days"][0]["items"] += [{**bench, "sets": 5}, bench, {"text": "Bag 4x3 min"}]
+        fails = "\n".join(plan.check(p, ctx(), self.table, shape=shape))
+        self.assertIn("2026-11-16: 3 lifts; PJ's sessions have 2 at most", fails)
+        self.assertIn("for 5 sets; PJ does 4 at most", fails)
+
 
 class FakeBrain:
     def __init__(self, replies):
@@ -164,6 +196,13 @@ class RunTest(unittest.TestCase):
         )  # fmt: skip
         marts.start()
         self.addCleanup(marts.stop)
+        sessions = mock.patch.object(
+            plan, "read_sessions",
+            return_value=[{"workout_id": 1, "workout_name": "Mix 6A", "workout_date": MON,
+                           "exercise": "Bench Press (Barbell)", "working_sets": 4}],
+        )  # fmt: skip
+        sessions.start()
+        self.addCleanup(sessions.stop)
         work = mock.patch.object(plan, "ASSUME_WORK", "")  # the fixture's week is all free
         work.start()
         self.addCleanup(work.stop)
@@ -173,6 +212,8 @@ class RunTest(unittest.TestCase):
         out, fails = plan.run("2026-W47", brain=brain, var=self.var, ctx=ctx())
         self.assertEqual(fails, [])
         self.assertIn("the table says 165", brain.asked[1])
+        self.assertIn("1 lifts a session, 4 working sets each", brain.asked[0])
+        self.assertIn('"workout": "Mix 6A"', brain.asked[0])
         text = out.read_text()
         self.assertTrue(text.startswith("# Week 2 (2026-W47, Nov 16–Nov 22)"))
         self.assertIn("Bench Press (Barbell) 4x5 @ 165 lb", text)

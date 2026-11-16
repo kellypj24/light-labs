@@ -102,10 +102,16 @@ One-time setup:
 ## Weekly plan
 
 `lab training plan [--week 2026-W47]` (default: next week) refreshes the context, then
-writes `var/training/plans/<week>.md`. Code sets the week number, deload and every lift's
-load and reps; Claude (Sonnet) places the sessions in free windows and writes them up.
-Failed checks (5 training days, slots inside free windows, outdoor runs in outdoor hours,
-loads from the table) get one retry, then are listed at the bottom of the plan.
+writes `var/training/plans/<week>.md`. Code sets the week number, deload, every lift's
+load and reps, and the shape of a lift session; Claude (Sonnet) places the sessions in
+free windows and writes them up. Failed checks (5 training days, slots inside free
+windows, outdoor runs in outdoor hours, loads from the table, lift sessions no larger than
+the shape) get one retry, then are listed at the bottom of the plan.
+
+The shape comes from Strong's last 26 weeks (`plan.habit`): the median lifts per workout
+and working sets per lift are the ceiling for every lift day, and the named workouts
+longest since done (`Mix 1B`, `Mix 2A`, …) are handed to the model as the week's lift
+sessions. Changing the routine in Strong changes the plan; nothing is configured.
 
 Until the work calendar is in `TRAINING_CALENDARS`, weekdays 08:00–17:00 count as busy;
 set `TRAINING_ASSUME_WORK=` (empty) in `.env` once it is.

@@ -6,11 +6,14 @@ last plan, then writes var/training/plans/<yyyy>-W<ww>.md.
 
 Code owns what must be right: the week number and deload (goals.md: week 1 starts
 2026-11-09, every 4th is a deload; also a deload when acute:chronic load is above 1.3),
-and every lift's load and reps (progression from Strong's top sets: keep the rep scheme
-PJ trains; matching last time's top set adds load, falling short repeats it). The model picks and places
-sessions and writes them up, returning JSON that `check` validates: exactly 5 training
-days, each session inside a free window, each outdoor run inside the day's outdoor hours,
-lift loads from the table. A failed check gets one retry with the failures; then the plan
+every lift's load and reps (progression from Strong's top sets: keep the rep scheme
+PJ trains; matching last time's top set adds load, falling short repeats it), and the
+shape of a lift session (`habit`: the median lifts per workout and working sets per lift
+Strong logged, plus the named workouts longest since done, which are next in his
+rotation). The model picks and places sessions and writes them up, returning JSON that
+`check` validates: exactly 5 training days, each session inside a free window, each
+outdoor run inside the day's outdoor hours, lift loads from the table, no lift session
+larger than the habit. A failed check gets one retry with the failures; then the plan
 is written with them listed.
 
 PJ's notes (`training.notes`) come in before the model is asked: a noted event's time and
@@ -42,7 +45,10 @@ DELOAD_LOAD = 0.9
 # Load steps: barbell plates in 5 lb; PowerBlock dumbbells in 2.5 lb per hand (Strong
 # logs dumbbells per hand).
 STEP_LB, DUMBBELL_STEP_LB = 5, 2.5
-RECENT = timedelta(weeks=12)
+# PJ's rotation (16 named workouts, about 3 lifts a week) takes over 12 weeks to come
+# round, so a lift stays in the table for as long as read_marts and read_sessions look back.
+RECENT = timedelta(weeks=26)
+NEXT_UP = 4  # rotation workouts offered to the model; a week holds about 3 lifts
 # Until the work calendar is shared into TRAINING_CALENDARS, weekdays in this window are
 # treated as busy. TRAINING_ASSUME_WORK= (empty) turns it off.
 ASSUME_WORK = os.environ.get("TRAINING_ASSUME_WORK", "08:00-17:00")
@@ -124,6 +130,35 @@ def progression(lifts, start, is_deload, hold=False):
             }
         )
     return sorted(out, key=lambda x: (x["pattern"], x["exercise"]))
+
+
+def habit(sessions):
+    """The lift session PJ trains, from `read_sessions` rows (one per workout and
+    exercise): {"lifts": median exercises per workout, "sets": median working sets per
+    exercise, "next": the named workouts longest since done, oldest first, each with the
+    lifts it had last time}. None without history."""
+    from statistics import median
+
+    workouts = {}
+    for r in sessions:
+        w = workouts.setdefault(
+            r["workout_id"], {"name": r["workout_name"], "date": r["workout_date"], "lifts": {}}
+        )
+        w["lifts"][r["exercise"]] = r["working_sets"]
+    if not workouts:
+        return None
+    latest = {}
+    for w in sorted(workouts.values(), key=lambda w: w["date"]):
+        if w["name"]:
+            latest[w["name"]] = w
+    return {
+        "lifts": round(median(len(w["lifts"]) for w in workouts.values())),
+        "sets": round(median(n for w in workouts.values() for n in w["lifts"].values())),
+        "next": [
+            {"workout": w["name"], "last_done": str(w["date"]), "lifts": sorted(w["lifts"])}
+            for w in sorted(latest.values(), key=lambda w: w["date"])[:NEXT_UP]
+        ],
+    }
 
 
 def _minutes(hhmm):
@@ -209,6 +244,21 @@ def read_marts(db=None):
     return lifts, weeks
 
 
+def read_sessions(db=None):
+    """One row per Strong workout and exercise of the last 26 weeks, with its working
+    (non-warmup) sets; `habit` reads them."""
+    with _connect(db) as con:
+        cur = con.execute(
+            "SELECT workout_id, workout_date, workout_name, exercise, "
+            "count(*) FILTER (WHERE NOT is_warmup) AS working_sets "
+            "FROM intermediate.int_training_sets "
+            "WHERE workout_date >= current_date - INTERVAL 26 WEEK "
+            "GROUP BY ALL HAVING working_sets > 0"
+        )
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
+
+
 def done_days(start, before, db=None):
     """Training days logged in the week starting `start`, before `before`."""
     with _connect(db) as con:
@@ -257,8 +307,13 @@ Rules:
   training days the first line asks for ("rest": false); the rest are rest days.
 - Each training day's slot lies inside one of that day's free windows.
 - "outdoor": true only for a run, and its slot inside that day's outdoor windows.
-- A lift in the progression table uses its load_lb and reps exactly; you choose sets.
+- A lift in the progression table uses its load_lb and reps exactly.
   Lifts not in the table: name them as Strong does, load_lb null, cue RPE or RIR.
+- When a lift session shape is given, it overrides goals.md: no day has more lifts, and
+  no lift more sets, than it says (a lift+bag or lift+bike day included; a deload may
+  take fewer sets). Take the lift sessions from its "next" workouts, in order, one
+  workout per session, titled with the workout's name; swap a lift only when a rule
+  above or a note forces it, and say so in "why".
 - Rest days: "rest": true, "slot": null, "items": []. A day with no free windows is one.
 - Notes from PJ, when listed: a chore or ache is fatigue (keep the hard sessions away
   from it).
@@ -279,6 +334,7 @@ def prompt(
     train=TRAINING_DAYS,
     from_date=None,
     noted=(),
+    shape=None,
 ):
     replan = (
         f" Replanning from {from_date}: PJ has trained {TRAINING_DAYS - train} days this week"
@@ -303,6 +359,15 @@ def prompt(
             ),
             "Progression table (lb; dumbbell loads are per hand, as Strong logs them):\n"
             + json.dumps(table, indent=1),
+            *(
+                [
+                    f"Lift session shape (what PJ logs in Strong): {shape['lifts']} lifts a "
+                    f"session, {shape['sets']} working sets each. Next in his rotation, "
+                    "longest since done first:\n" + json.dumps(shape["next"], indent=1)
+                ]
+                if shape
+                else []
+            ),
             "Recent weeks (from Strong and Health):\n" + json.dumps(weeks, default=str, indent=1),
             "Last plan:\n" + (previous or "(none)"),
         ]
@@ -321,7 +386,7 @@ def _inside(slot, windows):
     return any(_minutes(a) <= s0 and s1 <= _minutes(b) for a, b in windows)
 
 
-def check(plan, ctx, table, train=TRAINING_DAYS):
+def check(plan, ctx, table, train=TRAINING_DAYS, shape=None):
     """Failures, as sentences the model can act on. Empty means the plan passes."""
     fails = []
     days = {d["date"]: d for d in ctx["days"]}
@@ -345,7 +410,17 @@ def check(plan, ctx, table, train=TRAINING_DAYS):
                 pass  # no forecast yet for that day; nothing to check against
             elif len(slot) != 2 or not _inside(slot, ok):
                 fails.append(f"{d['date']}: outdoor run at {slot}, outdoor hours are {ok}")
+        lifts = [i for i in d.get("items", []) if i.get("exercise")]
+        if shape and len(lifts) > shape["lifts"]:
+            fails.append(
+                f"{d['date']}: {len(lifts)} lifts; PJ's sessions have {shape['lifts']} at most"
+            )
         for item in d.get("items", []):
+            if shape and item.get("exercise") and (item.get("sets") or 0) > shape["sets"]:
+                fails.append(
+                    f"{d['date']}: {item['exercise']} for {item['sets']} sets; "
+                    f"PJ does {shape['sets']} at most"
+                )
             row = loads.get(item.get("exercise"))
             if row and row["load_lb"] is not None and item.get("load_lb") != row["load_lb"]:
                 fails.append(
@@ -414,6 +489,7 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
     is_deload, why = deload(number, ratio)
     noted_rows = week_notes.rows_for(start, var)
     table = progression(lifts, start, is_deload, hold=week_notes.held(noted_rows))
+    shape = habit(read_sessions(db))
     if ctx is None:
         _, ctx = week_context.run(week)
     ctx = with_assumed_work(ctx, ASSUME_WORK)
@@ -431,8 +507,9 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
     ctx, train, noted = week_notes.apply(ctx, noted_rows, train, subtract)
     previous = out.read_text() if from_date and out.exists() else last_plan(start, var)
     user = prompt(
-        start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date, noted
-    )
+        start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date, noted,
+        shape,
+    )  # fmt: skip
     if brain is None:
         from light_labs.core.brain import brain_for
 
@@ -449,7 +526,7 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
         except (ValueError, json.JSONDecodeError) as e:
             fails = [f"reply was not the JSON asked for: {e}"]
             continue
-        fails = check(plan, ctx, table, train)
+        fails = check(plan, ctx, table, train, shape)
         if not fails:
             break
     if plan is None:
