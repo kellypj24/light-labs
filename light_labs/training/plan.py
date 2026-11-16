@@ -9,11 +9,11 @@ Code owns what must be right: the week number and deload (goals.md: week 1 start
 every lift's load and reps (progression from Strong's top sets: keep the rep scheme
 PJ trains; matching last time's top set adds load, falling short repeats it), and the
 shape of a lift session (`habit`: the median lifts per workout and working sets per lift
-Strong logged, plus the named workouts longest since done, which are next in his
-rotation). The model picks and places sessions and writes them up, returning JSON that
+Strong logged, plus the pool of templates a lift day may use: the half of his named
+workouts longest since done, so the set is cycled without a fixed order). The model picks and places sessions and writes them up, returning JSON that
 `check` validates: exactly 5 training days, each session inside a free window, each
 outdoor run inside the day's outdoor hours, lift loads from the table, no lift session
-larger than the habit. A failed check gets one retry with the failures; then the plan
+larger than the habit, each lift day one pool template and none used twice. A failed check gets one retry with the failures; then the plan
 is written with them listed.
 
 PJ's notes (`training.notes`) come in before the model is asked: a noted event's time and
@@ -48,7 +48,9 @@ STEP_LB, DUMBBELL_STEP_LB = 5, 2.5
 # PJ's rotation (16 named workouts, about 3 lifts a week) takes over 12 weeks to come
 # round, so a lift stays in the table for as long as read_marts and read_sessions look back.
 RECENT = timedelta(weeks=26)
-NEXT_UP = 4  # rotation workouts offered to the model; a week holds about 3 lifts
+# The pool is the older half of the templates, and never fewer than this many (a week
+# holds about 3 lifts).
+POOL_MIN = 4
 # Until the work calendar is shared into TRAINING_CALENDARS, weekdays in this window are
 # treated as busy. TRAINING_ASSUME_WORK= (empty) turns it off.
 ASSUME_WORK = os.environ.get("TRAINING_ASSUME_WORK", "08:00-17:00")
@@ -135,8 +137,12 @@ def progression(lifts, start, is_deload, hold=False):
 def habit(sessions):
     """The lift session PJ trains, from `read_sessions` rows (one per workout and
     exercise): {"lifts": median exercises per workout, "sets": median working sets per
-    exercise, "next": the named workouts longest since done, oldest first, each with the
-    lifts it had last time}. None without history."""
+    exercise, "pool": the half of the named workouts longest since done, oldest first,
+    each with the lifts and movement patterns it had last time, "recent": the last two
+    workouts done}. None without history.
+
+    A lift day takes one template from the pool, so a template comes back only after
+    half the others have been done, and the model is free to order them for the week."""
     from statistics import median
 
     workouts = {}
@@ -145,19 +151,28 @@ def habit(sessions):
             r["workout_id"], {"name": r["workout_name"], "date": r["workout_date"], "lifts": {}}
         )
         w["lifts"][r["exercise"]] = r["working_sets"]
+        w.setdefault("patterns", set()).add(r.get("movement_pattern") or "other")
     if not workouts:
         return None
     latest = {}
     for w in sorted(workouts.values(), key=lambda w: w["date"]):
         if w["name"]:
             latest[w["name"]] = w
+    oldest = sorted(latest.values(), key=lambda w: w["date"])
+
+    def template(w):
+        return {
+            "workout": w["name"],
+            "last_done": str(w["date"]),
+            "lifts": sorted(w["lifts"]),
+            "patterns": sorted(w["patterns"]),
+        }
+
     return {
         "lifts": round(median(len(w["lifts"]) for w in workouts.values())),
         "sets": round(median(n for w in workouts.values() for n in w["lifts"].values())),
-        "next": [
-            {"workout": w["name"], "last_done": str(w["date"]), "lifts": sorted(w["lifts"])}
-            for w in sorted(latest.values(), key=lambda w: w["date"])[:NEXT_UP]
-        ],
+        "pool": [template(w) for w in oldest[: max(POOL_MIN, -(-len(oldest) // 2))]],
+        "recent": [template(w) for w in oldest[:-3:-1]],
     }
 
 
@@ -249,7 +264,7 @@ def read_sessions(db=None):
     (non-warmup) sets; `habit` reads them."""
     with _connect(db) as con:
         cur = con.execute(
-            "SELECT workout_id, workout_date, workout_name, exercise, "
+            "SELECT workout_id, workout_date, workout_name, exercise, movement_pattern, "
             "count(*) FILTER (WHERE NOT is_warmup) AS working_sets "
             "FROM intermediate.int_training_sets "
             "WHERE workout_date >= current_date - INTERVAL 26 WEEK "
@@ -311,9 +326,17 @@ Rules:
   Lifts not in the table: name them as Strong does, load_lb null, cue RPE or RIR.
 - When a lift session shape is given, it overrides goals.md: no day has more lifts, and
   no lift more sets, than it says (a lift+bag or lift+bike day included; a deload may
-  take fewer sets). Take the lift sessions from its "next" workouts, in order, one
-  workout per session, titled with the workout's name; swap a lift only when a rule
-  above or a note forces it, and say so in "why".
+  take fewer sets). Each lift day is one template from its pool: exactly that
+  template's lifts, titled with its name, and no template twice in a week. The pool is
+  not a sequence; choose and order templates for training effect and low injury risk:
+  - Across the week's lift days cover a push, a pull and a lower-body pattern (squat,
+    lunge, hinge, power) when the pool allows.
+  - No movement pattern on two lift days in a row, counting the "recent" workouts
+    before the week's first lift day; shoulders and vertical_push count as one pattern.
+  - A squat, lunge, hinge or power template not on the day before intervals or the
+    long session, and at most two such templates in a week.
+  - With those met, prefer the template longest since done.
+  Say in "why" what the choice was for.
 - Rest days: "rest": true, "slot": null, "items": []. A day with no free windows is one.
 - Notes from PJ, when listed: a chore or ache is fatigue (keep the hard sessions away
   from it).
@@ -362,8 +385,11 @@ def prompt(
             *(
                 [
                     f"Lift session shape (what PJ logs in Strong): {shape['lifts']} lifts a "
-                    f"session, {shape['sets']} working sets each. Next in his rotation, "
-                    "longest since done first:\n" + json.dumps(shape["next"], indent=1)
+                    f"session, {shape['sets']} working sets each. Template pool, longest "
+                    "since done first:\n"
+                    + json.dumps(shape["pool"], indent=1)
+                    + "\nRecent workouts, newest first:\n"
+                    + json.dumps(shape["recent"], indent=1)
                 ]
                 if shape
                 else []
@@ -397,6 +423,8 @@ def check(plan, ctx, table, train=TRAINING_DAYS, shape=None):
     if len(training) != train:
         fails.append(f"{len(training)} training days; must be exactly {train}")
     loads = {r["exercise"]: r for r in table}
+    pool = {frozenset(t["lifts"]): t["workout"] for t in (shape or {}).get("pool", [])}
+    used = []
     for d in training:
         day = days.get(d.get("date"))
         if day is None:
@@ -415,6 +443,16 @@ def check(plan, ctx, table, train=TRAINING_DAYS, shape=None):
             fails.append(
                 f"{d['date']}: {len(lifts)} lifts; PJ's sessions have {shape['lifts']} at most"
             )
+        if pool and lifts:
+            name = pool.get(frozenset(i["exercise"] for i in lifts))
+            if name is None:
+                fails.append(
+                    f"{d['date']}: its lifts are not one template from the pool "
+                    f"({', '.join(sorted(pool.values()))})"
+                )
+            elif name in used:
+                fails.append(f"{d['date']}: {name} is already on another day this week")
+            used.append(name)
         for item in d.get("items", []):
             if shape and item.get("exercise") and (item.get("sets") or 0) > shape["sets"]:
                 fails.append(

@@ -126,16 +126,59 @@ class NumbersTest(unittest.TestCase):
         d = date(2026, 8, 1)
         rows = (
             workout(1, "Mix 1A", d, "Bench Press (Dumbbell)", "Bulgarian Split Squat")
-            + workout(2, "Mix 1B", d + timedelta(days=5), "Pull Up", "Skullcrusher (Dumbbell)")
+            + [
+                {
+                    "workout_id": 2,
+                    "workout_name": "Mix 1B",
+                    "workout_date": d + timedelta(days=5),
+                    "exercise": e,
+                    "working_sets": 4,
+                    "movement_pattern": p,
+                }
+                for e, p in (("Pull Up", "vertical_pull"), ("Skullcrusher (Dumbbell)", "arms"))
+            ]
             + workout(3, "Mix 2A", d + timedelta(days=9), "Squat (Barbell)", "Shrug (Barbell)")
             + workout(4, "Mix 1A", d + timedelta(days=90), "Bench Press (Dumbbell)", "Dip", "Curl")
         )
         h = plan.habit(rows)
         self.assertEqual((h["lifts"], h["sets"]), (2, 4))
-        self.assertEqual([w["workout"] for w in h["next"]], ["Mix 1B", "Mix 2A", "Mix 1A"])
-        self.assertEqual(h["next"][0]["lifts"], ["Pull Up", "Skullcrusher (Dumbbell)"])
-        self.assertEqual(h["next"][2]["lifts"], ["Bench Press (Dumbbell)", "Curl", "Dip"])
+        self.assertEqual([w["workout"] for w in h["pool"]], ["Mix 1B", "Mix 2A", "Mix 1A"])
+        self.assertEqual(h["pool"][0]["lifts"], ["Pull Up", "Skullcrusher (Dumbbell)"])
+        self.assertEqual(h["pool"][0]["patterns"], ["arms", "vertical_pull"])
+        self.assertEqual(h["pool"][2]["lifts"], ["Bench Press (Dumbbell)", "Curl", "Dip"])
+        self.assertEqual([w["workout"] for w in h["recent"]], ["Mix 1A", "Mix 2A"])
+        many = [
+            r for i in range(16) for r in workout(i, f"T{i:02d}", d + timedelta(days=i), "Squat")
+        ]
+        self.assertEqual(
+            [w["workout"] for w in plan.habit(many)["pool"]], [f"T{i:02d}" for i in range(8)]
+        )
         self.assertIsNone(plan.habit([]))
+
+    def test_a_lift_day_is_one_pool_template_used_once(self):
+        def day(i, *exercises):
+            return {"date": (MON + timedelta(days=i)).isoformat(), "rest": False,
+                    "slot": ["05:30", "06:15"], "type": "lift",
+                    "items": [{"exercise": e, "sets": 4, "reps": 5} for e in exercises]
+                    + [{"text": "Bag 4x3 min"}]}  # fmt: skip
+
+        shape = {"lifts": 2, "sets": 4, "pool": [
+            {"workout": "Mix 1B", "lifts": ["Pull Up", "Skullcrusher (Dumbbell)"]},
+            {"workout": "Mix 2A", "lifts": ["Incline Bench Press (Dumbbell)", "RDL"]},
+        ]}  # fmt: skip
+        week = good_plan()
+        week["days"][0] = day(0, "Skullcrusher (Dumbbell)", "Pull Up")
+        week["days"][2] = day(2, "RDL", "Incline Bench Press (Dumbbell)")
+        week["days"][4] = day(4, "Pull Up", "Skullcrusher (Dumbbell)")
+        week["days"][5] = day(5, "Pull Up", "RDL")
+        fails = plan.check(week, ctx(), [], shape=shape)
+        self.assertEqual(
+            fails,
+            [
+                "2026-11-20: Mix 1B is already on another day this week",
+                "2026-11-21: its lifts are not one template from the pool (Mix 1B, Mix 2A)",
+            ],
+        )
 
     def test_assumed_work_hours_leave_weekends(self):
         c = plan.with_assumed_work(ctx(), "08:00-17:00")
@@ -164,7 +207,7 @@ class CheckTest(unittest.TestCase):
 
     def test_a_lift_session_larger_than_the_habit_fails(self):
         p = good_plan()
-        shape = {"lifts": 2, "sets": 4, "next": []}
+        shape = {"lifts": 2, "sets": 4, "pool": []}
         self.assertEqual(plan.check(p, ctx(), self.table, shape=shape), [])
         bench = p["days"][0]["items"][0]
         p["days"][0]["items"] += [{**bench, "sets": 5}, bench, {"text": "Bag 4x3 min"}]
@@ -198,7 +241,7 @@ class RunTest(unittest.TestCase):
         self.addCleanup(marts.stop)
         sessions = mock.patch.object(
             plan, "read_sessions",
-            return_value=[{"workout_id": 1, "workout_name": "Mix 6A", "workout_date": MON,
+            return_value=[{"workout_id": 1, "workout_name": None, "workout_date": MON,
                            "exercise": "Bench Press (Barbell)", "working_sets": 4}],
         )  # fmt: skip
         sessions.start()
@@ -213,7 +256,7 @@ class RunTest(unittest.TestCase):
         self.assertEqual(fails, [])
         self.assertIn("the table says 165", brain.asked[1])
         self.assertIn("1 lifts a session, 4 working sets each", brain.asked[0])
-        self.assertIn('"workout": "Mix 6A"', brain.asked[0])
+        self.assertIn("Template pool, longest since done first:", brain.asked[0])
         text = out.read_text()
         self.assertTrue(text.startswith("# Week 2 (2026-W47, Nov 16–Nov 22)"))
         self.assertIn("Bench Press (Barbell) 4x5 @ 165 lb", text)
