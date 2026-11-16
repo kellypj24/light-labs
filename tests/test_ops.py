@@ -43,6 +43,16 @@ class LaunchdJobsTest(unittest.TestCase):
             else:
                 self.fail(f"unknown kind of job: {argv}")
 
+    def test_each_lab_job_can_find_claude(self):
+        # claude installs to ~/.local/bin, which launchd's PATH lacks. Rush's tick, his
+        # chat (/replan) and Roll's chores all call it.
+        for path, job in self.jobs():
+            if "lab" in [Path(a).name for a in job["ProgramArguments"]]:
+                with self.subTest(path.name):
+                    self.assertIn(
+                        f"{PJ_HOME}/.local/bin", job["EnvironmentVariables"]["PATH"].split(":")
+                    )
+
     def test_each_job_runs_the_deployed_release_against_the_checkouts_var(self):
         # The plists name PJ's home outright; the target is under whoever runs the tests.
         target = deploy.TARGETS["lab"].relative_to(Path.home())
