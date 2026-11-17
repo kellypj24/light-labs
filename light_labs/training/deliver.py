@@ -12,8 +12,9 @@ Rush's hourly tick calls `tick`. It:
 3. Daily from 21:00, asks for Health if it is stale.
 
 `/note <text>` logs a note about the week (`training.notes`) and texts back what Rush
-understood; `/replan <text>` does that and then replans. A note sent in work hours is read
-by the first tick after them, which replans if the note asked for it.
+understood; `/replan <text>` does that and then replans. A note sent in work hours, or
+while Ollama is down, is read by the first tick that can, which replans if the note asked
+for it.
 
 `/plan` texts a stored plan (`show`); each plan text ends with its page on Rush's remote
 when `RUSH_REMOTE_URL` is set.
@@ -237,6 +238,8 @@ def note(text, send, now=None, var=None, parser=None, planner=None, then_replan=
         return send(None, f"Couldn't read that note: {e}. Nothing was saved.")
     if record["rows"] is None:
         after = " and replan then" if then_replan else ""
+        if record["down"]:
+            return send(None, f"Saved. Ollama isn't answering; I'll read it once it is{after}.")
         return send(None, f"Saved. No local model runs in work hours; I'll read it after{after}.")
     send(None, notes.echo(record["rows"]))
     if then_replan and record["rows"]:
