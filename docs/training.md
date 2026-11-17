@@ -156,7 +156,8 @@ a past weekday read as upcoming, which the reply shows.
 
 The note's text and what each row was stay on this machine: the planner's Claude call
 gets kind, date and duration only. In work hours no local model runs, so a note is saved
-unread and the first tick after them reads it (and replans, for `/replan <text>`).
+unread and the first tick after them reads it (and replans, for `/replan <text>`). A note
+sent while Ollama is down is saved unread too and read by the first tick that reaches it.
 Notes are append-only in `var/training/notes/notes.jsonl`.
 
 Dagster lands the notes and each plan's days (`raw.training_notes`,

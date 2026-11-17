@@ -198,6 +198,30 @@ class DeliverTest(unittest.TestCase):
         deliver.unnote(self.phone, SUN, self.var)
         self.assertEqual(self.phone.texts[-1], "No notes to drop.")
 
+    def test_a_note_sent_while_ollama_is_down_waits_for_a_tick_that_reaches_it(self):
+        def down(text, today):
+            raise ConnectionRefusedError(61, "Connection refused")
+
+        self.fresh()
+        self.tick(SUN.replace(hour=19))  # W47 sent
+        mon = SUN + timedelta(days=1, hours=20)  # Mon Nov 16, 20:00
+        deliver.note("flu", self.phone, mon, self.var, down, then_replan=True)
+        self.assertEqual(
+            self.phone.texts[-1],
+            "Saved. Ollama isn't answering; I'll read it once it is and replan then.",
+        )
+        still = mon.replace(hour=21)
+        done = deliver.tick(self.phone, now=still, planner=self.planner, var=self.var, parser=down)
+        self.assertTrue(done[0].startswith("notes unread:"))
+        self.assertEqual(len(self.planner.calls), 1)
+        done = deliver.tick(
+            self.phone, now=mon.replace(hour=22), planner=self.planner, var=self.var,
+            parser=self.sick,
+        )  # fmt: skip
+        self.assertEqual(done[:2], ["read a note", "replanned after a note"])
+        self.assertTrue(self.phone.said("Mon Nov 16: sick (flu)"))
+        self.assertEqual(self.planner.calls[-1], ("2026-W47", date(2026, 11, 17)))
+
     def test_a_work_hours_note_is_read_and_replanned_by_the_next_tick_after(self):
         self.fresh()
         self.tick(SUN.replace(hour=19))  # W47 sent

@@ -16,7 +16,7 @@ What a row does to the plan (`apply`), all of it in code:
 The raw text and each row's `what` stay on this machine. The planner's Claude call gets
 kinds, dates and durations only, as the `training/plan` gate source declares. In work
 hours no local model runs, so a note is saved unread and Rush's first tick after them
-reads it.
+reads it. A note sent while Ollama is down is saved unread the same way.
 
 Notes are append-only in var/training/notes/notes.jsonl; `/note undo` voids the newest.
 """
@@ -196,20 +196,26 @@ def load(var=None):
 
 
 def add(text, now=None, var=None, parser=None, replan=False, defer=None):
-    """Save a note and read it; in work hours (`defer`) save it unread (rows None)."""
+    """Save a note and read it; in work hours (`defer`) save it unread (rows None). With
+    Ollama unreachable it is saved unread too, and the returned record says `down`."""
     now = now or datetime.now()
     defer = workhours.working(now=now) if defer is None else defer
-    rows = None if defer else (parser or parse)(text, now.date())
+    rows, down = None, False
+    if not defer:
+        try:
+            rows = (parser or parse)(text, now.date())
+        except OSError:  # refused, unreachable or timed out; a bad reply still raises
+            down = True
     record = {
         "id": f"n{now:%Y%m%d%H%M%S}-{secrets.token_hex(2)}",
         "at": now.isoformat(timespec="seconds"),
         "text": text,
         "rows": rows,
-        "model": None if defer else MODEL,
+        "model": None if rows is None else MODEL,
         "replan": replan,
     }
     _append(record, var)
-    return record
+    return {**record, "down": down}
 
 
 def read_unread(now=None, var=None, parser=None):

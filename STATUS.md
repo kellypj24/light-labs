@@ -104,6 +104,8 @@ _Updated 2026-11-14._
    requested one lands, `/replan` on demand; `/plan` texts a stored plan and the remote's
    Training tab shows any week. `/note` and `/replan <text>` log events, chores and sick
    days (`training/notes.py`, read by `llama3.1:8b`) and the planner works around them.
+   A note sent while Ollama is down is saved unread and read by the first tick that
+   reaches it.
    Notes and plan days land in DuckDB (`training_record_job`); planned vs done is
    `mart_training_adherence`. A sick day holds loads, travel days are blocked, chore
    minutes count in the load.
