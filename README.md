@@ -74,7 +74,7 @@ analytics/             dbt-duckdb project: raw eval samples → staging → mart
 light_labs/orchestration/  Dagster: landing assets + the dbt project, jobs, sensors
 light_labs/radar/      Relationship Radar: a toolset for robots, data in ~/.relationship-radar
 tests/                 unit tests (no network, no models)
-ops/                   launchd job for Rush, Dagster instance config, GitHub settings
+ops/                   launchd jobs (Rush, Roll, Dagster, Ollama), Dagster instance config, GitHub settings
 var/                   runtime state, results and the lab database; git-ignored
 ```
 
@@ -82,7 +82,8 @@ var/                   runtime state, results and the lab database; git-ignored
 
 - [uv](https://docs.astral.sh/uv/), [just](https://just.systems), Go (see `evals/go.mod`)
 - [Ollama](https://ollama.com) with `llama3.1:8b`; for challengers, `gemma3:4b` and
-  `qwen2.5-coder:7b`
+  `qwen2.5-coder:7b`. `just ollama-install` runs its server under launchd, so it is back
+  after a reboot (quits Ollama.app: both bind :11434)
 - The `claude` CLI for Bass. Logged in with a subscription, it uses subscription limits;
   with `ANTHROPIC_API_KEY` set, it bills the API. Either way Bass runs without your user
   settings, hooks or `~/.claude/CLAUDE.md`.

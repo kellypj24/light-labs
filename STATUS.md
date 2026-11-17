@@ -19,6 +19,10 @@ _Updated 2026-11-14._
   release in `~/.light-labs/lab`, not the checkout (`lab deploy lab`, docs/ci-cd.md
   Deploys); data stays in the checkout's `var/`. `lab git land` deploys each merge once
   main's CI is green on it; `lab deploy lab --rollback` goes back one release.
+- Ollama's server runs under launchd (`com.pjkelly.light-labs.ollama`, `just
+  ollama-install`), so the local models are back after a reboot; Ollama.app stays closed
+  (both bind :11434) and is opened only to take an update, then `just ollama-install`
+  again. Log: `var/ollama/serve.log`.
 - Rush (DLN-100) live under launchd: hourly tick, board and mail triage, Telegram and the
   tailnet remote page. Escalations drafted by Auto, approved by PJ. muse's LOOP thread
   (`task_fb2e059c5a8bd362`) muted 2026-11-09: 73 of ~88 drafts since 11-03, all rejected.
@@ -125,10 +129,9 @@ _Updated 2026-11-14._
 
 - Work-hours board drafts from Claude always queue for PJ (auto-send was earned by
   `llama3.1:8b`). Let them auto-send under the same guards? Not decided.
-- Cap Ollama at one loaded model (`OLLAMA_MAX_LOADED_MODELS=1`)? Ollama.app ignores
-  `launchctl setenv` (its server log shows 0, the default), so it needs `ollama serve`
-  under a LaunchAgent of ours instead of the app. Rush's explicit unloads cover the
-  hourly tick without it.
+- Cap Ollama at one loaded model (`OLLAMA_MAX_LOADED_MODELS=1`)? Now one line in
+  `ops/com.pjkelly.light-labs.ollama.plist` plus `just ollama-install`; unset today.
+  Rush's explicit unloads cover the hourly tick without it.
 - Radar's shared digest is off by default (`share_digest: true` in its config turns it
   on; installing Drive for Desktop alone shares nothing). It would carry names, circles
   and birthdays to Google and a cloud Claude task, which the `radar` gate rule forbids

@@ -7,11 +7,11 @@ agents=~/Library/LaunchAgents
 
 labels() {
     case $1 in
-        rush | rush-remote | dagster) echo "com.pjkelly.light-labs.$1" ;;
+        rush | rush-remote | dagster | ollama) echo "com.pjkelly.light-labs.$1" ;;
         hermes) echo "ai.hermes.gateway" ;;
         radar) echo "com.pjkelly.relationship-radar.messages-export" \
             "com.pjkelly.relationship-radar.sync" "com.pjkelly.relationship-radar.weekly" ;;
-        *) echo "unknown job $1 (rush, rush-remote, dagster, hermes, radar, all)" >&2; exit 2 ;;
+        *) echo "unknown job $1 (rush, rush-remote, dagster, ollama, hermes, radar, all)" >&2; exit 2 ;;
     esac
 }
 
