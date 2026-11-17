@@ -92,8 +92,9 @@ missing CI deploys nothing and exits non-zero, as does a failed deploy; a target
 at or past the commit is left. `--no-wait` skips both waits. `lab deploy <target> --ref <branch>` tries a branch; `lab deploy <target> --rollback`
 goes back to the release before the current one, until the next deploy.
 
-Changing a plist: `just rush-install`, `just roll-chores-install` or `just dagster-install`
-copies it from the checkout and reloads the job.
+Changing a plist: `just rush-install`, `just roll-chores-install`, `just dagster-install`
+or `just ollama-install` copies it from the checkout and reloads the job. The Ollama job
+runs Ollama.app's own `ollama serve`, not a release, so a deploy never touches it.
 
 ## Claude review (`claude-code-review.yml`, `claude.yml`)
 

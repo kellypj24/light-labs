@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Ollama's server, so the local models are back after a reboot without Ollama.app
+     (which is not a login item and left Rush with nothing to connect to). Install with
+     `just ollama-install`, which quits the app first: both bind :11434. Not part of a
+     release: the binary is Ollama.app's own, so an update is still the app's to install. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.ollama</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/ollama</string>
+    <string>serve</string>
+  </array>
+  <!-- OLLAMA_* settings go here; Ollama.app ignores `launchctl setenv`. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OLLAMA_HOST</key><string>127.0.0.1:11434</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <!-- Don't spin while the port is taken (Ollama.app opened by hand): wait a minute. -->
+  <key>ThrottleInterval</key><integer>60</integer>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/ollama/serve.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/ollama/serve.log</string>
+</dict>
+</plist>

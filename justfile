@@ -145,6 +145,14 @@ _reload job:
 # Install (or reinstall) Rush's heartbeat and phone page as launchd jobs
 rush-install: (_reload "rush") (_reload "rush-remote")
 
+# Install (or reinstall) Ollama's server as a launchd job, so it is back after a reboot.
+# Quits Ollama.app first: both bind :11434
+ollama-install: _ollama-quit (_reload "ollama")
+
+_ollama-quit:
+    mkdir -p "${LAB_VAR:-var}/ollama"
+    pkill -x Ollama || true
+
 # Install (or reinstall) and start the daemon's launchd job
 dagster-install: _dagster-home (_reload "dagster")
 
@@ -154,7 +162,7 @@ dagster-restart:
 
 # Pause scheduled jobs: rush (hourly tick, default), rush-remote (phone page), dagster,
 # hermes (gateway and its crons, e.g. morning-brief), radar (Messages export, sync,
-# weekly), or all. Nothing is lost: each catches up on its next run. `just resume`
+# weekly), or all; ollama (the model server) only by name. Nothing is lost: each catches up on its next run. `just resume`
 # starts them again; `just bots` shows which run.
 pause +jobs="rush":
     @scripts/bots.sh pause {{ jobs }}

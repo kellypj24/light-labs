@@ -13,12 +13,22 @@ from light_labs import cli, deploy
 REPO = Path(__file__).resolve().parents[1]
 PLISTS = sorted((REPO / "ops").glob("*.plist"))
 PJ_HOME = "/Users/pjkelly"
+# Jobs that run a program from outside the repo, so no release, LAB_VAR or deploy restart.
+OUTSIDE = {"com.pjkelly.light-labs.ollama": ["/usr/local/bin/ollama", "serve"]}
 
 
 class LaunchdJobsTest(unittest.TestCase):
     def jobs(self):
         self.assertTrue(PLISTS)
         return [(path, plistlib.loads(path.read_bytes())) for path in PLISTS]
+
+    def lab_jobs(self):
+        return [(path, job) for path, job in self.jobs() if job["Label"] not in OUTSIDE]
+
+    def test_a_job_from_outside_the_repo_runs_only_its_named_command(self):
+        for _, job in self.jobs():
+            if job["Label"] in OUTSIDE:
+                self.assertEqual(job["ProgramArguments"], OUTSIDE[job["Label"]])
 
     def test_each_label_matches_its_file(self):
         for path, job in self.jobs():
@@ -28,7 +38,7 @@ class LaunchdJobsTest(unittest.TestCase):
         recipes = set(
             re.findall(r"^([a-z][\w-]*)[^\n:]*:", (REPO / "justfile").read_text(), re.MULTILINE)
         )
-        for _, job in self.jobs():
+        for _, job in self.lab_jobs():
             argv = job["ProgramArguments"]
             names = [Path(a).name for a in argv]
             if "lab" in names:
@@ -57,7 +67,7 @@ class LaunchdJobsTest(unittest.TestCase):
         # The plists name PJ's home outright; the target is under whoever runs the tests.
         target = deploy.TARGETS["lab"].relative_to(Path.home())
         current = f"{PJ_HOME}/{target}/current"
-        for path, job in self.jobs():
+        for path, job in self.lab_jobs():
             with self.subTest(path.name):
                 argv = job["ProgramArguments"]
                 self.assertTrue(
@@ -77,7 +87,7 @@ class LaunchdJobsTest(unittest.TestCase):
                     self.assertIn(f"{current}/.venv/bin/lab", argv)
 
     def test_the_services_a_merge_reports_are_the_keep_alive_jobs(self):
-        keep_alive = {job["Label"] for _, job in self.jobs() if job.get("KeepAlive")}
+        keep_alive = {job["Label"] for _, job in self.lab_jobs() if job.get("KeepAlive")}
         self.assertEqual({s["label"] for s in deploy.SERVICES.values()}, keep_alive)
 
 
