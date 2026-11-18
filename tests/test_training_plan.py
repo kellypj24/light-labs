@@ -76,7 +76,7 @@ class NumbersTest(unittest.TestCase):
         ]
         rows = {r["exercise"]: r for r in plan.progression(lifts, MON, False, hold=True)}
         self.assertEqual(rows["Bench Press (Barbell)"]["load_lb"], 160)
-        self.assertIn("held (sick)", rows["Bench Press (Barbell)"]["rule"])
+        self.assertIn("held", rows["Bench Press (Barbell)"]["rule"])
         self.assertEqual(rows["Pull Up"]["reps"], 4)
         moving = {r["exercise"]: r for r in plan.progression(lifts, MON, False)}
         self.assertEqual(moving["Bench Press (Barbell)"]["load_lb"], 165)
@@ -287,6 +287,56 @@ class RunTest(unittest.TestCase):
         self.assertEqual(days["2026-11-17"]["free"], [])
         self.assertNotIn(["06:00", "08:00"], days["2026-11-18"]["free"])
         self.assertTrue(all(a >= "08:00" or b <= "06:00" for a, b in days["2026-11-18"]["free"]))
+
+    def replan(self, did, injured=False):
+        """Replan W47 from Wed over a full-week plan; `did` is what `logged` returns."""
+        (self.var / "training" / "plans").mkdir()
+        (self.var / "training" / "plans" / "2026-W47.json").write_text(json.dumps(good_plan()))
+        if injured:
+            base = dict.fromkeys(("end_date", "start", "end", "minutes", "effort"))
+            hurt = {**base, "kind": "injury", "date": "2026-11-17", "done": False,
+                    "region": "shoulder", "what": "sore shoulder"}  # fmt: skip
+            notes.add(
+                "x", datetime(2026, 11, 17, 18), self.var, lambda text, today: [hurt], defer=False
+            )
+        days = [
+            {"date": (MON + timedelta(days=i)).isoformat(), "rest": i == 4, "slot": ["13:00", "13:45"],
+             "type": "run", "outdoor": True, "title": "Easy run", "items": []}
+            for i in range(2, 7)
+        ]  # fmt: skip
+        brain = FakeBrain([json.dumps({"glance": "g", "days": days, "summary": {}})] * 2)
+        with mock.patch.object(plan, "logged", return_value=did):
+            out, fails = plan.run(
+                "2026-W47", brain=brain, var=self.var, ctx=ctx(), from_date=MON + timedelta(days=2)
+            )
+        return out, fails, brain.asked[0]
+
+    def test_a_replan_shows_what_was_logged_before_it_and_keeps_a_rest_day(self):
+        out, fails, asked = self.replan({"2026-11-17": [{"kind": "running", "minutes": 31}]})
+        self.assertEqual(fails, [])
+        self.assertIn("PJ has trained 1 days this week already, so plan exactly 4", asked)
+        text = out.read_text()
+        self.assertIn("**Mon Nov 16**: no session logged.", text)
+        self.assertIn("**Tue Nov 17**: done: running 31 min.", text)
+        self.assertNotIn("Bench Press", text)
+        stored = json.loads(out.with_suffix(".json").read_text())["days"]
+        self.assertEqual(stored[0]["title"], "Strength")  # the plan's entry stays on record
+        self.assertEqual(stored[0]["logged"], [])
+
+    def test_missed_sessions_are_not_made_up(self):
+        _, _, asked = self.replan({})
+        self.assertIn("PJ has trained 0 days this week already, so plan exactly 4", asked)
+        self.assertEqual([plan.replan_cap(n) for n in range(1, 7)], [1, 2, 2, 3, 4, 4])
+
+    def test_an_injury_holds_loads_and_is_the_reason_beside_the_missed_days(self):
+        out, _, asked = self.replan({"2026-11-17": [{"kind": "running", "minutes": 31}]}, True)
+        self.assertIn("shoulder injury since 2026-11-17, not recovered", asked)
+        self.assertIn("Loads are held", asked)
+        self.assertNotIn("sore shoulder", asked)
+        self.assertIn('"load_lb": 160', asked)
+        text = out.read_text()
+        self.assertIn("**Mon Nov 16**: no session logged (shoulder injury).", text)
+        self.assertIn("**Tue Nov 17**: done: running 31 min.", text)
 
     def test_still_failing_plans_are_written_with_their_failures(self):
         bad = json.dumps(good_plan(load=170))

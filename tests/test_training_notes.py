@@ -114,6 +114,12 @@ class RecordTest(unittest.TestCase):
 def ctx(*dates):
     return {"days": [{"date": d, "free": [["05:00", "21:00"]]} for d in dates]}
 
+    def test_an_injury_reaches_every_later_week_until_recovered(self):
+        notes.add("x", NOON, self.var, lambda t, today: [row(kind="injury", region="knee")])
+        later = date(2026, 12, 14)
+        self.assertEqual([r["kind"] for r in notes.rows_for(later, self.var)], ["injury"])
+        self.assertEqual(notes.rows_for(date(2026, 11, 2), self.var), [])
+
 
 class ApplyTest(unittest.TestCase):
     def apply(self, rows, train=5, days=("2026-11-14", "2026-11-15", "2026-11-16")):
@@ -143,6 +149,35 @@ class ApplyTest(unittest.TestCase):
         _, _, lines = self.apply([row(kind="sick")])
         self.assertIn("Loads are held", lines[-1])
 
+    def test_an_injury_holds_loads_and_rules_out_its_region_until_recovered(self):
+        hurt = row(kind="injury", region="Shoulder", what="sore shoulder")
+        self.assertEqual(hurt["region"], "shoulder")
+        self.assertTrue(notes.held([hurt]))
+        _, owed, lines = self.apply([hurt], train=2)
+        self.assertEqual(owed, 2)
+        self.assertEqual(lines[0], "shoulder injury since 2026-11-14, not recovered")
+        self.assertNotIn("sore", " ".join(lines))
+        self.assertIn("until you send /note shoulder is fine", notes.echo([hurt]))
+        healed = [hurt, row(kind="recovered", region="shoulder", day="tomorrow")]
+        self.assertEqual((notes.injuries(healed), notes.held(healed)), ({}, False))
+
+    def test_a_sore_body_part_is_an_injury_whatever_kind_the_model_gave(self):
+        sore = row(kind="ache", what="sore shoulder")
+        self.assertEqual((sore["kind"], sore["region"]), ("injury", "shoulder"))
+        self.assertEqual(row(kind="ache", what="headache")["kind"], "ache")
+        self.assertEqual(row(kind="injury", region="soul", what="tired")["kind"], "ache")
+
+    def test_reasons_for_a_day_without_a_session(self):
+        hurt = row(kind="injury", region="knee")  # noted Sat Nov 14
+        chore = row(kind="chore", day="yesterday", what="mowed")
+        week = "2026-11-09"
+        self.assertEqual(notes.reasons([hurt, chore], "2026-11-13", week), ["knee injury", "chore"])
+        self.assertEqual(notes.reasons([hurt], "2026-11-10", week), ["knee injury"])
+        self.assertEqual(notes.reasons([hurt], "2026-11-06", week), [])
+        self.assertEqual(notes.reasons([hurt], "2026-11-20", week), ["knee injury"])
+        self.assertEqual(row(kind="recovered")["kind"], "other")
+        self.assertIsNone(row(kind="chore", region="knee")["region"])
+
     def test_owed_never_exceeds_the_days_that_have_a_window(self):
         _, owed, _ = self.apply([], train=5)
         self.assertEqual(owed, 3)
@@ -150,7 +185,7 @@ class ApplyTest(unittest.TestCase):
     def test_chores_and_aches_reach_the_planner_without_their_words(self):
         rows = [
             row(kind="chore", day="yesterday", minutes=120, effort="hard", what="split firewood"),
-            row(kind="ache", what="sore knee"),
+            row(kind="ache", what="slept badly"),
             row(kind="event", start="15:00", end="17:00", what="dentist"),
         ]
         _, _, lines = self.apply(rows)

@@ -46,8 +46,9 @@ SOURCES = {
     "evals": set(),
     # Weekly plan: PJ's training logs, goals.md, free windows (no event titles) and the
     # forecast. Allowed and recorded (docs/plans/training.md, decided 2026-11-08). His
-    # notes add kind, date and duration per row (training/notes.py `line`); their text
-    # and what each one was stay local.
+    # notes add kind, date and duration per row (training/notes.py `line`) and an
+    # injury's region from a fixed list (`REGIONS`, decided 2026-11-17); their text and
+    # what each one was stay local.
     "training/plan": set(),
 }
 

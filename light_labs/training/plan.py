@@ -19,11 +19,15 @@ is written with them listed.
 PJ's notes (`training.notes`) come in before the model is asked: a noted event's time and
 a sick or travel day leave the free windows, a sick day lowers the sessions owed and
 holds every load at last time's (this week and the next), and chores and aches reach the
-model as kind, date and duration.
+model as kind, date and duration. An injury (until a note says it has recovered) holds
+every load too and reaches the model as its region; nothing is ruled out.
 
-A midweek replan (`from_date`) plans only the days from that date, with as many training
-days as the week still owes after what Strong and Health logged before it; the days
-before it keep the earlier plan.
+A midweek replan (`from_date`) plans only the days from that date. It owes what the week
+still lacks after what Strong and Health logged before it, capped so the days left keep
+one rest day in three (`replan_cap`): missed sessions are not made up. The days before
+it keep the earlier plan's entry with what was logged that day beside it (`logged`), and
+the page shows what was logged, not what was planned, with the noted reason beside a day
+that had no session.
 """
 
 import json
@@ -91,7 +95,8 @@ def progression(lifts, start, is_deload, hold=False):
     The rep target is the scheme PJ trains: the more reps of the last two weeks' top sets.
     The last top set reaching it adds one step of load; falling short repeats the load.
     Bodyweight lifts add a rep instead. A deload takes 90% of the load. `hold` (PJ was
-    sick this week or last) repeats the last load and reps whatever the last set did."""
+    sick this week or last, or is injured) repeats the last load and reps whatever the
+    last set did."""
     by_exercise = {}
     for r in lifts:
         by_exercise.setdefault(r["exercise"], []).append(r)
@@ -107,7 +112,7 @@ def progression(lifts, start, is_deload, hold=False):
         weight, reps = latest["top_set_weight"] or 0, int(latest["top_set_reps"] or 0)
         if latest["is_bodyweight_lift"]:
             target_reps, load = reps + (0 if hold else 1), None
-            rule = f"bodyweight: {reps} → {target_reps} reps" + (", held (sick)" if hold else "")
+            rule = f"bodyweight: {reps} → {target_reps} reps" + (", held" if hold else "")
         else:
             target_reps = max(reps, int(prev["top_set_reps"] or 0) if prev else 0)
             step = DUMBBELL_STEP_LB if "(Dumbbell)" in name else STEP_LB
@@ -115,7 +120,7 @@ def progression(lifts, start, is_deload, hold=False):
             load = weight + step if hit and not hold else weight
             rule = (
                 f"{weight:g}×{reps}, scheme {target_reps}: {'hit' if hit else 'short'} → {load:g}"
-                + (", held (sick)" if hold else "")
+                + (", held" if hold else "")
             )
             if is_deload:
                 load = _round(load * DELOAD_LOAD, step)
@@ -274,14 +279,27 @@ def read_sessions(db=None):
         return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
 
 
-def done_days(start, before, db=None):
-    """Training days logged in the week starting `start`, before `before`."""
+def logged(start, before, db=None):
+    """{date: [{"kind", "minutes"}]} for the sessions Strong and Health logged in the
+    week starting `start`, before `before`. A day with none has no key."""
     with _connect(db) as con:
-        return con.execute(
-            "SELECT count(DISTINCT session_date) FROM intermediate.int_training_sessions "
-            "WHERE session_date >= ? AND session_date < ?",
+        rows = con.execute(
+            "SELECT session_date, kind, duration_minutes "
+            "FROM intermediate.int_training_sessions "
+            "WHERE session_date >= ? AND session_date < ? ORDER BY started_at_local",
             [start, before],
-        ).fetchone()[0]
+        ).fetchall()
+    out = {}
+    for day, kind, minutes in rows:
+        out.setdefault(str(day)[:10], []).append(
+            {"kind": kind, "minutes": round(minutes) if minutes else None}
+        )
+    return out
+
+
+def replan_cap(days_left):
+    """The most sessions a replan puts on the days left: one rest day in every three."""
+    return days_left - days_left // 3
 
 
 def last_plan(start, var=None):
@@ -339,7 +357,11 @@ Rules:
   Say in "why" what the choice was for.
 - Rest days: "rest": true, "slot": null, "items": []. A day with no free windows is one.
 - Notes from PJ, when listed: a chore or ache is fatigue (keep the hard sessions away
-  from it).
+  from it). An injury not recovered from: PJ can train, loads are already held; ease
+  back into what loads that region (those lifts later in the week, reps in reserve,
+  the easier option when two fit) and say so in "why".
+- A replan does not make up sessions missed earlier in the week: no doubled sessions,
+  no added volume.
 - No safety disclaimer; the page adds its own.
 """
 
@@ -358,9 +380,10 @@ def prompt(
     from_date=None,
     noted=(),
     shape=None,
+    done=0,
 ):
     replan = (
-        f" Replanning from {from_date}: PJ has trained {TRAINING_DAYS - train} days this week"
+        f" Replanning from {from_date}: PJ has trained {done} days this week"
         f" already, so plan exactly {train} training days across the dates listed below."
         if from_date
         else f" Plan exactly {train} training days."
@@ -493,7 +516,16 @@ def render(plan, start, number, is_deload, why, fails, from_date=None):
     lines.append("")
     for d in sorted(plan.get("days", []), key=lambda d: d.get("date", "")):
         day = date.fromisoformat(d["date"])
-        if d.get("rest"):
+        if "logged" in d:  # a day before a replan: what was done, not what was planned
+            did = ", ".join(
+                s["kind"] + (f" {s['minutes']} min" if s.get("minutes") else "")
+                for s in d["logged"]
+            )
+            why = f" ({', '.join(d['missed_for'])})" if d.get("missed_for") else ""
+            lines.append(
+                f"**{day:%a %b %-d}**: {'done: ' + did if did else 'no session logged' + why}."
+            )
+        elif d.get("rest"):
             lines.append(f"**{day:%a %b %-d}**: rest. {d.get('why', '')}".rstrip())
         else:
             slot = "–".join(d.get("slot") or [])
@@ -533,20 +565,29 @@ def run(week=None, brain=None, var=None, db=None, ctx=None, from_date=None):
     ctx = with_assumed_work(ctx, ASSUME_WORK)
     year, wk, _ = start.isocalendar()
     out = home(var) / "plans" / f"{year}-W{wk:02d}.md"
-    train, earlier = TRAINING_DAYS, []
+    train, earlier, done = TRAINING_DAYS, [], 0
     if from_date and from_date > start:
         ctx = {**ctx, "days": [d for d in ctx["days"] if d["date"] >= from_date.isoformat()]}
-        train = max(0, min(len(ctx["days"]), TRAINING_DAYS - done_days(start, from_date, db)))
+        did = logged(start, from_date, db)
+        done = len(did)
+        train = max(0, min(replan_cap(len(ctx["days"])), TRAINING_DAYS - done))
+        old = {}
         if out.with_suffix(".json").exists():
-            old = json.loads(out.with_suffix(".json").read_text())
-            earlier = [d for d in old.get("days", []) if d.get("date", "") < from_date.isoformat()]
+            old = {
+                d.get("date"): d for d in json.loads(out.with_suffix(".json").read_text())["days"]
+            }
+        for i in range((from_date - start).days):
+            day = (start + timedelta(days=i)).isoformat()
+            planned = old.get(day) or {"date": day, "rest": True, "slot": None, "items": []}
+            why = [] if day in did else week_notes.reasons(noted_rows, day, start.isoformat())
+            earlier.append({**planned, "logged": did.get(day, []), "missed_for": why})
     else:
         from_date = None
     ctx, train, noted = week_notes.apply(ctx, noted_rows, train, subtract)
     previous = out.read_text() if from_date and out.exists() else last_plan(start, var)
     user = prompt(
         start, number, is_deload, why, ctx, table, weeks, goals, previous, train, from_date, noted,
-        shape,
+        shape, done,
     )  # fmt: skip
     if brain is None:
         from light_labs.core.brain import brain_for

@@ -12,9 +12,14 @@ What a row does to the plan (`apply`), all of it in code:
 - travel, upcoming: its days have no free windows. The sessions owed stay, capped at the
   days that still have one.
 - chore, ache: handed to the planner as context (kind, date, minutes, effort).
+- injury: from its date until a `recovered` row for the same region (`injuries`), every
+  load repeats last time's and the planner is told the region, to ease back into what
+  loads it. Nothing is ruled out: PJ decides what he can lift. On a replan it is the
+  reason shown beside the days that had no session (`reasons`).
 
 The raw text and each row's `what` stay on this machine. The planner's Claude call gets
-kinds, dates and durations only, as the `training/plan` gate source declares. In work
+kinds, dates, durations and an injury's region (one of `REGIONS`) only, as the
+`training/plan` gate source declares. In work
 hours no local model runs, so a note is saved unread and Rush's first tick after them
 reads it. A note sent while Ollama is down is saved unread the same way.
 
@@ -33,7 +38,11 @@ from light_labs.core import workhours
 
 # An Ollama tag, not a brain spec: a note's text never goes to a paid model.
 MODEL = os.environ.get("TRAINING_NOTES_MODEL", "llama3.1:8b")
-KINDS = ("event", "chore", "sick", "ache", "travel", "other")
+KINDS = ("event", "chore", "sick", "ache", "injury", "recovered", "travel", "other")
+# The body parts an injury row may name. The region is all of an injury the planner's
+# Claude call sees, so it comes from this list and never from the note's words.
+REGIONS = ("shoulder", "elbow", "wrist", "neck", "back", "hip", "knee", "ankle", "foot")
+_REGION = re.compile(r"\b(" + "|".join(REGIONS) + r")s?\b")
 EFFORTS = ("light", "moderate", "hard")
 DEFAULT_EVENT_MIN = 60  # an event with a start and no end or duration
 CONTEXT_BEFORE = timedelta(days=7)  # last week's chores and aches still matter
@@ -44,13 +53,17 @@ _HHMM = re.compile(r"([01]?\d|2[0-3]):([0-5]\d)")
 SYSTEM = """You turn PJ's note about his week into JSON for his training planner.
 Reply with a JSON array only, no prose. One object per separate thing in the note:
 
-{"kind": "event" | "chore" | "sick" | "ache" | "travel" | "other",
+{"kind": "event" | "chore" | "sick" | "ache" | "injury" | "recovered" | "travel" | "other",
  "day": "...", "end_day": null, "start": null, "end": null,
- "minutes": null, "effort": null, "done": false, "what": "..."}
+ "minutes": null, "effort": null, "done": false, "region": null, "what": "..."}
 
 kind: event = an appointment or commitment at a time. chore = physical work (yardwork,
 moving, cleaning, repairs). sick = ill: a cold, flu, fever, stomach bug, "sick".
-ache = sore, tired, slept badly, a tweak or minor injury. travel = away from home.
+ache = tired, slept badly, a headache, sore all over: no one body part.
+injury = one body part hurt, sore, strained, tweaked or recovering (sore shoulder, bad
+knee). recovered = that body part is fine again. travel = away from home.
+region: for injury and recovered, the body part, one of: shoulder, elbow, wrist, neck,
+back, hip, knee, ankle, foot. Else null.
 day: the day exactly as he said it, lowercase: today, yesterday, tomorrow, a weekday
 (mon tue wed thu fri sat sun) or YYYY-MM-DD. Use "today" when he names no day.
 end_day: the last day when it spans several days, else null.
@@ -65,16 +78,20 @@ and end_day. The same event on two days is two objects.
 
 Examples (today is Wednesday):
 Note: vet appointment Fri 4-5, and I power-washed the deck for 90 minutes on Monday
-[{"kind":"event","day":"fri","end_day":null,"start":"16:00","end":"17:00","minutes":60,"effort":null,"done":false,"what":"vet appointment"},
- {"kind":"chore","day":"mon","end_day":null,"start":null,"end":null,"minutes":90,"effort":"moderate","done":true,"what":"power-washed the deck"}]
+[{"kind":"event","day":"fri","end_day":null,"start":"16:00","end":"17:00","minutes":60,"effort":null,"done":false,"region":null,"what":"vet appointment"},
+ {"kind":"chore","day":"mon","end_day":null,"start":null,"end":null,"minutes":90,"effort":"moderate","done":true,"region":null,"what":"power-washed the deck"}]
 Note: at a conference Mon to Wed next week
-[{"kind":"travel","day":"mon","end_day":"wed","start":null,"end":null,"minutes":null,"effort":null,"done":false,"what":"conference"}]
+[{"kind":"travel","day":"mon","end_day":"wed","start":null,"end":null,"minutes":null,"effort":null,"done":false,"region":null,"what":"conference"}]
 Note: headache, skipped lunch
-[{"kind":"ache","day":"today","end_day":null,"start":null,"end":null,"minutes":null,"effort":null,"done":false,"what":"headache"}]
+[{"kind":"ache","day":"today","end_day":null,"start":null,"end":null,"minutes":null,"effort":null,"done":false,"region":null,"what":"headache"}]
 Note: came down with the flu yesterday
-[{"kind":"sick","day":"yesterday","end_day":null,"start":null,"end":null,"minutes":null,"effort":null,"done":false,"what":"flu"}]
+[{"kind":"sick","day":"yesterday","end_day":null,"start":null,"end":null,"minutes":null,"effort":null,"done":false,"region":null,"what":"flu"}]
+Note: tweaked my knee on a run yesterday, taking it easy
+[{"kind":"injury","day":"yesterday","end_day":null,"start":null,"end":null,"minutes":null,"effort":null,"done":false,"region":"knee","what":"tweaked knee"}]
+Note: elbow feels fine again
+[{"kind":"recovered","day":"today","end_day":null,"start":null,"end":null,"minutes":null,"effort":null,"done":false,"region":"elbow","what":"elbow is fine"}]
 Note: school play 2026-12-03 at 6pm
-[{"kind":"event","day":"2026-12-03","end_day":null,"start":"18:00","end":null,"minutes":null,"effort":null,"done":false,"what":"school play"}]"""
+[{"kind":"event","day":"2026-12-03","end_day":null,"start":"18:00","end":null,"minutes":null,"effort":null,"done":false,"region":null,"what":"school play"}]"""
 
 
 def path(var=None):
@@ -133,6 +150,18 @@ def clean(raw, today):
     if not start or end <= start:
         start = end = None
     kind = raw.get("kind") if raw.get("kind") in KINDS else "other"
+    region = str(raw.get("region") or "").strip().lower()
+    what = str(raw.get("what") or kind)[:60]
+    if kind in ("injury", "recovered", "ache") and region not in REGIONS:
+        named = _REGION.search(what.lower())
+        region = named.group(1) if named else None
+    if kind == "ache" and region:
+        kind = "injury"  # the model files "sore shoulder" under ache; a body part is an injury
+    if kind == "injury" and not region:
+        kind = "ache"
+    if kind == "recovered" and not region:
+        kind = "other"
+    region = region if kind in ("injury", "recovered") else None
     return {
         "kind": kind,
         "date": day.isoformat(),
@@ -142,7 +171,8 @@ def clean(raw, today):
         "minutes": minutes,
         "effort": raw.get("effort") if raw.get("effort") in EFFORTS else None,
         "done": done or day < today,
-        "what": str(raw.get("what") or kind)[:60],
+        "region": region,
+        "what": what,
     }
 
 
@@ -244,15 +274,41 @@ def undo(now=None, var=None):
 
 
 def rows_for(start, var=None):
-    """Rows touching the week starting `start`, or the week before it."""
+    """Rows touching the week starting `start`, or the week before it, and every
+    injury or recovered row up to the week's end (an injury has no end of its own)."""
     lo, hi = start - CONTEXT_BEFORE, start + timedelta(days=6)
     out = []
     for note in load(var):
         for r in note["rows"] or []:
             first = date.fromisoformat(r["date"])
             last = date.fromisoformat(r["end_date"]) if r["end_date"] else first
-            if first <= hi and last >= lo:
+            if first <= hi and (last >= lo or r["kind"] in ("injury", "recovered")):
                 out.append(r)
+    return out
+
+
+def injuries(rows):
+    """{region: date it started} for each injury no later `recovered` row has cleared."""
+    hurt = {}
+    for r in sorted(rows, key=lambda r: r["date"]):  # stable: same day keeps note order
+        if r["kind"] == "injury":
+            hurt.setdefault(r["region"], r["date"])
+        elif r["kind"] == "recovered":
+            hurt.pop(r["region"], None)
+    return hurt
+
+
+def reasons(rows, day, week_start):
+    """Why a day may have had no session, as kinds and regions only: the sick, travel,
+    chore and ache rows covering `day` (ISO), and each injury open on it. An injury
+    noted later in the same week counts too: PJ reports one after the days it cost."""
+    hurt = set(injuries([r for r in rows if r["date"] <= day]))
+    hurt |= {r["region"] for r in rows if r["kind"] == "injury" and r["date"] > day >= week_start}
+    out = [f"{region} injury" for region in REGIONS if region in hurt]
+    for r in rows:
+        kind = r["kind"]
+        if kind in ("sick", "travel", "chore", "ache") and kind not in out and day in _span(r):
+            out.append(kind)
     return out
 
 
@@ -285,16 +341,18 @@ def apply(ctx, rows, train, subtract):
     dates = {d["date"] for d in days}
     owed = max(0, train - len(sick & dates))
     owed = min(owed, sum(1 for d in days if d["free"]))
-    lines = [line(r) for r in rows if r["kind"] != "event"]
+    lines = [line(r) for r in rows if r["kind"] not in ("event", "injury", "recovered")]
+    for region, since in injuries(rows).items():
+        lines.append(f"{region} injury since {since}, not recovered")
     if held(rows):
-        lines.append("Loads are held at last time's: a sick day this week or last.")
+        lines.append("Loads are held at last time's: a sick day this week or last, or an injury.")
     return {**ctx, "days": days}, owed, lines
 
 
 def held(rows):
     """Loads repeat instead of progressing: a sick day in the rows `rows_for` returns
-    (the planned week and the one before)."""
-    return any(r["kind"] == "sick" for r in rows)
+    (the planned week and the one before), or an injury not recovered from."""
+    return any(r["kind"] == "sick" for r in rows) or bool(injuries(rows))
 
 
 def line(row):
@@ -330,6 +388,13 @@ def echo(rows):
         elif r["kind"] == "travel":
             state = "noted" if r["done"] else "no sessions those days"
             out.append(f"{when}: away ({r['what']}); {state}")
+        elif r["kind"] == "injury":
+            out.append(
+                f"{when} on: {r['region']} injury ({r['what']}). Loads repeat and the plan "
+                f"eases back into it until you send /note {r['region']} is fine."
+            )
+        elif r["kind"] == "recovered":
+            out.append(f"{when}: {r['region']} recovered; loads progress again.")
         elif r["start"] and not r["done"]:
             out.append(f"{when} {r['start']}–{r['end']} busy ({r['what']})")
         else:
