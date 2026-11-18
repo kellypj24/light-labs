@@ -112,7 +112,11 @@ _Updated 2026-11-14._
    reaches it.
    Notes and plan days land in DuckDB (`training_record_job`); planned vs done is
    `mart_training_adherence`. A sick day holds loads, travel days are blocked, chore
-   minutes count in the load.
+   minutes count in the load. An `injury` note (a region from a fixed list) holds loads
+   until a `recovered` note and rules nothing out; the region reaches the planner's
+   Claude call (decided 2026-11-17). A replan shows what was logged on the days before
+   it, with the noted reason beside a day without a session, and caps the sessions on the days left (one rest
+   day in three); missed sessions are not made up.
    Lift days follow Strong (`plan.habit`): at most the logged 2 lifts × 4 sets, each
    one `Mix` template from the pool (the 8 longest since done), ordered by pattern
    balance and leg placement, not sequence. PJ is open to changing, adding and renaming

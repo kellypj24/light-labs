@@ -13,7 +13,7 @@ models:
         tests:
           - accepted_values:
               arguments:
-                values: ["event", "chore", "sick", "ache", "travel", "other"]
+                values: ["event", "chore", "sick", "ache", "injury", "recovered", "travel", "other"]
       - name: last_date
         description: The last day the row covers; note_date when it is one day
         tests:

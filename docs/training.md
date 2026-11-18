@@ -119,6 +119,14 @@ not exactly one pool template, or a template used twice. A template returns only
 half the others have been done, so all of them cycle. Changing the routine in Strong
 changes the plan; nothing is configured.
 
+A midweek replan plans only the days left. It owes what the week still lacks after the
+sessions Strong and Health logged, capped at the days left minus one rest day in three
+(5 days left: 4 sessions at most), so missed sessions are not made up. Days before the
+replan show what was logged ("done: lifting 42 min", or "no session logged (shoulder
+injury, chore)" with the kinds of that day's notes), not what was planned; the plan's
+JSON keeps the planned entry with `logged` and `missed_for` beside it, so
+planned-versus-done still sees it.
+
 Until the work calendar is in `TRAINING_CALENDARS`, weekdays 08:00–17:00 count as busy;
 set `TRAINING_ASSUME_WORK=` (empty) in `.env` once it is.
 
@@ -153,9 +161,15 @@ a past weekday read as upcoming, which the reply shows.
 | `sick` | The day has no free windows; the week owes one session fewer per sick day. Every load repeats last time's, that week and the next |
 | `travel`, upcoming | Its days have no free windows; the sessions owed stay, capped at the days left |
 | `chore`, `ache` | Context for the planner: kind, date, minutes, effort. A chore's minutes count in the weekly load (and so in the acute:chronic deload trigger) once its day has come |
+| `injury` (one body part) | From its date until a `recovered` note for that region (`/note shoulder is fine`): every load repeats last time's and the planner is told the region, to ease back into what loads it. Nothing is ruled out. On a replan it is the reason beside the days that had no session, including days earlier that week |
+| `recovered` | Ends that region's injury |
+
+An injury names one region of `notes.REGIONS` (shoulder, elbow, wrist, neck, back, hip,
+knee, ankle, foot). The local model files "sore shoulder" under `ache`; code makes any
+ache that names a region an injury.
 
 The note's text and what each row was stay on this machine: the planner's Claude call
-gets kind, date and duration only. In work hours no local model runs, so a note is saved
+gets kind, date and duration, and an injury's region from that list, only. In work hours no local model runs, so a note is saved
 unread and the first tick after them reads it (and replans, for `/replan <text>`). A note
 sent while Ollama is down is saved unread too and read by the first tick that reaches it.
 Notes are append-only in `var/training/notes/notes.jsonl`.
