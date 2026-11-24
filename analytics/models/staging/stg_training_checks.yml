@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_training_checks
+    description: One row per tap on a set or item in the Workouts app.
+    columns:
+      - name: line_index
+        description: The tap's position in the log
+        tests:
+          - unique
+          - not_null
+      - name: is_done
+        description: The tap checked the set; FALSE when it undid a check
+        tests:
+          - not_null
+      - name: is_same_day
+        description: Tapped on the day the session was planned for
+      - name: is_latest
+        description: The newest tap for its set; is_done on this row is the set's state
+        tests:
+          - not_null

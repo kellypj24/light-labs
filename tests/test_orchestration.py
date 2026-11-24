@@ -47,6 +47,7 @@ def fixture_var(root):
     shutil.copytree(ANALYTICS / "fixtures/training/plans", Path(root) / "training/plans")
     (Path(root) / "training/notes").mkdir()
     shutil.copy(ANALYTICS / "fixtures/training/notes.jsonl", Path(root) / "training/notes")
+    shutil.copy(ANALYTICS / "fixtures/training/checks.jsonl", Path(root) / "training")
     return Path(root)
 
 
@@ -177,6 +178,14 @@ class SensorLogicTest(unittest.TestCase):
         os.utime(plan, (wrote.timestamp() + 1, wrote.timestamp() + 1))
         later = record_fingerprint(self.var, now=wrote + timedelta(minutes=5))
         self.assertNotIn(later, {None, settled})
+        # A session's taps land once, twenty minutes after the last one.
+        checks = self.var / "training/checks.jsonl"
+        checks.write_text("{}\n")
+        at = wrote.timestamp() + 600
+        os.utime(checks, (at, at))
+        self.assertIsNone(record_fingerprint(self.var, now=wrote + timedelta(minutes=25)))
+        after = record_fingerprint(self.var, now=wrote + timedelta(minutes=31))
+        self.assertNotIn(after, {None, later})
 
     def test_sensors_hold_off_during_a_fight(self):
         from dagster import SkipReason, build_sensor_context
@@ -292,6 +301,7 @@ class FullRunTest(unittest.TestCase):
                     "mart_training_weekly_breakdown",
                     "mart_lift_progress",
                     "mart_training_adherence",
+                    "mart_workouts_usage",
                 ):
                     n = con.execute(f"SELECT count(*) FROM marts.{table}").fetchone()[0]
                     self.assertGreater(n, 0, table)
@@ -302,6 +312,21 @@ class FullRunTest(unittest.TestCase):
                     "FROM marts.mart_training_adherence WHERE iso_week = '2026-W44'"
                 ).fetchone()
                 self.assertEqual(week, (5, 4, 1, 1, 1, 0, 0.8))  # the voided trip isn't counted
+                # Check-offs sit beside that: the Oct 27 lift was ticked in full, and Strong
+                # has it too.
+                checked = con.execute(
+                    "SELECT checked_sessions, checked_only_sessions "
+                    "FROM marts.mart_training_adherence WHERE iso_week = '2026-W44'"
+                ).fetchone()
+                self.assertEqual(checked, (1, 0))
+                usage = con.execute(
+                    "SELECT planned_sessions, days_used, planned_units, checked_units, "
+                    "checked_units_in_slot, unlogged_items, unlogged_items_checked, taps, "
+                    "undone_taps FROM marts.mart_workouts_usage WHERE iso_week = '2026-W44'"
+                ).fetchone()
+                # 7 of the lift's units in its slot, 2 of the ride's the morning after;
+                # the tap on an item the plan dropped counts as a tap and nothing else.
+                self.assertEqual(usage, (5, 2, 19, 9, 7, 13, 3, 12, 1))
                 chores = con.execute(
                     "SELECT chore_minutes FROM marts.mart_training_weekly "
                     "WHERE iso_week = '2026-W43'"

@@ -28,6 +28,7 @@ from light_labs.orchestration.jobs import (
 
 # `just eval` loads its own results when a fight ends; let that finish first.
 SETTLE = timedelta(minutes=2)
+CHECKS_SETTLE = timedelta(minutes=20)
 
 
 def finished_since(evals_dir, cursor, now=None):
@@ -153,22 +154,25 @@ def health_dropped(context: SensorEvaluationContext):
 
 
 def record_fingerprint(var_dir, now=None):
-    """Changes with PJ's notes and the plans' JSON; None while the newest change is
-    younger than SETTLE. A note is often followed by a replan within a minute, and the
-    planner reads var/lab.duckdb for it: a run that starts in between holds the write
-    lock the planner then waits on."""
+    """Changes with PJ's notes, the plans' JSON and the Workouts check-offs; None while
+    the newest change is too young. Notes and plans wait SETTLE: a note is often followed
+    by a replan within a minute, and the planner reads var/lab.duckdb for it, so a run
+    that starts in between holds the write lock the planner then waits on. Check-offs
+    wait CHECKS_SETTLE, so a session's taps land in one run after it, not one per rest."""
     home = Path(var_dir) / "training"
+    checks = home / "checks.jsonl"
     paths = sorted([*home.glob("notes/notes.jsonl"), *home.glob("plans/*-W*.json")])
+    paths += [checks] if checks.exists() else []
     if not paths:
         return None
     now = now or datetime.now(UTC)
-    h, newest = hashlib.sha256(), 0
+    h = hashlib.sha256()
     for path in paths:
         st = path.stat()
-        newest = max(newest, st.st_mtime)
+        wait = CHECKS_SETTLE if path == checks else SETTLE
+        if now.timestamp() - st.st_mtime < wait.total_seconds():
+            return None
         h.update(f"{path.relative_to(home)}:{st.st_mtime_ns}:{st.st_size}\n".encode())
-    if now.timestamp() - newest < SETTLE.total_seconds():
-        return None
     return h.hexdigest()[:16]
 
 
@@ -176,7 +180,8 @@ def record_fingerprint(var_dir, now=None):
     job=training_record_job,
     minimum_interval_seconds=300,
     default_status=DefaultSensorStatus.RUNNING,
-    description="Reloads PJ's training notes and plans once they have been still for two minutes.",
+    description="Reloads PJ's training notes and plans once they have been still for two "
+    "minutes, and the Workouts check-offs once still for twenty.",
 )
 def training_record_changed(context: SensorEvaluationContext):
     if run_id := live_fight(config.VAR / "evals"):
@@ -185,9 +190,9 @@ def training_record_changed(context: SensorEvaluationContext):
         return SkipReason(f"heavy job {held['job']} is running")
     fingerprint = record_fingerprint(config.VAR)
     if fingerprint is None:
-        return SkipReason("no notes or plans, or one changed in the last two minutes")
+        return SkipReason("no notes, plans or check-offs, or one changed too recently")
     if fingerprint == context.cursor:
-        return SkipReason("notes and plans unchanged")
+        return SkipReason("notes, plans and check-offs unchanged")
     context.update_cursor(fingerprint)
     return RunRequest(run_key=f"training-record:{fingerprint}")
 

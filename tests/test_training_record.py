@@ -57,6 +57,31 @@ class RecordTest(unittest.TestCase):
         self.assertEqual(got[0], ("2026-10-26", "2026-W44", False, "15:00", "run", 3))
         self.assertEqual(got[-1], ("2026-11-01", "2026-W44", True, None, None, 0))
 
+    def test_plan_items_land_with_the_apps_keys_and_units(self):
+        from light_labs.training import checks
+
+        got = record.plan_item_rows(FIXTURES / "plans/2026-W44.json")
+        self.assertEqual(len(got), 15)
+        bench = {"exercise": "Bench Press (Dumbbell)", "sets": 3, "reps": 5, "load_lb": 50}
+        self.assertEqual(
+            got[3],
+            ("2026-10-27", 0, "2026-W44", checks.item_key(bench), "Bench Press (Dumbbell)",
+             "Bench Press (Dumbbell)", 3, 5, 50.0, 3),
+        )  # fmt: skip
+        self.assertEqual(got[5][4:], ("Bag 4 x 3 min, light", None, None, None, None, 1))
+        files, rows = record.ingest_plan_items([FIXTURES / "plans/2026-W44.json"], db=self.db)
+        self.assertEqual((files, rows), (1, 15))
+        self.assertEqual(record.ingest_plan_items(var=self.var, db=self.db), (0, 0))
+
+    def test_checks_land_one_row_per_tap_in_order(self):
+        self.assertEqual(record.ingest_checks(FIXTURES / "checks.jsonl", db=self.db), 12)
+        got = self.rows(
+            "SELECT line_index, checked_at::VARCHAR, plan_date::VARCHAR, set_number, is_done "
+            "FROM raw.training_checks WHERE NOT is_done"
+        )
+        self.assertEqual(got, [(4, "2026-10-27 06:26:00", "2026-10-27", 1, False)])
+        self.assertEqual(record.ingest_checks(var=self.var, db=self.db), 0)  # no file yet
+
     def test_a_replanned_week_replaces_its_days(self):
         plans = self.var / "training" / "plans"
         plans.mkdir(parents=True)

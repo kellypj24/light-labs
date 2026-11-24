@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: mart_workouts_usage
+    description: One row per planned ISO week, what PJ ticked off in the Workouts app and when.
+    columns:
+      - name: week_start
+        description: Monday of the ISO week
+        tests:
+          - unique
+          - not_null
+      - name: iso_week
+        description: e.g. 2026-W47
+      - name: planned_sessions
+        description: Days the plan has a session on
+      - name: days_used
+        description: Days with at least one set ticked
+      - name: planned_units
+        description: Buttons the week's plan shows; one per set, one per other item
+      - name: checked_units
+        description: Of those, ticked and not undone
+      - name: checked_units_in_slot
+        description: Ticked from 30 min before the planned slot to 60 min after; the rest were filled in later
+      - name: unlogged_items
+        description: Planned items Strong doesn't record (no exercise and sets)
+      - name: unlogged_items_checked
+        description: Of those, ticked; their only record
+      - name: taps
+        description: Every tap that week's days got, undoings included
+      - name: undone_taps
+        description: Taps that undid a check
+      - name: checked_share
+        description: checked_units / planned_units; NULL for a week without items
+      - name: in_slot_share
+        description: checked_units_in_slot / checked_units; NULL when nothing is ticked

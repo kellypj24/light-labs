@@ -2,7 +2,8 @@
     One row per planned ISO week: what the plan asked for against what Strong and
     Health logged, with the notes that explain a gap beside it. A planned day counts
     as completed when any session was logged that date; it is due once the date has
-    come.
+    come. Check-offs from the Workouts app sit beside that and never change it: a
+    session is checked when every set of every item was ticked.
 #}
 
 WITH plan_days AS (
@@ -35,6 +36,16 @@ note_days AS (
 
 ),
 
+check_days AS (
+
+    SELECT
+        plan_date,
+        BOOL_AND(is_checked) AS is_checked
+    FROM {{ ref('int_training_checked_items') }}
+    GROUP BY plan_date
+
+),
+
 days AS (
 
     SELECT
@@ -43,6 +54,7 @@ days AS (
         plan_days.is_training AS is_planned,
         plan_days.plan_date <= CURRENT_DATE AS is_due,
         session_days.session_date IS NOT NULL AS is_trained,
+        COALESCE(check_days.is_checked, FALSE) AS is_checked,
         COALESCE(note_days.is_sick, FALSE) AS is_sick,
         COALESCE(note_days.is_away, FALSE) AS is_away,
         COALESCE(note_days.ache_notes, 0) AS ache_notes,
@@ -52,6 +64,8 @@ days AS (
         ON plan_days.plan_date = session_days.session_date
     LEFT JOIN note_days
         ON plan_days.plan_date = note_days.note_day
+    LEFT JOIN check_days
+        ON plan_days.plan_date = check_days.plan_date
 
 ),
 
@@ -67,6 +81,10 @@ weekly AS (
         COUNT(*) FILTER (
             WHERE is_planned AND is_due AND NOT is_trained AND (is_sick OR is_away)
         ) AS missed_sick_or_away,
+        COUNT(*) FILTER (WHERE is_planned AND is_checked) AS checked_sessions,
+        COUNT(*) FILTER (
+            WHERE is_planned AND is_checked AND NOT is_trained
+        ) AS checked_only_sessions,
         COUNT(*) FILTER (WHERE NOT is_planned AND is_trained) AS unplanned_training_days,
         COUNT(*) FILTER (WHERE is_sick) AS sick_days,
         COUNT(*) FILTER (WHERE is_away) AS away_days,

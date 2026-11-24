@@ -1,10 +1,13 @@
-"""PJ's notes and the weekly plans landed in DuckDB, for the planned-versus-done marts.
+"""PJ's notes, the weekly plans and the Workouts app's check-offs landed in DuckDB, for
+the planned-versus-done marts.
 
 `raw.training_notes`: one row per thing a note said (`training.notes`), every note kept,
 voided ones flagged. `raw.training_plan_days`: one row per day of each plan in
-var/training/plans/*.json, as it stood when last planned. Both are snapshot replaces of
-small local files (`lab training ingest-notes`, `ingest-plans`; Dagster's
-`raw/training_notes` and `raw/training_plan_days`).
+var/training/plans/*.json, as it stood when last planned, and `raw.training_plan_items`:
+one row per item of those days. `raw.training_checks`: one row per tap in the Workouts
+app (`training.checks`), undoings included. All are snapshot replaces of small local
+files (`lab training ingest-notes`, `ingest-plans`, `ingest-plan-items`, `ingest-checks`;
+Dagster's `raw/training_*` assets).
 
 The note text and each row's `what` are in the raw table and staging only. They stay out
 of the marts the planner reads, so they never reach its Claude call.
@@ -16,7 +19,7 @@ from pathlib import Path
 
 from light_labs import config
 from light_labs.evals import results
-from light_labs.training import notes
+from light_labs.training import checks, notes
 
 SCHEMA = """
 CREATE SCHEMA IF NOT EXISTS raw;
@@ -51,6 +54,27 @@ CREATE TABLE IF NOT EXISTS raw.training_plan_days (
     item_count INTEGER NOT NULL,
     planned_at TIMESTAMP NOT NULL,
     source_file VARCHAR NOT NULL
+);
+CREATE TABLE IF NOT EXISTS raw.training_plan_items (
+    plan_date DATE NOT NULL,
+    item_index INTEGER NOT NULL,
+    iso_week VARCHAR NOT NULL,
+    item_key VARCHAR NOT NULL,
+    label VARCHAR NOT NULL,
+    exercise VARCHAR,
+    sets INTEGER,
+    reps INTEGER,
+    load_lb DOUBLE,
+    unit_count INTEGER NOT NULL,
+    PRIMARY KEY (plan_date, item_index)
+);
+CREATE TABLE IF NOT EXISTS raw.training_checks (
+    line_index INTEGER PRIMARY KEY,
+    checked_at TIMESTAMP NOT NULL,
+    plan_date DATE NOT NULL,
+    item_key VARCHAR NOT NULL,
+    set_number INTEGER NOT NULL,
+    is_done BOOLEAN NOT NULL
 );
 """
 
@@ -126,12 +150,71 @@ def ingest_notes(path=None, var=None, db=None):
     return _replace("training_notes", note_rows(path or notes.path(var)), db)
 
 
+def _number(value, kind):
+    return kind(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def plan_item_rows(path):
+    """One tuple per item of each day of a plan's JSON. `item_key` and `unit_count` are
+    what the Workouts app keys and counts its buttons by."""
+    path = Path(path)
+    out = []
+    for d in json.loads(path.read_text()).get("days", []):
+        for i, item in enumerate(d.get("items") or []):
+            out.append(
+                (
+                    d["date"],
+                    i,
+                    path.stem,
+                    checks.item_key(item),
+                    item.get("exercise") or item.get("text") or "",
+                    item.get("exercise"),
+                    _number(item.get("sets"), int),
+                    _number(item.get("reps"), int),
+                    _number(item.get("load_lb"), float),
+                    checks.units(item),
+                )
+            )
+    return out
+
+
+def check_rows(path):
+    """One tuple per line of checks.jsonl, numbered in the order they were tapped."""
+    path = Path(path)
+    out = []
+    for i, line in enumerate(path.read_text().splitlines() if path.exists() else []):
+        r = json.loads(line)
+        out.append((i, datetime.fromisoformat(r["at"]), r["date"], r["item"], r["n"], r["done"]))
+    return out
+
+
+def _plan_files(paths, var):
+    folder = Path(var or config.VAR) / "training" / "plans"
+    return sorted(map(Path, paths)) if paths else sorted(folder.glob("*-W*.json"))
+
+
+def _by_key(files, rows_of, width):
+    """Rows from every file keyed by their first `width` fields: a date belongs to one
+    ISO week, and a later file would win."""
+    rows = {}
+    for path in files:
+        for r in rows_of(path):
+            rows[r[:width]] = r
+    return list(rows.values())
+
+
 def ingest_plans(paths=None, var=None, db=None):
     """Reload raw.training_plan_days from the plan JSON files. Returns (files, rows)."""
-    folder = Path(var or config.VAR) / "training" / "plans"
-    files = sorted(map(Path, paths)) if paths else sorted(folder.glob("*-W*.json"))
-    rows = {}
-    for path in files:  # a date belongs to one ISO week; a later file would win
-        for r in plan_rows(path):
-            rows[r[0]] = r
-    return len(files), _replace("training_plan_days", list(rows.values()), db)
+    files = _plan_files(paths, var)
+    return len(files), _replace("training_plan_days", _by_key(files, plan_rows, 1), db)
+
+
+def ingest_plan_items(paths=None, var=None, db=None):
+    """Reload raw.training_plan_items from the plan JSON files. Returns (files, rows)."""
+    files = _plan_files(paths, var)
+    return len(files), _replace("training_plan_items", _by_key(files, plan_item_rows, 2), db)
+
+
+def ingest_checks(path=None, var=None, db=None):
+    """Reload raw.training_checks from checks.jsonl. Returns the row count."""
+    return _replace("training_checks", check_rows(path or checks.checks_path(var)), db)
