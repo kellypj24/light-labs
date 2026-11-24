@@ -192,6 +192,7 @@ remote: its own process (`workouts` LaunchAgent, `just workouts-install`), port 
 | `/d/<date>`, `/w/<week>` | Any day or week. A week with only its text (an imported note) is shown as text |
 | Set buttons | One per set, or one `Done` per item without sets. A tap checks it off, a second tap undoes it; the count and the day's mark follow |
 | Notes box | `Log note`, `Replan` (around the note when there is one) and `Undo last note`: what `/note`, `/replan` and `/note undo` run. The reading or the outcome shows at the top of the page; a replan takes about a minute and the page reloads itself until it ends |
+| `/stats` | The training marts (`training/stats.py`): this week's sessions logged and ticked, the acute:chronic load against the 1.3 deload line, twelve weeks of adherence with minutes and app use, each lift's latest top set and e1RM change, and ticked items nothing else records. As fresh as Dagster's last run; the page says when |
 
 Check-offs append to `var/training/checks.jsonl` (day, a hash of the exercise or text, set
 number, done or not), so a replan that keeps an exercise keeps its marks. Strong and
