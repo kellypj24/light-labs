@@ -193,9 +193,20 @@ remote: its own process (`workouts` LaunchAgent, `just workouts-install`), port 
 | Set buttons | One per set, or one `Done` per item without sets. A tap checks it off, a second tap undoes it; the count and the day's mark follow |
 | Notes box | `Log note`, `Replan` (around the note when there is one) and `Undo last note`: what `/note`, `/replan` and `/note undo` run. The reading or the outcome shows at the top of the page; a replan takes about a minute and the page reloads itself until it ends |
 
-Check-offs are for the page only. They append to `var/training/checks.jsonl` (day, a hash
-of the exercise or text, set number, done or not), so a replan that keeps an exercise
-keeps its marks. `mart_training_adherence` still counts from Strong and Health.
+Check-offs append to `var/training/checks.jsonl` (day, a hash of the exercise or text, set
+number, done or not), so a replan that keeps an exercise keeps its marks. Strong and
+Health stay the record of what was trained; check-offs add to it and never change it.
+Dagster lands them (`raw.training_checks`, and the plans' items as
+`raw.training_plan_items`; `lab training ingest-checks`, `ingest-plan-items`) twenty
+minutes after the last tap.
+
+| Model | What it holds |
+|---|---|
+| `intermediate.int_training_checked_items` | One row per planned item: sets ticked, how many inside the planned slot, first and last tap. `is_lift` FALSE marks items nothing else records (bag rounds, a ride's parts) |
+| `marts.mart_training_adherence` | `checked_sessions` (every set ticked) and `checked_only_sessions` (ticked, nothing in Strong or Health that date), beside `completed_sessions` |
+| `marts.mart_workouts_usage` | Per week: days used, share of the plan ticked, share ticked inside the slot, taps and undone taps, unlogged items planned and ticked |
+
+Check-offs do not reach the planner: loads and progression come from Strong.
 
 Access is the remote's (`core/tailnet.py`): it listens on 127.0.0.1:8788, answers only
 PJ's tailnet login and this machine's Host, and every form carries a per-process token.

@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: int_training_checked_items
+    description: One row per planned item with the sets PJ ticked in the Workouts app.
+    columns:
+      - name: plan_item_id
+        tests:
+          - unique
+          - not_null
+      - name: is_lift
+        description: FALSE for items only the app records (bag rounds, a ride's parts)
+      - name: units_checked
+        description: Sets ticked and not undone
+        tests:
+          - not_null
+      - name: units_checked_in_slot
+        description: Of those, ticked from 30 min before the planned slot to 60 min after
+      - name: is_checked
+        description: Every set of the item is ticked
+        tests:
+          - not_null

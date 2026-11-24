@@ -13,13 +13,13 @@
    "title": "Easy run",
    "items": [
     {
-     "text": "x"
+     "text": "Warm-up"
     },
     {
-     "text": "x"
+     "text": "Main set"
     },
     {
-     "text": "x"
+     "text": "Cool-down"
     }
    ],
    "why": "fixture"
@@ -36,13 +36,19 @@
    "title": "Strength A",
    "items": [
     {
-     "text": "x"
+     "exercise": "Bench Press (Dumbbell)",
+     "sets": 3,
+     "reps": 5,
+     "load_lb": 50
     },
     {
-     "text": "x"
+     "exercise": "Bent Over Row (Dumbbell)",
+     "sets": 3,
+     "reps": 8,
+     "load_lb": 45
     },
     {
-     "text": "x"
+     "text": "Bag 4 x 3 min, light"
     }
    ],
    "why": "fixture"
@@ -59,13 +65,13 @@
    "title": "Intervals",
    "items": [
     {
-     "text": "x"
+     "text": "Warm-up"
     },
     {
-     "text": "x"
+     "text": "Main set"
     },
     {
-     "text": "x"
+     "text": "Cool-down"
     }
    ],
    "why": "fixture"
@@ -82,13 +88,13 @@
    "title": "Strength B",
    "items": [
     {
-     "text": "x"
+     "text": "Warm-up"
     },
     {
-     "text": "x"
+     "text": "Main set"
     },
     {
-     "text": "x"
+     "text": "Cool-down"
     }
    ],
    "why": "fixture"
@@ -105,13 +111,13 @@
    "title": "Zone 2 ride",
    "items": [
     {
-     "text": "x"
+     "text": "Warm-up"
     },
     {
-     "text": "x"
+     "text": "Main set"
     },
     {
-     "text": "x"
+     "text": "Cool-down"
     }
    ],
    "why": "fixture"

@@ -21,6 +21,10 @@ models:
         description: Due sessions with nothing logged that date
       - name: missed_sick_or_away
         description: Missed sessions on a day a note marks sick or travel
+      - name: checked_sessions
+        description: Planned days with every set ticked in the Workouts app; beside completed_sessions, never part of it
+      - name: checked_only_sessions
+        description: Of those, days with nothing logged in Strong or Health
       - name: unplanned_training_days
         description: Rest days with a logged session
       - name: sick_days

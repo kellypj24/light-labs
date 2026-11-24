@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: stg_training_plan_items
+    description: One row per item of each planned training day.
+    columns:
+      - name: plan_item_id
+        description: plan_date and the item's position in the day
+        tests:
+          - unique
+          - not_null
+      - name: item_key
+        description: Hash of the exercise or text; what a check-off names
+        tests:
+          - not_null
+      - name: unit_count
+        description: Buttons the Workouts app shows for the item; one per set, else one
+        tests:
+          - not_null
+      - name: is_lift
+        description: Has an exercise with sets; Strong records these
+        tests:
+          - not_null

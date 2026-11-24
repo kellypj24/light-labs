@@ -20,3 +20,6 @@ fits and beats the raw probability.
 `training/` holds PJ's notes and one plan for 2026-W44, the week the Strong and Health
 fixtures cover: five sessions planned, the lift on Oct 29 missed on a noted sick day, a
 chore the week before, a voided trip, and a note saved in work hours and read later.
+`training/checks.jsonl` is the Workouts app's log for that week: the Oct 27 lift ticked in
+full during its slot (one set undone and redone), two of the Oct 30 ride's three items
+ticked the next morning, and one tap on an item the plan no longer has.

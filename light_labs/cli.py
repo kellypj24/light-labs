@@ -170,6 +170,19 @@ def training_ingest_plans(args):
     print(f"loaded {rows} plan days from {files} plans into raw.training_plan_days")
 
 
+def training_ingest_plan_items(args):
+    from light_labs.training import record
+
+    files, rows = record.ingest_plan_items(args.json or None)
+    print(f"loaded {rows} plan items from {files} plans into raw.training_plan_items")
+
+
+def training_ingest_checks(args):
+    from light_labs.training import record
+
+    print(f"loaded {record.ingest_checks(args.jsonl)} taps into raw.training_checks")
+
+
 def training_send(args):
     from light_labs.agents import rush
     from light_labs.training import deliver
@@ -1130,6 +1143,12 @@ def parser():
     tcmd.add_parser(
         "ingest-plans", help="reload raw.training_plan_days from the plans' JSON"
     ).add_argument("json", nargs="*", help="plan files (default: var/training/plans/)")
+    tcmd.add_parser(
+        "ingest-plan-items", help="reload raw.training_plan_items from the plans' JSON"
+    ).add_argument("json", nargs="*", help="plan files (default: var/training/plans/)")
+    tcmd.add_parser(
+        "ingest-checks", help="reload raw.training_checks from the Workouts app's check-offs"
+    ).add_argument("jsonl", nargs="?", help="a checks file (default: var/training/checks.jsonl)")
     claude_p = sub.add_parser("claude", help="Claude Code's own usage in DuckDB")
     ccmd = claude_p.add_subparsers(dest="cmd", required=True)
     cingest = ccmd.add_parser(

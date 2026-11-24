@@ -123,6 +123,27 @@ sources:
             tests:
               - unique
               - not_null
+      - name: training_plan_items
+        description: >
+          One row per item of each planned day, reloaded in full by `lab training
+          ingest-plan-items` from var/training/plans/*.json.
+        columns:
+          - name: plan_date
+            tests:
+              - not_null
+          - name: item_key
+            tests:
+              - not_null
+      - name: training_checks
+        description: >
+          One row per tap on a set or item in the Workouts app, reloaded in full by
+          `lab training ingest-checks` from var/training/checks.jsonl. Undoings are
+          rows too.
+        columns:
+          - name: line_index
+            tests:
+              - unique
+              - not_null
       - name: health_workouts
         description: >
           Apple Health workouts (Strava writes rides and runs to Health), upserted by

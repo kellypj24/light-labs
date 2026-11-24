@@ -107,8 +107,11 @@ _Updated 2026-11-23._
    plan Sunday evening, asks for stale Strong or Health files, refreshes the plan when a
    requested one lands, `/replan` on demand; `/plan` texts a stored plan. The plan is
    also a phone web app, Workouts (`lab training app`, `workouts` LaunchAgent, tailnet
-   port 8080): today's session, a button per set, notes and replans; check-offs are
-   display only (`var/training/checks.jsonl`). Rush's remote no longer has a Training tab. `/note` and `/replan <text>` log events, chores and sick
+   port 8080): today's session, a button per set, notes and replans. Check-offs
+   (`var/training/checks.jsonl`) land in DuckDB as an addition to Strong and Health,
+   never a replacement: `checked_sessions` beside `completed_sessions` in
+   `mart_training_adherence`, and `mart_workouts_usage` for how the app is used and for
+   items nothing else records (bag rounds). They do not reach the planner. Rush's remote no longer has a Training tab. `/note` and `/replan <text>` log events, chores and sick
    days (`training/notes.py`, read by `llama3.1:8b`) and the planner works around them.
    A note sent while Ollama is down is saved unread and read by the first tick that
    reaches it.
