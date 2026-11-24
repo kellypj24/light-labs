@@ -154,7 +154,8 @@ runs a tick when loaded and hourly after that, while the Mac is awake.
 The lab over MCP (read-only: approval queues and Rush's mail triage), for an outside agent
 such as Hermes: `uv run lab mcp`. Hermes runs it from a deployed commit (`lab deploy hermes
 [--ref <branch>]`; `lab git land` redeploys main). Setup and config:
-[docs/hermes.md](docs/hermes.md).
+[docs/hermes.md](docs/hermes.md). Claude desktop and Claude Code are registered against the same server
+(same doc). The morning brief is Rush's own: `lab brief` ([docs/brief.md](docs/brief.md)).
 
 Relationship Radar (`lab radar`): who to reach out to this week, from message and contact
 metadata. Setup, permissions and the privacy model: [docs/radar.md](docs/radar.md).

@@ -48,7 +48,8 @@ paths = ["light_labs/orchestration/", "ops/orchestration/", "ops/com.pjkelly.lig
 [areas.rush]
 color = "f9d0c4"
 description = "DLN-100 Rush"
-paths = ["light_labs/agents/rush/", "ops/com.pjkelly.light-labs.rush.plist"]
+paths = ["light_labs/agents/rush/", "ops/com.pjkelly.light-labs.rush.plist",
+         "ops/com.pjkelly.light-labs.brief.plist"]
 
 [areas.guts-man]
 color = "f9d0c4"

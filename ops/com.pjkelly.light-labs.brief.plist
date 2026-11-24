@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Rush's morning brief (docs/brief.md). Install with `just brief-install`. 07:50 daily:
+     after Rush's 07:07 tick and before work hours, so personal mail is already triaged
+     locally. A Mac asleep at 07:50 runs it on wake. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.brief</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <!-- The release's own entry point, not `uv run` on the current link: uv caches the
+         interpreter it found at that path and keeps starting the release before. -->
+    <string>/Users/pjkelly/.light-labs/lab/current/.venv/bin/lab</string>
+    <string>brief</string>
+    <string>--send</string>
+  </array>
+  <!-- launchd's PATH lacks gh and claude. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LAB_VAR</key><string>/Users/pjkelly/light-labs/var</string>
+    <key>PATH</key><string>/Users/pjkelly/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>50</integer></dict>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/rush/brief.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/rush/brief.log</string>
+</dict>
+</plist>

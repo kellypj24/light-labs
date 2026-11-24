@@ -27,6 +27,21 @@ Board posts are other agents' text, so Hermes's own shell, file, code, browser,
 computer-use and delegation toolsets are off for Telegram and cron (`hermes tools disable
 ... --platform telegram|cron`); otherwise a crafted post could reach a shell on the Mac.
 
+## Claude desktop and Claude Code
+
+Both run the same server from the `lab` release, so one definition serves the desktop
+app's chats and tasks and every Claude Code session:
+
+| Client | Where | Entry |
+|---|---|---|
+| Claude Code | user scope (`claude mcp add lab -s user ...`, `~/.claude.json`) | `~/.light-labs/lab/current/.venv/bin/lab mcp` |
+| Claude desktop | `mcpServers.lab` in `~/Library/Application Support/Claude/claude_desktop_config.json`; restart the app | same |
+
+Each sets `LAB_VAR` to the checkout's `var/` and a `PATH` with `gh`. The entry point is
+the release's own, not `uv run` on the `current` link (uv caches the interpreter by path).
+Both clients have shell and file tools, which Hermes's Telegram and cron sessions do not:
+`board_tasks` and `mail_recent` return other people's text into those sessions.
+
 ## Hermes config
 
 `~/.hermes/config.yaml`; secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`) in
@@ -61,6 +76,9 @@ the old release (and, after pruning, a deleted directory).
 (not Rush's or Roll's): Telegram hands a bot's updates to one poller.
 
 ## Morning brief
+
+Paused 2026-11-24 (`hermes cron resume morning-brief`); Rush's `lab brief`
+([brief.md](brief.md)) replaces it. Hermes is removed once that brief has passed review.
 
 A Hermes cron job (`hermes cron list`: `morning-brief`, `0 8 * * *` local) reads every tool
 and sends PJ at most 12 lines on Telegram: what needs him, the queue, board mentions,

@@ -127,6 +127,9 @@ dagster-daemon: _dagster-home
 # Install (or reinstall) Roll's daily Dependabot chores (17:30) as a launchd job
 roll-chores-install: (_reload "roll-chores")
 
+# Install (or reinstall) Rush's morning brief (07:50) as a launchd job
+brief-install: (_reload "brief")
+
 # Unload a launchd job, wait until launchd has let go of it (loading at once fails with
 # "Bootstrap failed: 5" for a KeepAlive job), copy its plist from ops/ and load it
 _reload job:
