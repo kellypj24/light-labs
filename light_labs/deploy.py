@@ -54,6 +54,11 @@ SERVICES = {
         "paths": ("light_labs/",),
         "restart": "launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.rush-remote",
     },
+    "workouts": {
+        "label": "com.pjkelly.light-labs.workouts",
+        "paths": ("light_labs/",),
+        "restart": "launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.workouts",
+    },
     "dagster": {
         "label": "com.pjkelly.light-labs.dagster",
         "paths": ("light_labs/", "analytics/"),
@@ -64,7 +69,7 @@ SERVICES = {
 
 def restart_lab(out=sys.stdout, run=subprocess.run, ps=None):
     """Put the `lab` target's long-running jobs on the new release. The phone page
-    restarts; the Dagster daemon too unless a run is in progress (a restart would kill
+    and Workouts restart; the Dagster daemon too unless a run is in progress (a restart would kill
     it), in which case this says how to do it later. A job launchd hasn't loaded is left."""
     from light_labs.core import heavy
 

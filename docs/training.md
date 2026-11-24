@@ -181,7 +181,34 @@ week: sessions planned, due, completed (any session logged that date) and missed
 misses on a noted sick or travel day, unplanned training days, sick and away days, ache
 notes and chore minutes. The note's words stay in raw and staging.
 
-The remote page's Training tab (`/training`, `/training/<week>`; tailnet only) renders any
-week's plan, and a week's imported note where the lab has no plan. With `RUSH_REMOTE_URL`
-set, every plan text ends with that week's link. A week runs Monday to Sunday, so on
-Sunday evening the new plan is `/plan next`.
+## Workouts app
+
+`lab training app` serves the plan as a phone web app named Workouts, apart from Rush's
+remote: its own process (`workouts` LaunchAgent, `just workouts-install`), port and look.
+
+| Part | What it does |
+|---|---|
+| `/` | Today's session in its week; a strip of the week's days, each marked untouched, started or done |
+| `/d/<date>`, `/w/<week>` | Any day or week. A week with only its text (an imported note) is shown as text |
+| Set buttons | One per set, or one `Done` per item without sets. A tap checks it off, a second tap undoes it; the count and the day's mark follow |
+| Notes box | `Log note`, `Replan` (around the note when there is one) and `Undo last note`: what `/note`, `/replan` and `/note undo` run. The reading or the outcome shows at the top of the page; a replan takes about a minute and the page reloads itself until it ends |
+
+Check-offs are for the page only. They append to `var/training/checks.jsonl` (day, a hash
+of the exercise or text, set number, done or not), so a replan that keeps an exercise
+keeps its marks. `mart_training_adherence` still counts from Strong and Health.
+
+Access is the remote's (`core/tailnet.py`): it listens on 127.0.0.1:8788, answers only
+PJ's tailnet login and this machine's Host, and every form carries a per-process token.
+Publish it on its own tailnet port, then set the link plan texts end with:
+
+```
+just workouts-install
+tailscale serve --bg --http 8080 http://127.0.0.1:8788
+# .env
+WORKOUTS_URL=http://<mac>.<tailnet>.ts.net:8080
+```
+
+On the phone, Share → Add to Home Screen gives it its own icon and title. No offline use:
+the tailnet has no HTTPS certificates, so the page needs the Mac awake. Rush's remote
+redirects its old `/training` paths here. A week runs Monday to Sunday, so on Sunday
+evening the new plan is next week's (`W.. ›`), or `/plan next` in chat.

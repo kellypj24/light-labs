@@ -11,14 +11,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from light_labs.agents.rush import remote as remote_mod
-from light_labs.agents.rush.remote import (
-    Remote,
-    board_view,
-    handler,
-    request_host,
-    tailnet_hosts,
-)
+from light_labs.agents.rush.remote import Remote, board_view, handler
 from light_labs.core.store import Store
+from light_labs.core.tailnet import request_host, tailnet_hosts
 
 PJ = "pj@example.com"
 
@@ -235,21 +230,23 @@ class RemoteTest(unittest.TestCase):
         self.assertEqual(len(self.remote.after), remote_mod.AFTER_KEEP)
         self.assertNotIn(first.rsplit("/", 1)[1], self.remote.after)
 
-    def test_training_page_renders_a_week_and_links_the_others(self):
-        self.remote.training_var = Path(self.tmp.name)
-        self.assertIn("No plans yet", self.call("/training")[1])
-        plans = Path(self.tmp.name) / "training" / "plans"
-        plans.mkdir(parents=True)
-        (plans / "2026-W46.md").write_text("# Week 1\n\n**Mon**: lift\n- Bench <5x5>\n- _easy_\n")
-        (plans / "2026-W47.md").write_text("# Week 2\n")
-        code, body = self.call("/training/2026-W46")
-        self.assertEqual(code, 200)
-        self.assertIn("<h3>Week 1</h3>", body)
-        self.assertIn("<p><b>Mon</b>: lift</p>", body)
-        self.assertIn("<ul>\n<li>Bench &lt;5x5&gt;</li>\n<li><i>easy</i></li>\n</ul>", body)
-        self.assertIn('<a href="/training/2026-W47">2026-W47</a>', body)
-        self.assertEqual(self.call("/training/2026-W01")[0], 404)
-        self.assertEqual(self.call("/training/2026-W46", login=None)[0], 403)
+    def test_training_moved_to_the_workouts_app(self):
+        with mock.patch.dict("os.environ", {"WORKOUTS_URL": ""}):
+            self.assertEqual(self.call("/training")[0], 404)
+        with mock.patch.dict("os.environ", {"WORKOUTS_URL": "http://mac.ts.net:8080/"}):
+            for path, to in (
+                ("/training", "http://mac.ts.net:8080/"),
+                ("/training/2026-W46", "http://mac.ts.net:8080/w/2026-W46"),
+            ):
+                req = urllib.request.Request(self.base + path)
+                req.add_header("Tailscale-User-Login", PJ)
+                with self.assertRaises(urllib.error.HTTPError) as e:
+                    urllib.request.build_opener(NoRedirect).open(req)
+                self.assertEqual((e.exception.code, e.exception.headers["Location"]), (302, to))
+                e.exception.close()
+            self.assertEqual(self.call("/training/not-a-week")[0], 404)
+            self.assertEqual(self.call("/training/2026-W46", login=None)[0], 403)
+        self.assertNotIn("/training", self.call("/")[1])
 
     def test_usage_page_reports_when_the_marts_are_missing(self):
         import duckdb

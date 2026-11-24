@@ -213,6 +213,13 @@ def training_note(args):
         raise SystemExit("lab training note <text> | --undo")
 
 
+def training_app(args):
+    """Workouts, the plan as a phone web app. Publish with `tailscale serve`."""
+    from light_labs.training import app
+
+    app.serve(port=args.port, allowed=args.allow or None)
+
+
 def training_plan(args):
     from light_labs.training import plan
 
@@ -1103,6 +1110,11 @@ def parser():
         "--week", help="ISO week, e.g. 2026-W47 (default: next week)"
     )
     tcmd.add_parser("tick", help="what Rush's hourly tick runs: plan, send, ask for files")
+    app_p = tcmd.add_parser("app", help="Workouts: the plan as a phone web app (tailnet only)")
+    app_p.add_argument("--port", type=int, default=8788)
+    app_p.add_argument(
+        "--allow", action="append", help="Tailscale login allowed in (default: this machine's)"
+    )
     tcmd.add_parser(
         "replan", help="what /replan in Rush's chat runs: refresh the plan, text it"
     ).add_argument("note", nargs="*", help="a note to log and plan around first")

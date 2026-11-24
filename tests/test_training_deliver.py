@@ -42,7 +42,7 @@ class DeliverTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.var = Path(tmp.name)
         self.phone, self.planner = Phone(), Planner(self.var)
-        env = mock.patch.dict(os.environ, {"RUSH_REMOTE_URL": ""})  # a developer's .env sets it
+        env = mock.patch.dict(os.environ, {"WORKOUTS_URL": ""})  # a developer's .env sets it
         env.start()
         self.addCleanup(env.stop)
 
@@ -167,10 +167,10 @@ class DeliverTest(unittest.TestCase):
         self.assertIn("Which week?", self.show("tomorrow"))
         self.assertIn("Which week?", self.show("2026-W99"))
 
-    def test_plan_texts_end_with_the_remote_link_when_one_is_set(self):
+    def test_plan_texts_end_with_the_workouts_link_when_one_is_set(self):
         self.plan("2026-W46")
-        with mock.patch.dict(os.environ, {"RUSH_REMOTE_URL": "http://mac.ts.net/"}):
-            self.assertTrue(self.show("").endswith("\n\nhttp://mac.ts.net/training/2026-W46"))
+        with mock.patch.dict(os.environ, {"WORKOUTS_URL": "http://mac.ts.net:8080/"}):
+            self.assertTrue(self.show("").endswith("\n\nhttp://mac.ts.net:8080/w/2026-W46"))
 
     def sick(self, text, today):
         return [{"kind": "sick", "date": today.isoformat(), "end_date": None, "start": None,

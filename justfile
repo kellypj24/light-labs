@@ -145,6 +145,12 @@ _reload job:
 # Install (or reinstall) Rush's heartbeat and phone page as launchd jobs
 rush-install: (_reload "rush") (_reload "rush-remote")
 
+# Install (or reinstall) Workouts, the training plan's phone app, as a launchd job
+workouts-install: _workouts-log (_reload "workouts")
+
+_workouts-log:
+    mkdir -p "${LAB_VAR:-var}/training"
+
 # Install (or reinstall) Ollama's server as a launchd job, so it is back after a reboot.
 # Quits Ollama.app first: both bind :11434
 ollama-install: _ollama-quit (_reload "ollama")
@@ -160,7 +166,8 @@ dagster-install: _dagster-home (_reload "dagster")
 dagster-restart:
     launchctl kickstart -k gui/$(id -u)/com.pjkelly.light-labs.dagster
 
-# Pause scheduled jobs: rush (hourly tick, default), rush-remote (phone page), dagster,
+# Pause scheduled jobs: rush (hourly tick, default), rush-remote (phone page), workouts
+# (the training plan's phone app), dagster,
 # hermes (gateway and its crons, e.g. morning-brief), radar (Messages export, sync,
 # weekly), or all; ollama (the model server) only by name. Nothing is lost: each catches up on its next run. `just resume`
 # starts them again; `just bots` shows which run.
