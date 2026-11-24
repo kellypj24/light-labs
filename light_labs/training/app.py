@@ -10,7 +10,8 @@ trained.
 
 Access is the remote's (`core/tailnet.py`): 127.0.0.1 behind `tailscale serve`, an allowed
 tailnet login, this machine's Host, a per-process token on every form. Stdlib only; pages
-render on the server and `/app.js` saves a check-off without a reload.
+render on the server and `/app.js` saves a check-off without a reload. `/stats` shows the
+training marts (`training/stats.py`).
 """
 
 import html
@@ -147,7 +148,8 @@ STYLE = """
 body { margin:0; background:var(--bg); color:var(--fg);
   font:17px/1.45 -apple-system, system-ui, sans-serif; -webkit-text-size-adjust:100%; }
 header { background:var(--accent); color:#fff; padding:14px 16px;
-  padding-top:calc(14px + env(safe-area-inset-top)); display:flex; align-items:baseline; }
+  padding-top:calc(14px + env(safe-area-inset-top)); display:flex; align-items:baseline;
+  gap:18px; }
 header a { color:#fff; text-decoration:none; }
 header b { font-size:20px; letter-spacing:.02em; margin-right:auto; }
 a { color:var(--accent); text-decoration:none; }
@@ -192,6 +194,29 @@ textarea { width:100%; min-height:72px; font:16px/1.4 inherit; padding:10px;
 .row button { font:600 15px inherit; padding:10px 16px; border-radius:10px;
   border:1px solid var(--line); background:var(--card); color:var(--fg); }
 .row button.go { background:var(--accent); border-color:var(--accent); color:#fff; }
+.tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.tile { background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:12px 8px; text-align:center; }
+.tile b { display:block; font-size:24px; }
+.tile span { font-size:12px; color:var(--muted); }
+.bar { position:relative; height:10px; border-radius:5px; background:var(--line); }
+.bar span { display:block; height:100%; border-radius:5px; background:var(--accent); }
+.bar span.on { background:var(--on); }
+.bar i { position:absolute; top:-3px; width:2px; height:16px; background:var(--fg); }
+.load { display:grid; grid-template-columns:64px 1fr; align-items:center; gap:8px; }
+.load b { font-size:24px; }
+.warn { color:var(--accent); }
+.bar span.warn { background:var(--accent); }
+.load .bar span { background:var(--on); }
+.load .bar span.warn { background:var(--accent); }
+.wk { display:grid; grid-template-columns:40px minmax(0, 1fr) 64px; gap:2px 8px;
+  align-items:center; margin:10px 0; font-size:14px; }
+.wk > :nth-child(3) { text-align:right; }
+.wk > :nth-child(4) { grid-column:2 / 4; font-size:12px; }
+.lift { border-bottom:1px solid var(--line); padding:8px 0; font-size:15px; }
+.up { color:var(--on); }
+.down { color:var(--accent); }
+.built { margin-top:28px; }
 .said { border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px;
   padding:10px 12px; margin:0 0 14px; font-size:15px; white-space:pre-wrap; }
 """
@@ -238,7 +263,7 @@ def shell(title, body, refresh=None):
 <link rel="apple-touch-icon" href="/icon.png"><link rel="icon" href="/icon.png">
 <link rel="manifest" href="/manifest.webmanifest">{again}
 <title>{esc(title)}</title><style>{STYLE}</style></head><body>
-<header><b><a href="/">{NAME}</a></b><a href="/">Today</a></header>
+<header><b><a href="/">{NAME}</a></b><a href="/">Today</a><a href="/stats">Stats</a></header>
 <main>{body}</main><script src="/app.js"></script></body></html>"""
 
 
@@ -261,6 +286,7 @@ class App:
         self.allowed = set(allowed)
         self.hosts = LOOPBACK | {h.lower() for h in hosts if h}
         self.var = var  # var/; tests point it elsewhere
+        self.db = None  # var/lab.duckdb; tests point it elsewhere
         self.clock = clock or datetime.now  # tests fix the day and stay out of work hours
         self.parser, self.planner = parser, planner  # tests stand in for the models
         self.token = secrets.token_urlsafe(16)
@@ -444,6 +470,16 @@ class App:
         body = said + nav + body + self.note_box(f"/d/{picked.isoformat()}")
         return shell(NAME, body, refresh=WORKING_REFRESH_S if self.doing else None)
 
+    def stats_page(self):
+        """The training marts (`training/stats.py`)."""
+        from light_labs.training import stats
+
+        try:
+            body = stats.render(stats.report(self.db))
+        except stats.Unavailable as e:
+            body = f'<p class="meta">{esc(e)}</p>'
+        return shell(f"{NAME} · stats", body)
+
     def week_page(self, key):
         """A week opens on today when it holds today, else on its Monday."""
         days = week_days(key)
@@ -491,6 +527,8 @@ def handler(app):
                     return self._send(200, app.week_page(parts[1]))
             except ValueError:  # 2026-02-31, 2026-W99
                 return self._missing()
+            if parts == ["stats"]:
+                return self._send(200, app.stats_page())
             if parts == ["app.js"]:
                 return self._send(200, APP_JS, ctype="text/javascript; charset=utf-8")
             if parts == ["icon.png"]:
