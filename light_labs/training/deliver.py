@@ -16,8 +16,8 @@ understood; `/replan <text>` does that and then replans. A note sent in work hou
 while Ollama is down, is read by the first tick that can, which replans if the note asked
 for it.
 
-`/plan` texts a stored plan (`show`); each plan text ends with its page on Rush's remote
-when `RUSH_REMOTE_URL` is set.
+`/plan` texts a stored plan (`show`); each plan text ends with its page in the Workouts
+app (`training/app.py`) when `WORKOUTS_URL` is set.
 
 Only requested files trigger a refresh, so the nightly Health drop never re-plans. State
 lives in var/training/deliver.json; a lock keeps the tick and a Telegram-triggered
@@ -136,10 +136,11 @@ def _since(newest, kind):
     return "ever" if at is None else f"{at:%a %b %-d}"
 
 
-def link(key):
-    """The plan's page on Rush's remote (tailnet only), '' when no remote is configured."""
-    base = os.environ.get("RUSH_REMOTE_URL", "").rstrip("/")
-    return f"{base}/training/{key}" if base else ""
+def link(key=None):
+    """A week's page in the Workouts app (tailnet only), or the app itself without a key;
+    '' when `WORKOUTS_URL` is unset."""
+    base = os.environ.get("WORKOUTS_URL", "").rstrip("/")
+    return (f"{base}/w/{key}" if key else f"{base}/") if base else ""
 
 
 def weeks(var=None):
@@ -162,7 +163,7 @@ def plan_file(spec="", now=None, var=None):
         start = week_context.week_start(spec)
     else:
         start = week_context.week_start(today=now.date()) - timedelta(days=7)
-    key = _week_key(start)
+    key = week_key(start)
     return key, weeks(var).get(key)
 
 
@@ -186,13 +187,13 @@ def _send_plan(path, send, lead):
         send(None, f"{lead}\n\n{part}" if i == 0 else part)
 
 
-def _week_key(start):
+def week_key(start):
     year, num, _ = start.isocalendar()
     return f"{year}-W{num:02d}"
 
 
 def _plan(state, start, send, planner, lead, from_date=None, built_without=(), retry=RETRY_TICK):
-    key = _week_key(start)
+    key = week_key(start)
     try:
         path, fails = planner(key, from_date=from_date)
     except Exception as e:  # noqa: BLE001 - any failure is texted, and retried next tick
@@ -218,7 +219,7 @@ def refresh(state, now, send, planner, retry=RETRY_TICK):
     remaining days (from today before noon, else tomorrow). True when a plan was sent,
     False when planning failed (texted, with `retry`), None when no day is left."""
     nxt = week_context.week_start(today=now.date())
-    if _week_key(nxt) in state["sent"]:
+    if week_key(nxt) in state["sent"]:
         return _plan(state, nxt, send, planner, "Updated plan:", retry=retry)
     this = nxt - timedelta(days=7)
     start_from = now.date() if now.hour < 12 else now.date() + timedelta(days=1)
@@ -289,7 +290,7 @@ def tick(send, now=None, planner=None, var=None, parser=None):
         if (
             now.weekday() == SUNDAY
             and CHECK_HOUR <= now.hour <= LAST_HOUR
-            and _week_key(nxt) not in state["sent"]
+            and week_key(nxt) not in state["sent"]
         ):
             for kind in missing:
                 if kind not in state["requested"]:
@@ -299,7 +300,7 @@ def tick(send, now=None, planner=None, var=None, parser=None):
             fresh_strong = newest["strong"] == now.date() and loaded("strong", var)
             due = fresh_strong or now.hour >= PLAN_HOUR
             if due and _plan(state, nxt, send, planner, "Next week's plan:", built_without=missing):
-                done.append(f"sent {_week_key(nxt)}")
+                done.append(f"sent {week_key(nxt)}")
 
         if (
             now.hour >= HEALTH_HOUR
@@ -329,8 +330,8 @@ def replan(send, now=None, planner=None, var=None):
 def send_week(week, send, var=None):
     """`lab training send`: text an existing plan."""
     start = week_context.week_start(week)
-    path = home(var) / "plans" / f"{_week_key(start)}.md"
+    path = home(var) / "plans" / f"{week_key(start)}.md"
     if not path.exists():
         raise FileNotFoundError(f"no plan at {path}; run `lab training plan` first")
-    _send_plan(path, send, f"Plan for {_week_key(start)}:")
+    _send_plan(path, send, f"Plan for {week_key(start)}:")
     return path

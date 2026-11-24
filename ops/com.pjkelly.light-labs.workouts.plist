@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Workouts, the training plan as a phone web app, on 127.0.0.1:8788. Install with
+     `just workouts-install`; publish to the tailnet with `tailscale serve`
+     (docs/training.md). No double hyphen in here: XML forbids it inside a comment, and
+     tests/test_ops.py parses this file. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.pjkelly.light-labs.workouts</string>
+  <key>ProgramArguments</key>
+  <array>
+    <!-- The release's own entry point, not `uv run` on the current link: uv caches the
+         interpreter it found at that path and keeps starting the release before. -->
+    <string>/Users/pjkelly/.light-labs/lab/current/.venv/bin/lab</string>
+    <string>training</string>
+    <string>app</string>
+  </array>
+  <!-- launchd's PATH lacks /usr/local/bin, where the tailscale CLI lives, and
+       ~/.local/bin, where claude lives (a replan plans through it). -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LAB_VAR</key><string>/Users/pjkelly/light-labs/var</string>
+    <key>PATH</key><string>/Users/pjkelly/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/pjkelly/light-labs/var/training/app.log</string>
+  <key>StandardErrorPath</key><string>/Users/pjkelly/light-labs/var/training/app.log</string>
+</dict>
+</plist>

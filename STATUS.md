@@ -3,7 +3,7 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-11-14._
+_Updated 2026-11-23._
 
 ## Now
 
@@ -105,8 +105,10 @@ _Updated 2026-11-14._
 5. Training planner (`docs/plans/training.md`): steps 1–5 live (landing, marts,
    context, `lab training plan`). Step 6 in review: Rush's hourly tick sends next week's
    plan Sunday evening, asks for stale Strong or Health files, refreshes the plan when a
-   requested one lands, `/replan` on demand; `/plan` texts a stored plan and the remote's
-   Training tab shows any week. `/note` and `/replan <text>` log events, chores and sick
+   requested one lands, `/replan` on demand; `/plan` texts a stored plan. The plan is
+   also a phone web app, Workouts (`lab training app`, `workouts` LaunchAgent, tailnet
+   port 8080): today's session, a button per set, notes and replans; check-offs are
+   display only (`var/training/checks.jsonl`). Rush's remote no longer has a Training tab. `/note` and `/replan <text>` log events, chores and sick
    days (`training/notes.py`, read by `llama3.1:8b`) and the planner works around them.
    A note sent while Ollama is down is saved unread and read by the first tick that
    reaches it.

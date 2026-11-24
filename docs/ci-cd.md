@@ -74,7 +74,7 @@ commit of `origin`, exported with `git archive` and installed with `uv sync --lo
 
 | Target | Runs | Restart on a new commit |
 |---|---|---|
-| `lab` (`~/.light-labs/lab`) | Rush's hourly tick and phone page, the Dagster daemon, Roll's chores (`ops/*.plist`) | The phone page; the Dagster daemon unless a run is in progress. The tick and chores are a new process each time |
+| `lab` (`~/.light-labs/lab`) | Rush's hourly tick and phone page, the Workouts app, the Dagster daemon, Roll's chores (`ops/*.plist`) | The phone page and Workouts; the Dagster daemon unless a run is in progress. The tick and chores are a new process each time |
 | `hermes` (`~/.hermes/lab`) | Hermes's lab MCP server | `hermes gateway restart` |
 | `radar` (docs/radar.md) | Radar's scheduled sync and digest | none |
 

@@ -7,16 +7,16 @@ agents=~/Library/LaunchAgents
 
 labels() {
     case $1 in
-        rush | rush-remote | dagster | ollama) echo "com.pjkelly.light-labs.$1" ;;
+        rush | rush-remote | workouts | dagster | ollama) echo "com.pjkelly.light-labs.$1" ;;
         hermes) echo "ai.hermes.gateway" ;;
         radar) echo "com.pjkelly.relationship-radar.messages-export" \
             "com.pjkelly.relationship-radar.sync" "com.pjkelly.relationship-radar.weekly" ;;
-        *) echo "unknown job $1 (rush, rush-remote, dagster, ollama, hermes, radar, all)" >&2; exit 2 ;;
+        *) echo "unknown job $1 (rush, rush-remote, workouts, dagster, ollama, hermes, radar, all)" >&2; exit 2 ;;
     esac
 }
 
 jobs="$*"
-[ "$jobs" = all ] && jobs="rush rush-remote dagster hermes radar"
+[ "$jobs" = all ] && jobs="rush rush-remote workouts dagster hermes radar"
 for job in $jobs; do
     for label in $(labels "$job"); do
         running=$(launchctl print "$domain/$label" >/dev/null 2>&1 && echo yes)
