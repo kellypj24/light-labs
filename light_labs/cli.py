@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from light_labs import config
@@ -992,6 +993,27 @@ def cmd_mcp(args):
     mcp_server.serve()
 
 
+def cmd_brief(args):
+    """Rush's morning brief: print it, or text it with the queue's oldest drafts."""
+    from light_labs.agents import rush
+    from light_labs.agents.rush import brief
+    from light_labs.core.brain import brain_for
+
+    now = datetime.now(UTC)
+    brain = None if args.no_claude else brain_for(brief.BRAIN, source=brief.SOURCE)
+    text, ids = brief.compose(now, brain)
+    print(text)
+    if not args.send:
+        return
+    if not rush.TELEGRAM_CHAT:
+        sys.exit("lab brief: Rush has no Telegram chat (RUSH_TELEGRAM_CHAT)")
+    from light_labs.agents.rush.telegram import Telegram
+
+    telegram = Telegram.from_keychain(rush.TELEGRAM_CHAT, config.VAR / "rush" / "telegram.json")
+    shown = brief.send(text, ids, now, telegram, rush.REMOTE_URL)
+    print(f"sent; {len(shown)} draft(s) shown with buttons")
+
+
 def cmd_board(args):
     """Agent Net for Auto, through Rush: read the cache (or --live), post as Auto."""
     from light_labs.agents import rush
@@ -1048,7 +1070,10 @@ def parser():
     p = argparse.ArgumentParser(prog="lab")
     sub = p.add_subparsers(dest="robot", required=True)
     sub.add_parser("roster", help="list the DLN registry")
-    sub.add_parser("mcp", help="serve the lab over MCP on stdio (read-only; for Hermes)")
+    sub.add_parser("mcp", help="serve the lab over MCP on stdio (docs/hermes.md)")
+    brief_p = sub.add_parser("brief", help="Rush's morning brief (printed unless --send)")
+    brief_p.add_argument("--send", action="store_true", help="text it in Rush's chat")
+    brief_p.add_argument("--no-claude", action="store_true", help="fixed layout, no model")
     python_p = sub.add_parser("python", help="Python version pins (any repo)")
     pycmd = python_p.add_subparsers(dest="cmd", required=True)
     pins_p = pycmd.add_parser(
@@ -1303,7 +1328,7 @@ def main(argv=None):
     if args.robot == "radar":
         raise SystemExit(radar_cli.run(args))
     if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board",
-                      "heavy", "python"):  # fmt: skip
+                      "heavy", "python", "brief"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude", "calibration", "training"):
