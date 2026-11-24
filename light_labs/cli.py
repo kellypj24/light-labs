@@ -742,7 +742,7 @@ def cmd_google(args):
     if args.cmd == "auth":
         account, scopes = google.authorize(args.who, login_hint=args.account)
         print(f"{args.who}: signed in to {account} with {', '.join(scopes)}")
-    elif args.cmd == "check" and args.who == "training":
+    elif args.cmd == "check" and args.who in ("training", "brief"):
         cals = google.Calendar(args.who, args.account).calendars()
         print(f"{args.who}: {args.account}, {len(cals)} calendars: {', '.join(n for _, n in cals)}")
     elif args.cmd == "check":
@@ -1260,7 +1260,7 @@ def parser():
         ("check", "prove a token works"),
     ):
         gp = gocmd.add_parser(name, help=text)
-        gp.add_argument("who", choices=["rush", "roll", "training"])
+        gp.add_argument("who", choices=["rush", "roll", "training", "brief"])
         gp.add_argument(
             "--account",
             required=name == "check",

@@ -38,7 +38,8 @@ SOURCES = {
     "rush/mail-work": set(),  # sanitized view, personal mail deferred to the evening
     "rush/mail-fixtures": set(),
     # Morning brief (agents/rush/brief.py): non-personal mail through sanitize.scrub,
-    # board mentions, PRs and CI outside the client repos, queue counts, the forecast.
+    # board mentions, PRs and CI outside the client repos, queue counts, the forecast,
+    # and calendar counts and times (no titles or places).
     "rush/brief": {"board"},
     "roll/keep": {"mail"},
     "roll/keep-teacher": set(),  # sanitized view, personal mail skipped
