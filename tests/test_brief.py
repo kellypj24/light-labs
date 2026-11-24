@@ -164,6 +164,71 @@ class BriefTest(unittest.TestCase):
             (self.var / "rush" / "brief" / "2026-11-24.txt").read_text(), "the brief\n"
         )
 
+    def events(self, *rows):
+        day = "2026-11-24"
+        out = []
+        for start, end, title, family in rows:
+            all_day = start is None
+            out.append({
+                "start": brief.date.fromisoformat(day) if all_day
+                else brief._at(f"{start}:00-05:00" if "T" in start else f"{day}T{start}:00-05:00"),
+                "end": brief.date.fromisoformat("2026-11-25") if all_day
+                else brief._at(f"{end}:00-05:00" if "T" in end else f"{day}T{end}:00-05:00"),
+                "all_day": all_day, "title": title, "where": "", "family": family,
+            })  # fmt: skip
+        return out
+
+    def test_calendar_titles_stay_local_and_claude_gets_the_shape(self):
+        found = self.events(
+            (None, None, "Trash day", True),
+            ("08:30", "09:30", "Standup", False),
+            ("09:30", "10:00", "Dentasys sync", False),
+            ("09:45", "10:15", "School drop-off", True),
+            ("10:00", "11:00", "Review", False),
+            ("2026-11-25T08:00", "2026-11-25T09:00", "Dentist", True),
+        )
+        brain = FakeBrain()
+        text, _ = brief.compose(NOW, brain, {"calendar": lambda: brief.calendar(NOW, found)})
+        for title in ("Standup", "Dentasys", "drop-off", "Dentist", "Trash"):
+            self.assertNotIn(title, brain.seen)
+        shape = json.loads(brain.seen.split("<facts>")[1].split("</facts>")[0])["calendar"]
+        self.assertEqual(shape["events_today"], 4)
+        self.assertEqual(shape["starts_before_9"], ["08:30"])
+        self.assertEqual(shape["conflicts_work_vs_family"], ["09:30–10:00 overlaps 09:45–10:15",
+                                                             "10:00–11:00 overlaps 09:45–10:15"])  # fmt: skip
+        self.assertEqual(shape["tomorrow_morning_first"], "08:00")
+        self.assertIn("All day Trash day (family)", text)
+        self.assertIn("09:45–10:15 School drop-off (family)", text)
+        self.assertIn("Conflict: 09:30 Dentasys sync overlaps 09:45 School drop-off (family)", text)
+        self.assertIn("Tomorrow morning: 08:00 Dentist", text)
+
+    def test_three_events_without_a_break_are_a_stretch(self):
+        found = self.events(
+            ("13:00", "14:00", "A", False),
+            ("14:00", "15:00", "B", False),
+            ("15:05", "16:00", "C", False),
+            ("17:00", "18:00", "D", False),
+        )
+        safe, _ = brief.calendar(NOW, found)
+        self.assertEqual(safe["no_break_stretches"], ["13:00–16:00"])
+        self.assertIn("No break 13:00–16:00", brief.render({"calendar": safe}))
+
+    def test_events_come_from_each_named_calendar_with_family_tagged(self):
+        class Cal:
+            def resolve(self, names):
+                return [f"id-{n}" for n in names]
+
+            def events(self, cal_id, start, end):
+                self.window = (start.isoformat(), end.isoformat())
+                return [{"start": "2026-11-24T09:00:00-05:00", "end": "2026-11-24T10:00:00-05:00",
+                         "all_day": False, "title": cal_id, "where": ""}]  # fmt: skip
+
+        cal = Cal()
+        found = brief.events(NOW, cal, ["primary", "Kelly family calendar"])
+        self.assertEqual([(e["title"], e["family"]) for e in found],
+                         [("id-primary", False), ("id-Kelly family calendar", True)])  # fmt: skip
+        self.assertEqual(cal.window, ("2026-11-24T00:00:00-05:00", "2026-11-25T12:00:00-05:00"))
+
     def test_nothing_to_say(self):
         text, ids = brief.compose(NOW, FakeBrain(), NO_READERS)
         self.assertEqual((text, ids), ("Nothing needs you this morning.", []))

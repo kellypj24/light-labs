@@ -5,9 +5,11 @@ write up to WRITTEN_LINES lines from the cloud-safe ones, and appends the rest i
 
 - cloud-safe (gate source `rush/brief`): non-personal mail through `sanitize.scrub`,
   board items mentioning PJ or Rush, PRs and failing CI outside the client repos, queue
-  counts (never a draft's text), robot health, today's forecast.
-- local only, written by code: personal mail (`sanitize.is_personal`) and anything in a
-  client repo. Neither reaches Claude.
+  counts (never a draft's text), robot health, today's forecast, and the shape of
+  today's calendar: counts and times, never a title.
+- local only, written by code: today's events with their titles and places (the `brief`
+  Google sign-in, core/google.py), personal mail (`sanitize.is_personal`) and anything
+  in a client repo. None of it reaches Claude.
 
 A brief is always produced: if Claude is unreachable, signed out or denied by the gate,
 the same facts go out in a fixed layout and the last line says why. A reader that fails
@@ -24,7 +26,7 @@ thread flagged again is marked "still open". Each sent brief is kept beside it a
 import json
 import os
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from email.utils import parsedate_to_datetime
 
 from light_labs import config
@@ -39,6 +41,10 @@ MAIL_WINDOW = timedelta(hours=26)  # a daily run, with room for a late one
 MAIL_MAX = 5
 STALE = timedelta(hours=3)  # Rush ticks hourly; Roll has no schedule
 EXCERPT = 120
+EVENTS_MAX = 8
+EARLY = time(9, 0)
+NO_BREAK = timedelta(minutes=5)  # a gap this short is no break
+STRETCH = 3  # this many events in a row is worth a line
 # Mail Rush filed as something else that still carries a date to act on.
 DEADLINE = re.compile(
     r"\b(bill|invoice|due|overdue|deadline|payment|expir\w+|renew\w*|final notice)\b",
@@ -51,7 +57,9 @@ most {WRITTEN_LINES} short lines, readable in under a minute.
 
 The first line is one sentence naming the single most important thing today; it becomes \
 the notification banner. Then, in this order, leaving out a section with nothing in it: \
-mail that needs a reply or action (sender, subject, what is needed; say "still open" \
+the shape of today's calendar (you are given times, never titles; the event list follows \
+your text, so name an event by its time, and mention a conflict, a start before 9 or a \
+stretch with no break); mail that needs a reply or action (sender, subject, what is needed; say "still open" \
 where the fact does); failing CI and his pull requests with failing checks; the approval queue \
 (count by robot, how many escalated, the oldest); board items; robot health; the weather, \
 with a note when a coat, an umbrella or extra drive time is called for.
@@ -203,11 +211,100 @@ def weather(now):
     }
 
 
+def _at(text):
+    at = datetime.fromisoformat(text)
+    return (at if at.tzinfo else at.replace(tzinfo=TZ)).astimezone(TZ)
+
+
+def _span(e):
+    return f"{e['start']:%H:%M}–{e['end']:%H:%M}"
+
+
+def events(now, cal=None, names=None):
+    """Today's events and tomorrow morning's from the brief's calendars, in start order:
+    {start, end (local datetimes; dates when all_day), all_day, title, where, family}.
+    Every calendar but `primary` is the family's."""
+    from light_labs.training.calendar import calendar_names
+
+    if cal is None:
+        from light_labs.core.google import Events
+
+        account = os.environ.get("BRIEF_GOOGLE_ACCOUNT") or os.environ.get(
+            "TRAINING_GOOGLE_ACCOUNT", ""
+        )
+        if not account:
+            raise RuntimeError("BRIEF_GOOGLE_ACCOUNT is not set in .env")
+        cal = Events("brief", account)
+    names = names or [
+        n.strip() for n in os.environ.get("BRIEF_CALENDARS", "").split(",") if n.strip()
+    ]
+    names = names or calendar_names()
+    day = now.astimezone(TZ).date()
+    start = datetime.combine(day, time(0), TZ)
+    end = datetime.combine(day + timedelta(days=1), time(12), TZ)
+    out = []
+    for name, cal_id in zip(names, cal.resolve(names), strict=True):
+        for e in cal.events(cal_id, start, end):
+            parse = date.fromisoformat if e["all_day"] else _at
+            out.append({**e, "start": parse(e["start"]), "end": parse(e["end"]),
+                        "family": name != "primary"})  # fmt: skip
+    return sorted(out, key=lambda e: (not e["all_day"], str(e["start"])))
+
+
+def _event_line(e):
+    when = "All day" if e["all_day"] else _span(e)
+    line = f"{when} {e['title']}" + (" (family)" if e["family"] else "")
+    return line + (f", {e['where'][:60]}" if e["where"] else "")
+
+
+def calendar(now, found):
+    """(cloud-safe shape of the day, local lines). Claude gets counts and times; every
+    title and place is in the lines code writes."""
+    day = now.astimezone(TZ).date()
+    all_day = [e for e in found if e["all_day"] and e["start"] <= day < e["end"]]
+    timed = [e for e in found if not e["all_day"]]
+    today = [e for e in timed if e["start"].date() == day]
+    tomorrow = [e for e in timed if e["start"].date() > day]
+    conflicts = [
+        (a, b)
+        for a in today
+        for b in today
+        if not a["family"] and b["family"] and a["start"] < b["end"] and b["start"] < a["end"]
+    ]
+    stretches, run = [], today[:1]
+    for e in today[1:]:
+        if timedelta(0) <= e["start"] - run[-1]["end"] <= NO_BREAK:
+            run.append(e)
+            continue
+        stretches.append(run)
+        run = [e]
+    stretches = [r for r in [*stretches, run] if len(r) >= STRETCH]
+    lines = [_event_line(e) for e in (all_day + today)[:EVENTS_MAX]]
+    if len(all_day + today) > EVENTS_MAX:
+        lines.append(f"and {len(all_day + today) - EVENTS_MAX} more event(s)")
+    lines += [f"Conflict: {a['start']:%H:%M} {a['title']} overlaps {b['start']:%H:%M} "
+              f"{b['title']} (family)" for a, b in conflicts]  # fmt: skip
+    if tomorrow:
+        firsts = "; ".join(f"{e['start']:%H:%M} {e['title']}" for e in tomorrow[:3])
+        lines.append(f"Tomorrow morning: {firsts}")
+    safe = {
+        "events_today": len(today),
+        "all_day_events": len(all_day),
+        "first_start": f"{today[0]['start']:%H:%M}" if today else None,
+        "starts_before_9": [f"{e['start']:%H:%M}" for e in today if e["start"].time() < EARLY],
+        "conflicts_work_vs_family": [f"{_span(a)} overlaps {_span(b)}" for a, b in conflicts],
+        "no_break_stretches": [f"{r[0]['start']:%H:%M}–{r[-1]['end']:%H:%M}" for r in stretches],
+        "tomorrow_morning_first": f"{tomorrow[0]['start']:%H:%M}" if tomorrow else None,
+    }
+    return ({k: v for k, v in safe.items() if v} if found else None), lines
+
+
 def gather(now, flagged=(), readers=None):
     """({cloud-safe facts}, {local-only facts}). A reader that raises is named in
     safe["unavailable"] and its section left out."""
     if readers is None:
         readers = {
+            "calendar": lambda: calendar(now, events(now)),
             "board": board,
             "github": lambda: github(mcp_server.github_status()),
             "weather": lambda: weather(now),
@@ -222,8 +319,8 @@ def gather(now, flagged=(), readers=None):
         except Exception as e:  # noqa: BLE001 - any reader failing costs only its section
             missing.append(f"{name}: {type(e).__name__}")
             continue
-        if name == "github":
-            safe["github"], local["github"] = got
+        if name in ("github", "calendar"):
+            safe[name], local[name] = got
         else:
             safe[name] = got
     safe["unavailable"] = missing
@@ -246,7 +343,11 @@ def _github_lines(g):
 
 def render(safe):
     """The cloud-safe facts in a fixed layout: what goes out when Claude can't write it."""
-    lines = [f"Reply: {_mail_line(m)}" for m in safe.get("mail") or []]
+    cal = safe.get("calendar") or {}
+    early = cal.get("starts_before_9")
+    lines = [f"Starts before 9: {', '.join(early)}"] if early else []
+    lines += [f"No break {s}" for s in cal.get("no_break_stretches", [])]
+    lines += [f"Reply: {_mail_line(m)}" for m in safe.get("mail") or []]
     lines += _github_lines(safe.get("github") or {"prs": [], "ci_failing": {}})
     q = safe.get("queue")
     if q:
@@ -265,8 +366,9 @@ def render(safe):
 
 
 def local_lines(local):
-    """Lines Claude never sees: personal mail and client repos."""
-    lines = [f"Reply: {_mail_line(m)}" for m in local.get("mail") or []]
+    """Lines Claude never sees: the calendar, personal mail and client repos."""
+    lines = list(local.get("calendar") or [])
+    lines += [f"Reply: {_mail_line(m)}" for m in local.get("mail") or []]
     return lines + _github_lines(local.get("github") or {"prs": [], "ci_failing": {}})
 
 

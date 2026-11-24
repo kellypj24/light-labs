@@ -44,8 +44,10 @@ _Updated 2026-11-23._
   marts; credentials are redacted on ingest (#70).
 - Morning brief: `lab brief` (docs/brief.md), Rush's chat at 07:50 with his three oldest
   drafts and their buttons, on the Claude Code login through gate source `rush/brief`;
-  personal mail and client repos are written by code. Not installed yet: `just
-  brief-install` after the merge. Hermes's `morning-brief` cron is paused (its API key
+  personal mail, client repos and calendar titles are written by code. Installed
+  2026-11-24 (`brief` LaunchAgent). The calendar section needs the `brief` Google sign-in
+  (`lab google auth brief`, docs/brief.md); until then it reads `No calendar this run`.
+  The desktop morning task runs beside it until two lab briefs in a row pass review. Hermes's `morning-brief` cron is paused (its API key
   expired 2026-11-19); Hermes still deploys (`~/.hermes/lab/current`).
 - `lab mcp` is registered in Claude Code (user scope) and Claude desktop
   (docs/hermes.md), both on the `lab` release.
@@ -142,10 +144,6 @@ _Updated 2026-11-23._
 
 ## Open decisions
 
-- Morning brief has no calendar section; the desktop task's is its largest (events from
-  the primary and family calendars, conflicts, early starts). Options: a
-  `calendar.events.readonly` sign-in with titles written by code only, or keep the
-  desktop task for calendar alone. Until decided the desktop task can't be retired.
 - Morning brief runs daily; the desktop task is weekdays only. Keep daily?
 - Morning brief re-shows Rush's three oldest drafts every day until acted on. Keep, or
   show each draft once?

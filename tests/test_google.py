@@ -7,6 +7,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from light_labs.core import google
@@ -96,6 +97,43 @@ class GmailTest(unittest.TestCase):
         self.assertEqual([c.full_url for c in calls].count("https://t"), 1)
         self.assertIn(b"refresh_token=RT", calls[0].data)
         self.assertEqual(calls[1].headers["Authorization"], "Bearer AT")
+
+
+class EventsTest(unittest.TestCase):
+    def test_events_are_read_in_pages_without_cancelled_ones(self):
+        pages = [
+            {"items": [{"status": "confirmed", "summary": "Standup", "hangoutLink": "https://m",
+                        "start": {"dateTime": "2026-11-24T09:00:00-05:00"},
+                        "end": {"dateTime": "2026-11-24T09:30:00-05:00"}},
+                       {"status": "cancelled", "start": {"date": "2026-11-24"},
+                        "end": {"date": "2026-11-25"}}],
+             "nextPageToken": "p2"},
+            {"items": [{"start": {"date": "2026-11-24"}, "end": {"date": "2026-11-25"}}]},
+        ]  # fmt: skip
+        urls = []
+
+        def opener(req, timeout=None):
+            if req.full_url == "https://t":
+                return io.BytesIO(json.dumps({"access_token": "AT"}).encode())
+            urls.append(req.full_url)
+            return io.BytesIO(json.dumps(pages[len(urls) - 1]).encode())
+
+        def get(service):
+            if service == google.CLIENT_KEYCHAIN:
+                return json.dumps(CLIENT)
+            self.assertEqual(service, "light-labs-google-brief-me@x")
+            return json.dumps({"refresh_token": "RT"})
+
+        start = datetime(2026, 11, 24, tzinfo=UTC)
+        cal = google.Events("brief", "me@x", get=get, opener=opener)
+        got = cal.events("fam#ily@group", start, start + timedelta(days=1))
+        self.assertEqual([(e["title"], e["all_day"], e["where"]) for e in got],
+                         [("Standup", False, "https://m"), ("(no title)", True, "")])  # fmt: skip
+        self.assertIn("/calendars/fam%23ily%40group/events?", urls[0])
+        self.assertIn("pageToken=p2", urls[1])
+
+    def test_the_brief_sign_in_can_only_read(self):
+        self.assertTrue(all(s.endswith(".readonly") for s in google.SCOPES["brief"]))
 
 
 if __name__ == "__main__":
