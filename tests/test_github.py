@@ -94,6 +94,13 @@ class GitHubWatchTest(unittest.TestCase):
         self.assertIn("passing again", self.check()[0])
         self.assertEqual(len(self.sent), 2)
 
+    def test_each_change_is_a_journal_line_for_the_feed(self):
+        self.check()
+        self.gh.runs = [run(2, "CI", "failure")]
+        self.check()
+        journal = (self.store.root / "journal.md").read_text()
+        self.assertIn(f"GitHub: CI failed on {REPO} main (CI): https://gh/run/2", journal)
+
     def test_new_dependabot_prs(self):
         self.gh.dependabot = [pr(5, "bump x")]
         self.check()

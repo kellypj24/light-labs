@@ -17,6 +17,7 @@ lab dash --once   # one frame on stdout (no color when piped)
 | Waiting on you from the lab | `var/*/queue/pending`, `var/rush/asks.jsonl` | Counts per robot and kind, escalations, age of the oldest. Read-only: approvals stay in Telegram |
 | Tasks, Waiting on others | `DASH_TASKS` (default `~/tasks/tasks.md`) | Overdue red, due today or tomorrow yellow |
 | Repo review queue | `gh`, and the CI state Rush's GitHub watch keeps | PJ's PRs with failing checks or changes requested, reviews asked of him (not Dependabot's: Roll has those), a red default branch, issues assigned to him. A failing canary workflow (`Python next`; `DASH_CANARIES` overrides the names) is a dim `canary` row at the end, not a red branch. `DASH_REPOS` overrides the repo list in `dash/review.py` |
+| Recent | The feed (below) | The last four events of the past 24 hours, newest first; lines over an hour old are dim. Absent when there are none. `f` opens the last 7 days over the whole frame |
 | Jobs | `launchctl list`, Dagster's run store, `var/evals/*.run.json` | A count of healthy launchd and Dagster jobs, with each failing one listed under it; `j` opens the full list. The latest run per eval stage |
 
 Calendar, GitHub and Ollama are read on background threads (every 5, 10 and 1 minutes)
@@ -32,10 +33,36 @@ files are re-read every 5 seconds.
 | `x` then a letter | tick that task's box |
 | `u` | undo the last tick |
 | `j` | open or close the full job list |
-| `R` | re-exec, so code changes load |
+| `f` | open or close the feed |
+| `R` | re-exec, so code changes load (not in the hint line) |
 | `q` | quit |
 
 ESC alone does nothing. Pasted text is ignored whole.
+
+## Feed
+
+```
+lab feed                  # the last day, oldest first, then new events as they come
+lab feed --since 1w       # start further back (6h, 2d, 1w)
+lab feed --once           # print and exit
+```
+
+What happened, where the rest of the dashboard shows what is true now. Nothing collects
+it and nothing is stored for it: `dash/feed.py` reads records their producers already
+keep with a timestamp, so it shows what happened while no dashboard was open, and
+history is as long as those records are.
+
+| Source | Events |
+|---|---|
+| `var/rush/journal.md`, `var/roll/journal.md` | Every line but the routine ones (an empty tick, the mail count, a superseded draft). Rush's GitHub watch journals each change it texts about, so CI failing and passing again on a default branch is here, as are new Dependabot PRs and comments |
+| Dagster's run store | Runs that failed or were canceled |
+| `var/evals/*.run.json` | Eval runs that ended |
+| `~/.claude/projects/*/*.jsonl` | The last turn of each session active in the past 7 days |
+
+Failures are red, a recovery green, and a failing canary workflow plain. Lines from one
+source that start with the same three words within two minutes are one line with a
+count. CI changes arrive when Rush next ticks, so up to an hour late. A session's
+earlier turns are not events: only the log's tail is read.
 
 ## Tasks file
 

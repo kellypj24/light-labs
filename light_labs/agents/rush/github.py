@@ -180,6 +180,8 @@ def notify(store, to, send, repos=None, quiet_hours=None, run=subprocess.run, no
         store.journal(f"GitHub check failed for {err}")
     if not events:
         return []
+    for event in events:  # one line each: `lab feed` and the dashboard read them
+        store.journal(f"GitHub: {event}")
     try:
         send(to, message_for(events))
     except (OSError, subprocess.SubprocessError) as e:

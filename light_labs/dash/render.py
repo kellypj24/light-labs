@@ -212,7 +212,8 @@ def _header(m, cols, paint):
     if m.get("mode") == "pick":
         keys = ["letter: check off", "any other key: cancel"]
     else:
-        keys = ["r refresh", "1-9 open", "x check", "u undo", "j jobs", "R reload", "q quit"]
+        # R (reload the code) is left out: it is for whoever is changing the dashboard.
+        keys = ["r refresh", "1-9 open", "x check", "u undo", "j jobs", "f feed", "q quit"]
     hint = GAP.join(keys)
     space = cols - width(left) - width(hint)
     if space >= 2:
@@ -433,6 +434,33 @@ def _jobs(m, cols, paint, compact):
     return lines
 
 
+RECENT = 4  # feed lines in the frame; `f` opens the rest
+FRESH = timedelta(hours=1)  # older feed lines are dim
+
+
+def _feed(m, cols, paint, limit, wrap_to=1):
+    rows = []
+    for e in (m.get("feed") or [])[:limit]:
+        color = {"bad": "red", "good": "green"}.get(e["level"], "")
+        old = "dim" if m["now"] - e["at"] > FRESH else ""
+        rows.append([(ago(e["at"], m["now"]), "dim"), (e["source"], "dim"),
+                     (e["text"], color, old)])  # fmt: skip
+    return table(rows, cols, paint, flex=2, wrap_to=wrap_to)
+
+
+def _recent(m, cols, paint):
+    lines = _feed(m, cols, paint, RECENT)
+    return ["", heading("RECENT", paint, "f for more"), *lines] if lines else []
+
+
+def _feed_frame(m, cols, rows, paint):
+    """The feed over the whole frame: as many events as fit, newest first."""
+    lines = [*_header(m, cols, paint), "", heading("FEED", paint, "last 7 days · f to close")]
+    room = max(1, (rows or 40) - len(lines))
+    found = _feed(m, cols, paint, room, wrap_to=2)[:room]
+    return lines + (found or [INDENT + paint("nothing in the last 7 days", "dim")])
+
+
 def _build(m, cols, paint, compact):
     lines = _header(m, cols, paint)
     lines += _sessions(m, cols, paint)
@@ -440,6 +468,7 @@ def _build(m, cols, paint, compact):
     lines += _queue(m, cols, paint)
     lines += _tasks(m, cols, paint)
     lines += _review(m, cols, paint)
+    lines += _recent(m, cols, paint)
     lines += _jobs(m, cols, paint, compact)
     return lines
 
@@ -448,6 +477,8 @@ def frame(m, cols=100, rows=None, color=True):
     """The whole dashboard. With `rows`, healthy jobs collapse to a count when the full
     frame is too tall, and what still doesn't fit is cut with a count of what's hidden."""
     paint = Paint(color)
+    if m.get("feed_open"):
+        return _feed_frame(m, cols, rows, paint)
     lines = _build(m, cols, paint, compact=not m.get("jobs_open"))
     if rows and len(lines) > rows:
         hidden = len(lines) - rows + 1
