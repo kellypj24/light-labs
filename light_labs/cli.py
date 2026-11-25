@@ -1021,6 +1021,13 @@ def cmd_dash(args):
     app.once() if args.once else app.run()
 
 
+def cmd_feed(args):
+    """What happened lately in the lab, oldest first, then new events as they come."""
+    from light_labs.dash import app
+
+    app.follow(args.since, once=args.once)
+
+
 def cmd_board(args):
     """Agent Net for Auto, through Rush: read the cache (or --live), post as Auto."""
     from light_labs.agents import rush
@@ -1081,6 +1088,9 @@ def parser():
     brief_p = sub.add_parser("brief", help="Rush's morning brief (printed unless --send)")
     brief_p.add_argument("--send", action="store_true", help="text it in Rush's chat")
     brief_p.add_argument("--no-claude", action="store_true", help="fixed layout, no model")
+    feed_p = sub.add_parser("feed", help="what happened lately: robots, CI, jobs, sessions")
+    feed_p.add_argument("--since", default="1d", help="how far back to start (6h, 2d, 1w)")
+    feed_p.add_argument("--once", action="store_true", help="print and exit")
     dash_p = sub.add_parser("dash", help="terminal dashboard: what needs PJ today")
     dash_p.add_argument("--once", action="store_true", help="print one frame and exit")
     python_p = sub.add_parser("python", help="Python version pins (any repo)")
@@ -1337,7 +1347,7 @@ def main(argv=None):
     if args.robot == "radar":
         raise SystemExit(radar_cli.run(args))
     if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board",
-                      "heavy", "python", "brief", "dash"):  # fmt: skip
+                      "heavy", "python", "brief", "dash", "feed"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude", "calibration", "training"):

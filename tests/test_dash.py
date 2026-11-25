@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from light_labs.core import google
-from light_labs.dash import agenda, app, labstate, render, review, sessions, tasks
+from light_labs.dash import agenda, app, feed, labstate, render, review, sessions, tasks
 from light_labs.training.calendar import TZ
 
 NOW = datetime(2026, 11, 24, 10, 0, tzinfo=TZ)
@@ -393,7 +393,152 @@ class DecoderTest(unittest.TestCase):
         self.assertEqual(app.Decoder().feed("é\n🙂q".encode()), ["other", "other", "other", "q"])
 
 
+class FeedTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.var = Path(self.tmp.name)
+        self.since = NOW - timedelta(days=1)
+
+    def journal(self, robot, *lines):
+        (self.var / robot).mkdir(exist_ok=True)
+        (self.var / robot / "journal.md").write_text("".join(f"- {line}\n" for line in lines))
+
+    def test_journal_lines_are_events_without_the_routine_ones(self):
+        self.journal(
+            "rush",
+            "2026-11-20T10:00:00+00:00 sent aaaa1111 (comment) from the remote",  # too old
+            "2026-11-24T12:00:00+00:00 tick: 0 draft(s)",
+            "2026-11-24T12:01:00+00:00 mail: 1 receipt",
+            "2026-11-24T12:02:00+00:00 texted PJ about GitHub: 1 update(s)",
+            "2026-11-24T12:03:00+00:00 texted PJ about 08c5c57a",
+            "2026-11-24T12:04:00+00:00 a5e227c7 superseded by 40e4c1fe",
+            "not a journal line",
+            "2026-11-24T12:05:00+00:00 tick: 2 draft(s)",
+            "2026-11-24T12:06:00+00:00 mail check failed for a@b.c: HTTP Error 500",
+            "2026-11-24T12:07:00+00:00 GitHub: CI failed on pj/x main (CI): https://gh/1",
+            "2026-11-24T12:08:00+00:00 GitHub: CI passing again on pj/x main (CI)",
+            "2026-11-24T12:09:00+00:00 GitHub: CI failed on pj/x main (Python next): u",
+        )
+        found = feed.journal("rush", self.since, self.var)
+        self.assertEqual(
+            [(e["text"], e["level"]) for e in reversed(found)],
+            [("tick: 2 draft(s)", ""),
+             ("mail check failed for a@b.c: HTTP Error 500", "bad"),
+             ("CI failed on pj/x main (CI): https://gh/1", "bad"),
+             ("CI passing again on pj/x main (CI)", "good"),
+             ("CI failed on pj/x main (Python next): u", "")],
+        )  # fmt: skip
+        self.assertEqual(found[0]["at"], datetime(2026, 11, 24, 12, 9, tzinfo=UTC))
+        self.assertEqual(feed.journal("roll", self.since, self.var), [])
+
+    def test_failed_dagster_runs_and_finished_evals_are_events(self):
+        db = self.var / "runs.db"
+        with closing(sqlite3.connect(db)) as con:
+            con.execute("CREATE TABLE runs (pipeline_name, status, start_time, end_time)")
+            at = (NOW - timedelta(hours=2)).timestamp()
+            con.executemany("INSERT INTO runs VALUES (?, ?, ?, ?)", [
+                ("queue_job", "SUCCESS", at, at),
+                ("claude_job", "FAILURE", at, at),
+                ("old_job", "FAILURE", at - 5 * 86400, at - 5 * 86400),
+            ])  # fmt: skip
+            con.commit()
+        self.assertEqual(
+            [(e["source"], e["text"], e["level"]) for e in feed.dagster(self.since, db)],
+            [("dagster", "claude_job failure", "bad")],
+        )
+        (self.var / "evals").mkdir()
+        for name, ended, status in (("a", "2026-11-24T09:00:00Z", "completed"),
+                                    ("b", "2026-11-24T09:30:00Z", "cancelled"),
+                                    ("c", "2026-11-01T09:00:00Z", "completed")):  # fmt: skip
+            (self.var / "evals" / f"{name}.run.json").write_text(json.dumps(
+                {"stage": name, "status": status, "ended_at": ended, "passed": 9, "done": 10}))  # fmt: skip
+        (self.var / "evals" / "bad.run.json").write_text("{")
+        self.assertEqual(
+            sorted((e["text"], e["level"]) for e in feed.evals(self.since, self.var)),
+            [("a completed 9/10", ""), ("b cancelled 9/10", "bad")],
+        )
+
+    def test_a_sessions_last_turn_is_an_event(self):
+        project = self.var / "projects" / "p"
+        project.mkdir(parents=True)
+        log = project / "abc.jsonl"
+        log.write_text("\n".join(json.dumps(r) for r in (
+            {"type": "ai-title", "aiTitle": "fix the build"},
+            {"type": "assistant", "timestamp": "2026-11-24T08:00:00Z", "message": {}},
+            {"type": "assistant", "timestamp": "2026-11-24T09:00:00.500Z", "message": {}},
+            {"type": "user", "timestamp": "2026-11-24T09:30:00Z"},
+        )) + "\n")  # fmt: skip
+        stamp = NOW.timestamp()
+        os.utime(log, (stamp, stamp))
+        found = feed.claude(self.since, self.var / "projects", now=NOW)
+        self.assertEqual([(e["source"], e["text"]) for e in found],
+                         [("claude", "fix the build: turn ended")])  # fmt: skip
+        self.assertEqual(found[0]["at"].hour, 9)
+        old = NOW - timedelta(days=30)
+        os.utime(log, (old.timestamp(), old.timestamp()))
+        self.assertEqual(feed.claude(self.since, self.var / "projects", now=NOW), [])
+
+    def test_a_burst_is_one_line_with_a_count(self):
+        def at(minute, text, source="rush"):
+            return {"at": NOW - timedelta(minutes=minute), "source": source, "text": text,
+                    "level": "bad"}  # fmt: skip
+
+        found = feed.merged([
+            at(1, "GitHub check failed for pj/a: timeout"),
+            at(2, "GitHub check failed for pj/b: timeout"),
+            at(3, "GitHub check failed for pj/c: timeout"),
+            at(3, "GitHub check failed for pj/d: timeout", "roll"),
+            at(30, "GitHub check failed for pj/e: timeout"),
+        ])  # fmt: skip
+        self.assertEqual([e["text"] for e in found], [
+            "(3x) GitHub check failed for pj/a: timeout",
+            "GitHub check failed for pj/d: timeout",
+            "GitHub check failed for pj/e: timeout",
+        ])  # fmt: skip
+
+    def test_a_time_span(self):
+        self.assertEqual(feed.span("6h"), timedelta(hours=6))
+        self.assertEqual(feed.span(" 2D "), timedelta(days=2))
+        for bad in ("", "0d", "soon", "3y"):
+            with self.assertRaises(ValueError):
+                feed.span(bad)
+
+    def test_lab_feed_prints_oldest_first_and_only_new_lines_after(self):
+        import io
+
+        first = {"at": NOW - timedelta(hours=2), "source": "rush", "text": "one", "level": ""}
+        second = {
+            "at": NOW - timedelta(hours=1),
+            "source": "roll",
+            "text": "two\x1b[2J",
+            "level": "bad",
+        }
+        answers = iter([[second, first], [second, first], KeyboardInterrupt()])
+
+        def events(since):
+            answer = next(answers)
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
+
+        out = io.StringIO()
+        with mock.patch.object(feed, "events", events):
+            app.follow("1d", out=out, sleep=lambda s: None)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].endswith("rush     one"))
+        self.assertTrue(lines[1].endswith("roll     two[2J"))
+
+
 class PressTest(unittest.TestCase):
+    def test_f_opens_and_closes_the_feed(self):
+        state = app.State()
+        self.assertEqual(app.press(state, "f"), [])
+        self.assertTrue(state.feed_open)
+        app.press(state, "f")
+        self.assertFalse(state.feed_open)
+
     def test_j_opens_and_closes_the_job_list(self):
         state = app.State()
         self.assertEqual(app.press(state, "j"), [])
@@ -879,10 +1024,27 @@ class RenderTest(unittest.TestCase):
 
     def test_a_side_pane_wraps_the_key_hints_and_drops_the_folder(self):
         lines = render.frame(model(), 60, color=False)
-        self.assertEqual(lines[1], "r refresh  1-9 open  x check  u undo  j jobs  R reload")
-        self.assertEqual(lines[2], "q quit")
+        self.assertEqual(lines[1], "r refresh  1-9 open  x check  u undo  j jobs  f feed  q quit")
+        narrow = render.frame(model(), 40, color=False)
+        self.assertEqual(
+            narrow[1:3], ["r refresh  1-9 open  x check  u undo", "j jobs  f feed  q quit"]
+        )
         self.assertIn("fix the build  repo  163k", self.text())
         self.assertIn("fix the build  163k", "\n".join(lines))
+
+    def test_recent_shows_the_last_four_events_and_f_shows_the_feed_alone(self):
+        found = [{"at": NOW - timedelta(minutes=10 * i + 5), "source": "rush",
+                  "text": f"event {i}", "level": "bad" if i == 0 else ""} for i in range(6)]  # fmt: skip
+        self.assertNotIn("RECENT", self.text())
+        text = self.text(feed=found)
+        self.assertIn("RECENT  f for more\n  5m   rush  event 0\n  15m  rush  event 1", text)
+        self.assertIn("event 3", text)
+        self.assertNotIn("event 4", text)
+        opened = render.frame(model(feed=found, feed_open=True), 100, rows=20, color=False)
+        self.assertIn("FEED  last 7 days · f to close", opened)
+        self.assertIn("  55m  rush  event 5", opened)
+        self.assertNotIn("TASKS", "\n".join(opened))
+        self.assertLessEqual(len(render.frame(model(feed=found, feed_open=True), 100, rows=6)), 6)
 
     def test_a_short_window_is_cut_with_a_count(self):
         cut = render.frame(model(), 100, rows=6, color=False)

@@ -87,7 +87,10 @@ _Updated 2026-11-24._
   sessions, today's calendar and training session, the robots' queues, tasks from
   `~/tasks/tasks.md`, the repo review queue, launchd and Dagster health. No model;
   the only write is a task checkbox on a keypress. Calendar reads through the `dash`
-  sign-in (`calendar.events.readonly`), signed in 2026-11-24.
+  sign-in (`calendar.events.readonly`), signed in 2026-11-24. `lab feed` and the
+  dashboard's Recent section show what happened lately (robot journals, failed Dagster
+  runs, eval runs, session turns), read from records that already exist: no collector
+  and no store. Rush's GitHub watch now journals each change it texts about.
 - Python is pinned (`.python-version`, 3.13). `just pins` and CI fail on a project without
   a pin or a Docker/CI version that differs; `lab python status --all` audits every
   checkout in `~`; `python-next.yml` runs the tests on the next minor weekly

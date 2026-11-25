@@ -18,14 +18,16 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from light_labs.core import heavy, monitor
-from light_labs.dash import agenda, labstate, render, review, sessions, tasks
+from light_labs.dash import agenda, feed, labstate, render, review, sessions, tasks
 from light_labs.training.calendar import TZ
 
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 LOCAL_EVERY = 5  # seconds between re-reads of local files
+FEED_RECENT = timedelta(hours=24)  # what the RECENT section draws from
+FEED_OPEN = timedelta(days=7)  # what `f` opens
 CALENDAR_EVERY = 300
 REVIEW_EVERY = 600
 MODELS_EVERY = 60
@@ -118,6 +120,7 @@ class State:
     undo: list = field(default_factory=list)
     our_mtime: int | None = None  # the tasks file's mtime after the dashboard's last write
     jobs_open: bool = False  # the full job list, not the one-line count
+    feed_open: bool = False  # the feed over the whole frame, not its last few lines
 
 
 def press(state, key):
@@ -139,6 +142,9 @@ def press(state, key):
         return [("undo",)]
     if key == "j":
         state.jobs_open = not state.jobs_open
+        return []
+    if key == "f":
+        state.feed_open = not state.feed_open
         return []
     if key == "x":
         if state.letters:
@@ -310,10 +316,13 @@ def gather(state, sources, now=None):
         shown = monitor.models_view(models, now)
         notes.append("ollama: " + ", ".join(monitor.model_line(x) for x in shown))
     queue_error = []
+    feed_span = FEED_OPEN if state.feed_open else FEED_RECENT
     model = {
         "now": now,
         "mode": state.mode,
         "jobs_open": state.jobs_open,
+        "feed_open": state.feed_open,
+        "feed": _try(lambda: feed.events(now - feed_span, now), [], extra, "feed"),
         "message": state.message,
         "notes": [" · ".join(notes)] if notes else [],
         "sessions": _try(sessions.live, [], extra, "sessions"),
@@ -368,6 +377,33 @@ def once(out=None):
     model = gather(State(), sources)
     cols = shutil.get_terminal_size((100, 40)).columns
     out.write("\n".join(render.frame(model, cols, color=out.isatty())) + "\n")
+
+
+def follow(since="1d", once=False, out=None, sleep=time.sleep):
+    """`lab feed`: the events since `since`, oldest first, then each new one as it is
+    recorded. Plain lines, so it works in any pane or over ssh."""
+    out = out or sys.stdout
+    paint = render.Paint(out.isatty())
+    start = datetime.now(TZ) - feed.span(since)
+    seen = set()
+    try:
+        while True:
+            for e in reversed(feed.events(start)):
+                key = (e["at"], e["source"], e["text"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                color = {"bad": "red", "good": "green"}.get(e["level"], "")
+                stamp = f"{e['at'].astimezone(TZ):%a %d %b %H:%M}"
+                source = render.pad(e["source"], 7)
+                text = paint(render.clean(e["text"]), color)
+                out.write(f"{paint(stamp, 'dim')}  {paint(source, 'dim')}  {text}\n")
+            out.flush()
+            if once:
+                return
+            sleep(LOCAL_EVERY)
+    except KeyboardInterrupt:
+        return
 
 
 def run():
