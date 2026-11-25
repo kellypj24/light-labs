@@ -351,12 +351,17 @@ def _review(m, cols, paint):
         lines.append(INDENT + paint(clip(f"github: {clean(m['review_error'])}", cols - 2), "red"))
     if rows is None:
         return lines if m.get("review_error") else [*lines, INDENT + paint("loading", "dim")]
-    styles = {"ci": ("red", "bold"), "pr": ("yellow",), "review": (), "issue": ("dim",)}
+
+    def quiet(row):
+        return ("dim",) if row["kind"] == "canary" else ()
+
+    styles = {"ci": ("red", "bold"), "pr": ("yellow",), "review": (), "issue": ("dim",),
+              "canary": ("dim",)}  # fmt: skip
     table_rows = [
         [
             (r["kind"], *styles.get(r["kind"], ())),
-            r["repo"] + (f" #{r['number']}" if r["number"] else ""),
-            r["title"],
+            (r["repo"] + (f" #{r['number']}" if r["number"] else ""), *quiet(r)),
+            (r["title"], *quiet(r)),
             (r["detail"], "dim"),
         ]
         for r in rows

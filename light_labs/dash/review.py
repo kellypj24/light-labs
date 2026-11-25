@@ -4,6 +4,8 @@
 - PRs by someone else that ask for his review (Dependabot's are Roll's)
 - a red default branch, from the state Rush's GitHub watch already keeps
 - open issues assigned to him
+- a failing canary: a scheduled workflow (DASH_CANARIES) that tests what main does not
+  yet run on, such as the next Python. It is news, not a broken main, so it comes last
 
 Slow (several `gh` calls), so the dashboard runs it on a background thread and shows the
 cached answer.
@@ -24,6 +26,7 @@ REPOS = (
     "dentasys-modernization",
     "pjksystems-site",
 )
+CANARIES = ("Python next",)
 SEARCH_FIELDS = "repository,number,title,url,author"
 
 
@@ -31,6 +34,12 @@ def repos():
     raw = os.environ.get("DASH_REPOS", "")
     names = [n.strip() for n in raw.split(",") if n.strip()] or list(REPOS)
     return {n if "/" in n else f"{OWNER}/{n}" for n in names}
+
+
+def canaries():
+    raw = os.environ.get("DASH_CANARIES", "")
+    names = [n.strip() for n in raw.split(",") if n.strip()] or list(CANARIES)
+    return {n.casefold() for n in names}
 
 
 def _bot(author):
@@ -48,10 +57,16 @@ def fetch(run=None, watched=None):
     kw = {"run": run} if run else {}
     watched = repos() if watched is None else watched
     status = mcp_server.github_status(**kw)
-    rows = []
+    rows, last, early = [], [], canaries()
     for repo, jobs in sorted(status["ci_failing"].items()):
-        if repo in watched:
-            rows.append(_row("ci", repo, None, "main is red", ", ".join(jobs)))
+        if repo not in watched:
+            continue
+        red = [j for j in jobs if str(j).casefold() not in early]
+        if red:
+            rows.append(_row("ci", repo, None, "main is red", ", ".join(red)))
+        for job in jobs:
+            if job not in red:
+                last.append(_row("canary", repo, None, f"{job} is failing", ""))
     for pr in status["open_prs"]:
         if pr["repo"] not in watched or pr.get("draft"):
             continue
@@ -82,4 +97,4 @@ def fetch(run=None, watched=None):
         repo = (issue.get("repository") or {}).get("nameWithOwner", "")
         if repo in watched:
             rows.append(_row("issue", repo, issue["number"], issue["title"], "", issue["url"]))
-    return rows
+    return rows + last

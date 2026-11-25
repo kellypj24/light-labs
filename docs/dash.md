@@ -16,7 +16,7 @@ lab dash --once   # one frame on stdout (no color when piped)
 | Today | Stored training plan; Google Calendar through the `dash` sign-in | Row number, time, countdown (`done` / `now` / `in 25m`), title, calendar. `▸` marks the current event, or else the next. Declined and cancelled events are left out |
 | Waiting on you from the lab | `var/*/queue/pending`, `var/rush/asks.jsonl` | Counts per robot and kind, escalations, age of the oldest. Read-only: approvals stay in Telegram |
 | Tasks, Waiting on others | `DASH_TASKS` (default `~/tasks/tasks.md`) | Overdue red, due today or tomorrow yellow |
-| Repo review queue | `gh`, and the CI state Rush's GitHub watch keeps | PJ's PRs with failing checks or changes requested, reviews asked of him (not Dependabot's: Roll has those), a red default branch, issues assigned to him. `DASH_REPOS` overrides the repo list in `dash/review.py` |
+| Repo review queue | `gh`, and the CI state Rush's GitHub watch keeps | PJ's PRs with failing checks or changes requested, reviews asked of him (not Dependabot's: Roll has those), a red default branch, issues assigned to him. A failing canary workflow (`Python next`; `DASH_CANARIES` overrides the names) is a dim `canary` row at the end, not a red branch. `DASH_REPOS` overrides the repo list in `dash/review.py` |
 | Jobs | `launchctl list`, Dagster's run store, `var/evals/*.run.json` | A count of healthy launchd and Dagster jobs, with each failing one listed under it; `j` opens the full list. The latest run per eval stage |
 
 Calendar, GitHub and Ollama are read on background threads (every 5, 10 and 1 minutes)
