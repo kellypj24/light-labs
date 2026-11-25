@@ -11,6 +11,9 @@ permissions:
     training  calendar.freebusy          busy blocks only, never event titles
               calendar.calendarlist.readonly   calendar names and ids, to find
                                                "Kelly family calendar" by name
+    brief     calendar.events.readonly   today's events for the morning brief; titles
+                                         stay on the Mac (agents/rush/brief.py)
+              calendar.calendarlist.readonly
     dash      calendar.events.readonly   today's events with titles, for `lab dash`
               calendar.calendarlist.readonly
 
@@ -19,7 +22,9 @@ PKCE, the browser for PJ's sign-in and consent. PJ types his password into Googl
 
 Gmail here has no send method on purpose: nothing in the lab sends email. Calendar has
 no events method on purpose: the training planner sees busy blocks, not what they are.
-Events are read through EventCalendar, which refuses every sign-in but EVENT_READERS. `dash` is not a robot: it is PJ's terminal dashboard, which calls no
+Events, for the `brief` sign-in only, reads them and has no method that writes.
+`dash` reads them through EventCalendar, which refuses every sign-in but
+EVENT_READERS. `dash` is not a robot: it is PJ's terminal dashboard, which calls no
 model, so the titles it reads are shown to PJ and go nowhere else.
 """
 
@@ -45,6 +50,10 @@ SCOPES = {
     "roll": ["https://www.googleapis.com/auth/gmail.modify"],
     "training": [
         "https://www.googleapis.com/auth/calendar.freebusy",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    ],
+    "brief": [
+        "https://www.googleapis.com/auth/calendar.events.readonly",
         "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     ],
     "dash": [
@@ -382,6 +391,41 @@ class Calendar:
                 raise RuntimeError(f"free/busy for {cid}: {reasons}")
             out[cid] = [(b["start"], b["end"]) for b in cal.get("busy", [])]
         return out
+
+
+class Events(Calendar):
+    """Events for one sign-in (the `brief` robot's): time, title and place. Read-only."""
+
+    def events(self, cal_id, start, end):
+        """Events of one calendar overlapping start ≤ t < end (aware datetimes), in start
+        order, recurring ones expanded, cancelled ones dropped. `start` and `end` are ISO
+        strings: a date for an all-day event, else a date-time with its offset."""
+        out, token = [], None
+        path = f"calendars/{urllib.parse.quote(cal_id, safe='')}/events"
+        while True:
+            page = self.call(
+                path,
+                timeMin=start.isoformat(),
+                timeMax=end.isoformat(),
+                singleEvents="true",
+                orderBy="startTime",
+                maxResults=250,
+                fields="items(status,summary,location,hangoutLink,start,end),nextPageToken",
+                **({"pageToken": token} if token else {}),
+            )
+            for e in page.get("items", []):
+                if e.get("status") == "cancelled":
+                    continue
+                all_day = "date" in e["start"]
+                key = "date" if all_day else "dateTime"
+                out.append({
+                    "start": e["start"][key], "end": e["end"][key], "all_day": all_day,
+                    "title": e.get("summary") or "(no title)",
+                    "where": e.get("location") or e.get("hangoutLink") or "",
+                })  # fmt: skip
+            token = page.get("nextPageToken")
+            if not token:
+                return out
 
 
 class EventCalendar(Calendar):

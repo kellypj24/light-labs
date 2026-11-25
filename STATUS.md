@@ -44,11 +44,14 @@ _Updated 2026-11-24._
   marts; credentials are redacted on ingest (#70).
 - Morning brief: `lab brief` (docs/brief.md), Rush's chat at 07:50 with his three oldest
   drafts and their buttons, on the Claude Code login through gate source `rush/brief`;
-  personal mail and client repos are written by code. Not installed yet: `just
-  brief-install` after the merge. Hermes's `morning-brief` cron is paused (its API key
+  personal mail, client repos and calendar titles are written by code. Installed
+  2026-11-24 (`brief` LaunchAgent). The calendar section needs the `brief` Google sign-in
+  (`lab google auth brief`, docs/brief.md); until then it reads `No calendar this run`.
+  The desktop morning task runs beside it until two lab briefs in a row pass review. Hermes's `morning-brief` cron is paused (its API key
   expired 2026-11-19); Hermes still deploys (`~/.hermes/lab/current`).
 - `lab mcp` is registered in Claude Code (user scope) and Claude desktop
-  (docs/hermes.md), both on the `lab` release.
+  (docs/hermes.md), both on the `lab` release. Its `board_tasks` returns tasks without
+  comment text and skips Rush's muted threads.
 - Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
   `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
   memory; Dagster's sensors skip while it is held. `just check` waits up to 20 minutes
@@ -147,22 +150,17 @@ _Updated 2026-11-24._
 
 ## Open decisions
 
-- Morning brief has no calendar section; the desktop task's is its largest (events from
-  the primary and family calendars, conflicts, early starts). Options: a
-  `calendar.events.readonly` sign-in with titles written by code only, or keep the
-  desktop task for calendar alone. Until decided the desktop task can't be retired.
-  `lab dash` has that scope under its own `dash` sign-in (decided 2026-11-24); whether
-  the brief reads events through it is still open.
 - `lab dash`: Rush's launchd job reads as failed whenever his last tick exited non-zero
   (one network timeout does it). Keep that on the top line, or only after two failed
   ticks in a row?
+- Two readers of calendar events landed the same day: `Events` (the `brief` sign-in)
+  and `EventCalendar` (the `dash` sign-in), in `core/google.py`. Fold them into one
+  class, and should `lab dash` read through the `brief` sign-in instead of its own?
 - Morning brief runs daily; the desktop task is weekdays only. Keep daily?
 - Morning brief re-shows Rush's three oldest drafts every day until acted on. Keep, or
   show each draft once?
 - Remove Hermes (gateway, `lab deploy hermes`, docs/hermes.md) once two lab briefs in a
   row pass review: agreed 2026-11-24, not done.
-- `board_tasks` now reaches Claude Code and desktop sessions that have a shell. Drop it
-  from `lab mcp` for those clients, or accept it under their permission prompts?
 
 - Work-hours board drafts from Claude always queue for PJ (auto-send was earned by
   `llama3.1:8b`). Let them auto-send under the same guards? Not decided.

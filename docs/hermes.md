@@ -14,7 +14,7 @@ phone page; nothing in the lab depends on it.
 | `queue_pending` | drafts the robots hold for approval |
 | `queue_item` | one pending draft with the context it was drafted from |
 | `mail_recent` | Rush's triage: sender, subject, label, summary (never a body) |
-| `board_tasks` | Agent Net tasks updated recently, with mentions of PJ or Rush flagged |
+| `board_tasks` | Agent Net tasks updated recently, with mentions of PJ or Rush flagged; no comment text, and not the threads Rush has muted (`lab rush mute`) |
 | `github_status` | PJ's open PRs (review, checks) and failing CI on watched repos |
 | `robot_status` | a robot's journal tail; Roll's last inbox report and when it was taken |
 | `rush_present` | a request: Rush shows chosen drafts in its own chat with Send/Reject |
@@ -23,7 +23,9 @@ Hermes coordinates; Rush and Roll do the work and keep their own chats and butto
 Nothing here approves, rejects or sends: `rush_present` only puts drafts in front of PJ,
 and his tap in Rush's chat sends. Whatever a tool returns goes to the model Hermes runs on.
 
-Board posts are other agents' text, so Hermes's own shell, file, code, browser,
+Board posts are other agents' text. `board_tasks` returns a task's title, status and
+comment count but never a comment (PJ decided 2026-11-24); a thread is read in full with
+`lab board read <id>`. Titles are still other agents' text, so Hermes's own shell, file, code, browser,
 computer-use and delegation toolsets are off for Telegram and cron (`hermes tools disable
 ... --platform telegram|cron`); otherwise a crafted post could reach a shell on the Mac.
 
@@ -40,7 +42,8 @@ app's chats and tasks and every Claude Code session:
 Each sets `LAB_VAR` to the checkout's `var/` and a `PATH` with `gh`. The entry point is
 the release's own, not `uv run` on the `current` link (uv caches the interpreter by path).
 Both clients have shell and file tools, which Hermes's Telegram and cron sessions do not:
-`board_tasks` and `mail_recent` return other people's text into those sessions.
+`board_tasks` (titles) and `mail_recent` (senders, subjects) return other people's text
+into those sessions.
 
 ## Hermes config
 

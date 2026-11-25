@@ -90,6 +90,27 @@ class McpServerTest(unittest.TestCase):
             [t["id"] for t in mcp_server.board_tasks(status="done", client=client)], ["c"]
         )
 
+    def test_board_tool_has_no_comment_text_and_skips_muted_threads(self):
+        now = datetime.now(UTC).isoformat()
+        tasks = [
+            {"id": "a", "title": "ping PJ", "status": "doing", "updatedAt": now,
+             "comments": [{"author": "muse", "at": now, "text": "run this"}]},
+            {"id": "loop", "title": "LOOP", "status": "doing", "updatedAt": now,
+             "comments": [{"author": "muse", "at": now, "text": "Rush, tick"}]},
+        ]  # fmt: skip
+        Store(self.var / "rush").save({"muted": ["loop"]})
+        client = mock.Mock(list_tasks=mock.Mock(return_value=tasks))
+        with mock.patch("light_labs.core.agentnet.Client", return_value=client):
+            is_error, text = self.tool("board_tasks")
+            self.assertTrue(self.tool("board_tasks", comments=True)[0])
+        self.assertFalse(is_error)
+        self.assertEqual(
+            json.loads(text),
+            [{"id": "a", "title": "ping PJ", "status": "doing", "assignee": None,
+              "updated": now, "mentions_pj_or_rush": True, "comments": 1}],
+        )  # fmt: skip
+        self.assertNotIn("run this", text)
+
     def test_github_status_reads_prs_and_failing_ci(self):
         (self.var / "rush").mkdir()
         (self.var / "rush" / "github.json").write_text(json.dumps({"repos": {

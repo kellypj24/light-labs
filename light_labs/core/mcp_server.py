@@ -1,7 +1,9 @@
 """The lab as an MCP server (stdio), so an outside agent such as Hermes can read it.
 
 Reads: the robots' approval queues, Rush's triaged mail, the Agent Net board, GitHub and
-each robot's recent journal. One request tool, `rush_present`: Rush puts chosen drafts in
+each robot's recent journal. The board tool returns no comment text and skips the threads Rush has
+muted: this server's clients (Claude Code, Claude desktop) have a shell, and comments are
+other agents' text. One request tool, `rush_present`: Rush puts chosen drafts in
 front of PJ in its own Telegram chat with its Send/Reject buttons. Nothing here sends,
 posts, approves or rejects; PJ's tap in Rush's chat does that, as before. Mail comes out as Rush stored it:
 sender, subject, label and summary, never a body.
@@ -53,7 +55,9 @@ TOOLS = [
         "name": "board_tasks",
         "description": "Tasks on the Agent Net board (the lab's shared board with Ketan's "
         "agents) updated in the last `hours`, newest first, excluding done unless asked: id, "
-        "title, status, assignee, updated, whether PJ or Rush is mentioned, last comment.",
+        "title, status, assignee, updated, whether PJ or Rush is mentioned, comment count. "
+        "No comment text, and not the threads Rush has muted; PJ reads a thread in full "
+        "with `lab board read <id>`.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -153,7 +157,15 @@ def _when(stamp):
     return datetime.fromisoformat(stamp) if stamp else None
 
 
-def board_tasks(hours=24, status=None, mentions_only=False, limit=20, client=None):
+def _muted():
+    state = config.VAR / "rush" / "state.json"
+    return set(json.loads(state.read_text()).get("muted", [])) if state.exists() else set()
+
+
+def board_tasks(
+    hours=24, status=None, mentions_only=False, limit=20, client=None, comments=True, skip=()
+):
+    """`comments=False` leaves out the last comment; `skip` is task ids to leave out."""
     from light_labs.core.agentnet import Client
 
     tasks = (client or Client()).list_tasks()
@@ -162,26 +174,32 @@ def board_tasks(hours=24, status=None, mentions_only=False, limit=20, client=Non
     out = []
     for t in tasks:
         updated = _when(t.get("updatedAt"))
-        if updated is None or updated < cutoff:
+        if updated is None or updated < cutoff or t["id"] in skip:
             continue
         if (status and t.get("status") != status) or (not status and t.get("status") == "done"):
             continue
-        comments = t.get("comments") or []
+        thread = t.get("comments") or []
         text = " ".join([t.get("title") or "", t.get("description") or ""]
-                        + [c.get("text") or "" for c in comments])  # fmt: skip
+                        + [c.get("text") or "" for c in thread])  # fmt: skip
         mentioned = bool(MENTION.search(text))
         if mentions_only and not mentioned:
             continue
-        last = comments[-1] if comments else None
-        out.append({
+        row = {
             "id": t["id"], "title": t.get("title"), "status": t.get("status"),
             "assignee": t.get("assignee"), "updated": t.get("updatedAt"),
-            "mentions_pj_or_rush": mentioned, "comments": len(comments),
-            "last_comment": last and {"author": last.get("author"), "at": last.get("at"),
-                                      "text": (last.get("text") or "")[:EXCERPT]},
-        })  # fmt: skip
+            "mentions_pj_or_rush": mentioned, "comments": len(thread),
+        }  # fmt: skip
+        if comments:
+            last = thread[-1] if thread else None
+            row["last_comment"] = last and {"author": last.get("author"), "at": last.get("at"),
+                                            "text": (last.get("text") or "")[:EXCERPT]}  # fmt: skip
+        out.append(row)
     out.sort(key=lambda t: t["updated"], reverse=True)
     return out[: max(1, int(limit))]
+
+
+def board_tool(hours=24, status=None, mentions_only=False, limit=20):
+    return board_tasks(hours, status, mentions_only, limit, comments=False, skip=_muted())
 
 
 def _gh(*args, run=subprocess.run):
@@ -261,7 +279,7 @@ HANDLERS = {
     "queue_pending": queue_pending,
     "queue_item": queue_item,
     "mail_recent": mail_recent,
-    "board_tasks": board_tasks,
+    "board_tasks": board_tool,
     "github_status": github_status,
     "robot_status": robot_status,
     "rush_present": rush_present,
