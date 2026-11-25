@@ -76,6 +76,24 @@ class StatsTest(unittest.TestCase):
         self.assertNotIn("Cool-down", body)
         self.assertNotIn("Old Lift", body)
 
+    def test_the_markdown_export_carries_the_same_numbers(self):
+        self.build()
+        text = stats.markdown(stats.report(self.db))
+        self.assertIn("## This week (2026-W47)", text)
+        self.assertIn("| 3 / 6 | 2 | 89 | 1.42, above 1.3: the next plan deloads |", text)
+        self.assertIn(
+            "| W47 | 3/6 | 50% | 89 "
+            "| 1 missed sick or away, ticked 47%, 78% in the slot, 1 ticked only |",
+            text,
+        )
+        self.assertIn("| W45 | no plan |  | 0 |  |", text)
+        self.assertIn("| Bench &lt;Press> | 55 lb × 5 | 64 | +2.5 | Nov 19 |", text)
+        self.assertIn("| Pull Up | bodyweight × 4 |  |  | Nov 18 |", text)
+        self.assertIn("| Bag 4 x 3 min | Fri Nov 20 |", text)
+        self.assertNotIn("Old Lift", text)
+        self.assertIn("Nothing logged yet.", stats.markdown({"weeks": []}))
+        self.assertEqual(stats._cell("a|b"), "a\\|b")
+
     def test_an_empty_or_missing_mart_says_so(self):
         self.build("CREATE SCHEMA marts;")
         with self.assertRaises(stats.Unavailable) as e:

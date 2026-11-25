@@ -227,6 +227,25 @@ def training_note(args):
         raise SystemExit("lab training note <text> | --undo")
 
 
+def training_export(args):
+    """The training marts as Markdown, to stdout or a file (written whole, then renamed)."""
+    from light_labs.training import stats
+
+    try:
+        text = stats.markdown(stats.report())
+    except stats.Unavailable as e:
+        sys.exit(f"lab training export: {e}")  # an earlier export stays as it was
+    if not args.out:
+        print(text, end="")
+        return
+    out = Path(args.out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(out)
+    print(f"wrote {out}")
+
+
 def training_app(args):
     """Workouts, the plan as a phone web app. Publish with `tailscale serve`."""
     from light_labs.training import app
@@ -1184,6 +1203,8 @@ def parser():
         "--week", help="ISO week, e.g. 2026-W47 (default: next week)"
     )
     tcmd.add_parser("tick", help="what Rush's hourly tick runs: plan, send, ask for files")
+    exp = tcmd.add_parser("export", help="the training marts as Markdown (what /stats shows)")
+    exp.add_argument("--out", help="write this file instead of stdout")
     app_p = tcmd.add_parser("app", help="Workouts: the plan as a phone web app (tailnet only)")
     app_p.add_argument("--port", type=int, default=8788)
     app_p.add_argument(

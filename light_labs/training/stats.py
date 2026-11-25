@@ -1,4 +1,5 @@
-"""The training marts as a page in the Workouts app (`/stats`).
+"""The training marts as a page in the Workouts app (`/stats`) and as Markdown
+(`lab training export`, for a viewer outside the lab).
 
 Sessions done against the plan, load, lift progress, and what was ticked in the app, from
 var/lab.duckdb. Strong and Health are the record of what was trained; check-offs are shown
@@ -197,3 +198,90 @@ def render(rep):
         "Ticks show here about twenty minutes after the last one.</p>"
     )
     return "".join(out)
+
+
+def _cell(text):
+    """Table-cell text: an exercise name can't end the cell or start markup."""
+    return str(text).replace("\\", "\\\\").replace("|", "\\|").replace("<", "&lt;")
+
+
+def markdown(rep):
+    """The same report as `render`, as a Markdown page."""
+    weeks = rep["weeks"]
+    out = ["# Training progress", ""]
+    if not weeks:
+        return "\n".join(out + ["Nothing logged yet.", ""])
+    w = weeks[0]
+    done, planned = w["completed_sessions"], w["planned_sessions"]
+    ratio = w["acute_chronic_ratio"]
+    if ratio is None:
+        load = "none yet (nothing logged in the last four weeks)"
+    else:
+        over = float(ratio) > DELOAD_ABOVE
+        load = f"{float(ratio):.2f}" + (
+            f", above {DELOAD_ABOVE}: the next plan deloads" if over else ""
+        )
+    sessions = f"{done} / {planned}" if planned is not None else "–"
+    this_week = (
+        f"| {sessions} | {_num(w['checked_sessions'])} "
+        f"| {w['training_minutes'] or 0:.0f} | {load} |"
+    )
+    out += [
+        f"## This week ({w['iso_week']})",
+        "",
+        "| Sessions logged | Ticked in Workouts | Minutes | Load vs four-week average |",
+        "|---|---|---|---|",
+        this_week,
+        "",
+        f"## Last {len(weeks)} weeks",
+        "",
+        "Sessions logged in Strong or Health against sessions due.",
+        "",
+        "| Week | Logged / due | Adherence | Minutes | Notes |",
+        "|---|---|---:|---:|---|",
+    ]
+    for w in weeks:
+        has_plan = w["planned_sessions"] is not None
+        notes = []
+        if w["missed_sick_or_away"]:
+            notes.append(f"{w['missed_sick_or_away']} missed sick or away")
+        if w["days_used"]:
+            notes.append(
+                f"ticked {_pct(w['checked_share'])}, {_pct(w['in_slot_share'])} in the slot"
+            )
+        if w["checked_only_sessions"]:
+            notes.append(f"{w['checked_only_sessions']} ticked only")
+        out.append(
+            f"| {w['iso_week'][5:]} "
+            f"| {f'{w["completed_sessions"]}/{w["due_sessions"]}' if has_plan else 'no plan'} "
+            f"| {_pct(w['adherence_rate']) if has_plan else ''} "
+            f"| {w['training_minutes'] or 0:.0f} | {', '.join(notes)} |"
+        )
+    if rep["lifts"]:
+        out += [
+            "",
+            "## Lifts",
+            "",
+            "| Lift | Top set | e1RM | Change | Last |",
+            "|---|---|---:|---:|---|",
+        ]
+        for lift in rep["lifts"]:
+            if lift["is_bodyweight_lift"] and not lift["top_set_weight"]:
+                top = f"bodyweight × {_num(lift['top_set_reps'])}"
+            else:
+                top = f"{_num(lift['top_set_weight'])} lb × {_num(lift['top_set_reps'])}"
+            best, change = lift["best_e1rm"], lift["e1rm_change"]
+            when = f"{lift['last_session_date']:%b} {lift['last_session_date'].day}"
+            out.append(
+                f"| {_cell(lift['exercise'])} | {top} | {'' if best is None else f'{best:.0f}'} "
+                f"| {f'{change:+.1f}' if change else ''} | {when} |"
+            )
+    if rep["only_here"]:
+        out += ["", "## Only recorded in Workouts", "", "| Item | Day |", "|---|---|"]
+        out += [
+            f"| {_cell(r['label'][:LABEL_CLIP])} | {r['plan_date']:%a %b} {r['plan_date'].day} |"
+            for r in rep["only_here"]
+        ]
+    built = rep["built"]
+    out += ["", f"Data as of {built:%a %b} {built.day}, {built:%H:%M}.", ""]
+    return "\n".join(out)
