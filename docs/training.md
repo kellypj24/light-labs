@@ -194,6 +194,10 @@ remote: its own process (`workouts` LaunchAgent, `just workouts-install`), port 
 | Notes box | `Log note`, `Replan` (around the note when there is one) and `Undo last note`: what `/note`, `/replan` and `/note undo` run. The reading or the outcome shows at the top of the page; a replan takes about a minute and the page reloads itself until it ends |
 | `/stats` | The training marts (`training/stats.py`): this week's sessions logged and ticked, the acute:chronic load against the 1.3 deload line, twelve weeks of adherence with minutes and app use, each lift's latest top set and e1RM change, and ticked items nothing else records. As fresh as Dagster's last run; the page says when |
 
+`lab training export [--out FILE]` writes the same report as Markdown, for a viewer
+outside the lab (`~/batcomputer` runs it into its vault). Numbers and exercise names
+only, as on the page.
+
 Check-offs append to `var/training/checks.jsonl` (day, a hash of the exercise or text, set
 number, done or not), so a replan that keeps an exercise keeps its marks. Strong and
 Health stay the record of what was trained; check-offs add to it and never change it.

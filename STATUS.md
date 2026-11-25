@@ -134,7 +134,8 @@ _Updated 2026-11-24._
    never a replacement: `checked_sessions` beside `completed_sessions` in
    `mart_training_adherence`, and `mart_workouts_usage` for how the app is used and for
    items nothing else records (bag rounds). They do not reach the planner. `/stats` in the app shows the
-   training marts. Rush's remote no longer has a Training tab. `/note` and `/replan <text>` log events, chores and sick
+   training marts; `lab training export` writes them as Markdown, which `~/batcomputer`
+   (private repo, localhost viewer of projects, ideas and training) reads. Rush's remote no longer has a Training tab. `/note` and `/replan <text>` log events, chores and sick
    days (`training/notes.py`, read by `llama3.1:8b`) and the planner works around them.
    A note sent while Ollama is down is saved unread and read by the first tick that
    reaches it.
