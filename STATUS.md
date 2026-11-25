@@ -3,18 +3,18 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-11-24._
+_Updated 2026-11-25._
 
 ## Now
 
-- PJ uses this 16 GB MacBook for work (Teams, Memex) until an always-on Mac mini takes
-  the local models; Claude Code is on a Max plan. Work hours (`LAB_WORK_HOURS`, weekdays
-  08:00-17:00, `core/workhours.py`): no local model loads, heavy jobs other than
-  `just check` need `--force`, Roll sits out of chores (big brother decides alone). Rush
-  drafts and triages through `RUSH_WORK_BRAIN` (`claude:sonnet`), drafts all queued;
-  personal mail waits for 17:00. Outside work hours each local model unloads when its
-  step ends. Rush ticks at :07. `RUSH_MAIL_MODEL=llama3.1:8b` in `.env` meanwhile (one
-  ~5 GB model per tick instead of 8b + 14b).
+- PJ's work (Teams, Memex) moved to a separate machine 2026-11-25, so work hours are off
+  on this 16 GB MacBook: `LAB_WORK_HOURS=` (empty) in `.env`. Local models load at any
+  hour, heavy jobs need no `--force`, Roll takes part in chores, personal mail is not
+  held, and `RUSH_WORK_BRAIN` is unused. The mechanism stays (`core/workhours.py`,
+  default 08:00-17:00 when the variable is unset). Claude Code is on a Max plan. Each
+  local model still unloads when its step ends. Rush ticks at :07.
+  `RUSH_MAIL_MODEL=llama3.1:8b` is still in `.env` (one ~5 GB model per tick instead of
+  8b + 14b).
 - Scheduled jobs (Rush's tick and phone page, Dagster, Roll's chores) run the `lab`
   release in `~/.light-labs/lab`, not the checkout (`lab deploy lab`, docs/ci-cd.md
   Deploys); data stays in the checkout's `var/`. `lab git land` deploys each merge once
@@ -172,8 +172,9 @@ _Updated 2026-11-24._
 - Remove Hermes (gateway, `lab deploy hermes`, docs/hermes.md) once two lab briefs in a
   row pass review: agreed 2026-11-24, not done.
 
-- Work-hours board drafts from Claude always queue for PJ (auto-send was earned by
-  `llama3.1:8b`). Let them auto-send under the same guards? Not decided.
+- Work hours are off in `.env` only. Delete the mechanism (`core/workhours.py`,
+  `RUSH_WORK_BRAIN`, the `heavy`/chores/notes checks), or keep it for the Mac mini move?
+- With the memory free in the day: put `RUSH_MAIL_MODEL` back to the 8b + 14b pair?
 - Cap Ollama at one loaded model (`OLLAMA_MAX_LOADED_MODELS=1`)? Now one line in
   `ops/com.pjkelly.light-labs.ollama.plist` plus `just ollama-install`; unset today.
   Rush's explicit unloads cover the hourly tick without it.
