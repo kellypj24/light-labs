@@ -50,7 +50,8 @@ _Updated 2026-11-23._
   The desktop morning task runs beside it until two lab briefs in a row pass review. Hermes's `morning-brief` cron is paused (its API key
   expired 2026-11-19); Hermes still deploys (`~/.hermes/lab/current`).
 - `lab mcp` is registered in Claude Code (user scope) and Claude desktop
-  (docs/hermes.md), both on the `lab` release.
+  (docs/hermes.md), both on the `lab` release. Its `board_tasks` returns tasks without
+  comment text and skips Rush's muted threads.
 - Heavy jobs (`just eval`, `lab roll keep`, `just check`) hold
   `~/.cache/light-labs/heavy.lock`, refuse a busy machine and stop on critical heat or
   memory; Dagster's sensors skip while it is held. `just check` waits up to 20 minutes
@@ -149,8 +150,6 @@ _Updated 2026-11-23._
   show each draft once?
 - Remove Hermes (gateway, `lab deploy hermes`, docs/hermes.md) once two lab briefs in a
   row pass review: agreed 2026-11-24, not done.
-- `board_tasks` now reaches Claude Code and desktop sessions that have a shell. Drop it
-  from `lab mcp` for those clients, or accept it under their permission prompts?
 
 - Work-hours board drafts from Claude always queue for PJ (auto-send was earned by
   `llama3.1:8b`). Let them auto-send under the same guards? Not decided.
