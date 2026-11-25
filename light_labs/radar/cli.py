@@ -42,8 +42,10 @@ def register(sub) -> None:
     hb.add_argument("--snippets", action="store_true", help="compile in 140-char previews")
     hcmd.add_parser("install", help="LaunchAgent: daily 06:20 and on `lab radar sync`")
     hcmd.add_parser("uninstall", help="remove the LaunchAgent and binary")
+    pg = cmd.add_parser("page", help="serve the weekly digest on 127.0.0.1 (tailnet page)")
+    pg.add_argument("--port", type=int, default=None)
     sc = cmd.add_parser(
-        "schedule", help="LaunchAgents on the release: sync 06:30, weekly Fri 15:00"
+        "schedule", help="LaunchAgents on the release: sync 06:30, weekly Fri 15:00, the page"
     )
     sc.add_argument("action", choices=["install", "uninstall"])
 
@@ -57,6 +59,7 @@ def run(args) -> int:
         "person": person,
         "doctor": doctor_cmd,
         "purge": purge,
+        "page": page_cmd,
         "helper": helper_cmd,
         "schedule": schedule_cmd,
     }[args.cmd]
@@ -146,7 +149,7 @@ def bootstrap(args) -> None:
 
 
 def weekly(args) -> None:
-    from light_labs.radar import circles, digest, metrics
+    from light_labs.radar import circles, digest, metrics, notice
     from light_labs.radar.db import connect
 
     paths, settings = _setup()
@@ -163,6 +166,11 @@ def weekly(args) -> None:
     dated.write_text(local)
     dated.chmod(0o600)
     print(f"wrote {dated}")
+    # The page's copy is the shared render: a snippet never reaches it. The marker tells
+    # Rush a digest is ready and carries the date only (radar/notice.py).
+    paths.page_digest.write_text(shared)
+    paths.page_digest.chmod(0o600)
+    notice.mark(when.date())
     if settings.output_dir:
         settings.output_dir.mkdir(parents=True, exist_ok=True)
         out = settings.output_dir / "weekly-digest.md"
@@ -229,8 +237,12 @@ def doctor_cmd(args) -> int:
 
 
 def purge(args) -> int:
+    from light_labs.radar import notice
+
     paths, settings = _setup()
     targets = [
+        paths.page_digest,
+        *notice.clear(),
         paths.db,
         paths.db.with_suffix(".duckdb.wal"),
         paths.inbox,
@@ -259,6 +271,14 @@ def purge(args) -> int:
         "purged. The helper and the schedule stay: "
         "`lab radar helper uninstall`, `lab radar schedule uninstall`."
     )
+    return 0
+
+
+def page_cmd(args) -> int:
+    from light_labs.radar import page
+
+    paths, _ = _setup()
+    page.serve(paths.page_digest, port=args.port or page.PORT)
     return 0
 
 
@@ -299,5 +319,5 @@ def schedule_cmd(args) -> int:
             print(f"installed {p}")
     else:
         schedule.uninstall()
-        print("removed the sync and weekly LaunchAgents")
+        print("removed the sync, weekly and page LaunchAgents")
     return 0

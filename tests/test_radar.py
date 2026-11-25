@@ -314,6 +314,14 @@ class TestPipeline(RadarCase):
         weekly = schedule.plist("weekly", self.paths, lab)
         self.assertEqual(weekly["StartCalendarInterval"], {"Weekday": 5, "Hour": 15, "Minute": 0})
         self.assertTrue(weekly["StandardOutPath"].startswith(str(self.paths.logs)))
+        # Rush looks for the marker in the lab's var/, not the release's (ops/*.plist).
+        self.assertEqual(weekly["EnvironmentVariables"]["LAB_VAR"], str(schedule.LAB_VAR))
+        self.assertNotIn("LAB_VAR", sync["EnvironmentVariables"])
+        page = schedule.plist("page", self.paths, lab)
+        self.assertEqual(page["ProgramArguments"], [str(lab), "radar", "page"])
+        self.assertTrue(page["KeepAlive"] and page["RunAtLoad"])
+        self.assertNotIn("StartCalendarInterval", page)
+        self.assertIn("/usr/local/bin", page["EnvironmentVariables"]["PATH"])  # tailscale
 
     def test_broken_source_is_isolated(self):
         class Broken:
@@ -348,6 +356,7 @@ class TestCli(RadarCase):
         out = io.StringIO()
         with (
             mock.patch.dict("os.environ", {"RADAR_HOME": str(self.paths.home)}),
+            mock.patch("light_labs.config.VAR", self.tmp / "var"),
             redirect_stdout(out),
             self.assertRaises(SystemExit) as exit_,
         ):
@@ -367,11 +376,22 @@ class TestCli(RadarCase):
         self.lab("weekly", "--as-of", day)
         self.assertTrue((self.tmp / "drive" / "weekly-digest.md").exists())
         self.assertTrue((self.paths.digests / "2026-11-06.md").exists())
+        # The page's copy never has a snippet, whatever the dated copy got; the marker
+        # for Rush holds the date and nothing else.
+        self.lab("weekly", "--as-of", day, "--with-snippets")
+        served = self.paths.page_digest.read_text()
+        self.assertIn("## Reach out this week", served)
+        self.assertNotIn("snippet", served)
+        self.assertEqual(self.paths.page_digest.stat().st_mode & 0o777, 0o600)
+        marker = self.tmp / "var" / "radar" / "ready.json"
+        self.assertEqual(json.loads(marker.read_text()), {"date": day})
         self.assertIn("email: bob@example.com [exact]", self.lab("person", "Bob"))
         self.lab("purge", "--yes")
         for h in list(logging.getLogger("radar").handlers):
             h.close()
         self.assertFalse(self.paths.db.exists())
+        self.assertFalse(self.paths.page_digest.exists())
+        self.assertFalse(marker.exists())
         self.assertFalse((self.tmp / "drive" / "weekly-digest.md").exists())
         self.assertTrue(self.paths.circles.exists())  # PJ's edits stay without --all
 

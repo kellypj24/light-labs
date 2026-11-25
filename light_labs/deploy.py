@@ -7,7 +7,7 @@ release. Branch work in the checkout can't reach them; only a deploy can.
 
     lab deploy hermes                 origin/main
     lab deploy hermes --ref my-branch a branch, until main is deployed again
-    lab deploy radar                  Radar's scheduled jobs (no service to restart)
+    lab deploy radar                  Radar's scheduled jobs and its page
     lab deploy lab                    Rush's tick and phone page, Dagster, Roll's chores
     lab deploy lab --rollback         back to the release before the current one
 
@@ -87,9 +87,27 @@ def restart_lab(out=sys.stdout, run=subprocess.run, ps=None):
             out.write(f"restarted: {name}\n")
 
 
+# Radar's page (radar/schedule.py installs it). Named here, not imported: a deploy must
+# not need Radar's dependencies.
+RADAR_PAGE = "com.pjkelly.relationship-radar.page"
+
+
+def restart_radar(out=sys.stdout, run=subprocess.run):
+    """Put Radar's page on the new release; its sync and digest are a new process each
+    run. Left alone when launchd hasn't loaded it."""
+    if running_since(RADAR_PAGE, run) is None:
+        out.write("radar page: not running, left alone\n")
+        return
+    target = f"gui/{os.getuid()}/{RADAR_PAGE}"
+    done = run(["launchctl", "kickstart", "-k", target], capture_output=True, check=False)
+    if done.returncode:
+        raise DeployError(f"could not restart the radar page: `launchctl kickstart -k {target}`")
+    out.write("restarted: radar page\n")
+
+
 # What a deploy that changes the commit runs: a command, or a function of `out`.
 # The Hermes gateway drains in-flight runs, then launchd starts it on the new release.
-RESTART = {"hermes": ("hermes", "gateway", "restart"), "lab": restart_lab}
+RESTART = {"hermes": ("hermes", "gateway", "restart"), "lab": restart_lab, "radar": restart_radar}
 
 
 class DeployError(RuntimeError):

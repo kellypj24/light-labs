@@ -175,6 +175,28 @@ class DeployCase(unittest.TestCase):
         deploy.restart_lab(out, run=run, ps=ps)
         return [c[3].rsplit(".", 1)[1] for c in calls if c[:2] == ["launchctl", "kickstart"]], out
 
+    def test_the_radar_restart_kicks_the_page_only_when_it_runs(self):
+        for pid, kicked, said in (
+            ('"PID" = 77;', 1, "restarted: radar page"),
+            ("", 0, "left alone"),
+        ):
+            calls = []
+
+            def run(cmd, pid=pid, calls=calls, **kw):
+                calls.append(cmd)
+                out = f"{{\n\t{pid}\n}};\n" if cmd[:2] == ["launchctl", "list"] else ""
+                if cmd[0] == "ps":
+                    out = "Mon Nov  9 21:27:23 2026\n"
+                return mock.Mock(returncode=0, stdout=out)
+
+            out = io.StringIO()
+            deploy.restart_radar(out, run=run)
+            kicks = [c for c in calls if c[:2] == ["launchctl", "kickstart"]]
+            self.assertEqual(len(kicks), kicked)
+            self.assertIn(said, out.getvalue())
+            if kicks:
+                self.assertTrue(kicks[0][3].endswith("/com.pjkelly.relationship-radar.page"))
+
     def test_the_lab_restart_spares_a_dagster_run_and_unloaded_jobs(self):
         idle = "  1  0.0 /usr/bin/python3 dagster-daemon run\n"
         self.assertEqual(self.lab_restart(idle)[0], ["rush-remote", "dagster"])

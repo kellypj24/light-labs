@@ -1,10 +1,11 @@
-"""LaunchAgents for the daily sync and the weekly digest.
+"""LaunchAgents for the daily sync, the weekly digest and the digest's page.
 
 They run `lab radar` from the deployed release (`lab deploy radar`, a fixed commit of
 origin/main with its own locked environment), never from a checkout: a branch someone
 left checked out, or a dependency resolved at run time, would otherwise run at 06:30 with
 the database in reach. They need no special permission: only the helper (its own
-LaunchAgent, 06:20) reads Messages and Contacts.
+LaunchAgent, 06:20) reads Messages and Contacts. The page (radar/page.py) stays up and
+listens on 127.0.0.1; `tailscale serve` publishes it (docs/radar.md).
 """
 
 from __future__ import annotations
@@ -21,7 +22,15 @@ JOBS = {
     "sync": ({"Hour": 6, "Minute": 30}, ["sync"]),
     # Friday 15:00 local time.
     "weekly": ({"Weekday": 5, "Hour": 15, "Minute": 0}, ["weekly"]),
+    # No calendar: kept running.
+    "page": (None, ["page"]),
 }
+# The lab's var/, as ops/*.plist name it: `weekly` leaves Rush's marker there
+# (radar/notice.py), and a release's own var/ is not where Rush looks.
+LAB_VAR = Path.home() / "light-labs" / "var"
+# launchd's PATH lacks /usr/local/bin, where the tailscale CLI lives; the page asks it for
+# this machine's tailnet name and login.
+PAGE_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 def label(job: str) -> str:
@@ -40,16 +49,23 @@ def release_lab() -> Path:
 def plist(job: str, paths: Paths, lab: Path) -> dict[str, object]:
     when, args = JOBS[job]
     log = str(paths.logs / f"{job}.log")
-    return {
+    out: dict[str, object] = {
         "Label": label(job),
         "ProgramArguments": [str(lab), "radar", *args],
-        "StartCalendarInterval": when,
-        "RunAtLoad": False,
         "StandardOutPath": log,
         "StandardErrorPath": log,
-        "EnvironmentVariables": {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"},
         "ProcessType": "Background",
     }
+    if when is None:
+        return out | {
+            "RunAtLoad": True,
+            "KeepAlive": True,
+            "EnvironmentVariables": {"PATH": PAGE_PATH},
+        }
+    env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}
+    if job == "weekly":
+        env["LAB_VAR"] = str(LAB_VAR)
+    return out | {"StartCalendarInterval": when, "RunAtLoad": False, "EnvironmentVariables": env}
 
 
 def install(paths: Paths) -> list[Path]:
