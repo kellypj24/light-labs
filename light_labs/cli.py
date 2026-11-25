@@ -742,7 +742,7 @@ def cmd_google(args):
     if args.cmd == "auth":
         account, scopes = google.authorize(args.who, login_hint=args.account)
         print(f"{args.who}: signed in to {account} with {', '.join(scopes)}")
-    elif args.cmd == "check" and args.who == "training":
+    elif args.cmd == "check" and args.who in ("training", "dash"):
         cals = google.Calendar(args.who, args.account).calendars()
         print(f"{args.who}: {args.account}, {len(cals)} calendars: {', '.join(n for _, n in cals)}")
     elif args.cmd == "check":
@@ -1014,6 +1014,13 @@ def cmd_brief(args):
     print(f"sent; {len(shown)} draft(s) shown with buttons")
 
 
+def cmd_dash(args):
+    """PJ's terminal dashboard (docs/dash.md)."""
+    from light_labs.dash import app
+
+    app.once() if args.once else app.run()
+
+
 def cmd_board(args):
     """Agent Net for Auto, through Rush: read the cache (or --live), post as Auto."""
     from light_labs.agents import rush
@@ -1074,6 +1081,8 @@ def parser():
     brief_p = sub.add_parser("brief", help="Rush's morning brief (printed unless --send)")
     brief_p.add_argument("--send", action="store_true", help="text it in Rush's chat")
     brief_p.add_argument("--no-claude", action="store_true", help="fixed layout, no model")
+    dash_p = sub.add_parser("dash", help="terminal dashboard: what needs PJ today")
+    dash_p.add_argument("--once", action="store_true", help="print one frame and exit")
     python_p = sub.add_parser("python", help="Python version pins (any repo)")
     pycmd = python_p.add_subparsers(dest="cmd", required=True)
     pins_p = pycmd.add_parser(
@@ -1260,7 +1269,7 @@ def parser():
         ("check", "prove a token works"),
     ):
         gp = gocmd.add_parser(name, help=text)
-        gp.add_argument("who", choices=["rush", "roll", "training"])
+        gp.add_argument("who", choices=["rush", "roll", "training", "dash"])
         gp.add_argument(
             "--account",
             required=name == "check",
@@ -1328,7 +1337,7 @@ def main(argv=None):
     if args.robot == "radar":
         raise SystemExit(radar_cli.run(args))
     if args.robot in ("roster", "skills", "git", "google", "roll", "mcp", "deploy", "board",
-                      "heavy", "python", "brief"):  # fmt: skip
+                      "heavy", "python", "brief", "dash"):  # fmt: skip
         globals()[f"cmd_{args.robot}"](args)
         return
     if args.robot in ("evals", "queue", "claude", "calibration", "training"):

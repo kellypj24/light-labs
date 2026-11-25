@@ -3,7 +3,7 @@
 Current state only; history is in git and the PRs. Update this file in the same PR as the
 work it describes.
 
-_Updated 2026-11-23._
+_Updated 2026-11-24._
 
 ## Now
 
@@ -80,6 +80,11 @@ _Updated 2026-11-23._
   `share_digest: true`. `lab radar doctor` passes. Run Radar commands with `uv run lab
   radar ...` from the checkout: the bare `lab` tool install is unlocked (DuckDB 1.5.6,
   can't read the 2.0 database).
+- `lab dash` (`light_labs/dash`, docs/dash.md): PJ's terminal dashboard. Live Claude
+  sessions, today's calendar and training session, the robots' queues, tasks from
+  `~/tasks/tasks.md`, the repo review queue, launchd and Dagster health. No model;
+  the only write is a task checkbox on a keypress. Calendar reads through the `dash`
+  sign-in (`calendar.events.readonly`), signed in 2026-11-24.
 - Python is pinned (`.python-version`, 3.13). `just pins` and CI fail on a project without
   a pin or a Docker/CI version that differs; `lab python status --all` audits every
   checkout in `~`; `python-next.yml` runs the tests on the next minor weekly
@@ -146,6 +151,11 @@ _Updated 2026-11-23._
   the primary and family calendars, conflicts, early starts). Options: a
   `calendar.events.readonly` sign-in with titles written by code only, or keep the
   desktop task for calendar alone. Until decided the desktop task can't be retired.
+  `lab dash` has that scope under its own `dash` sign-in (decided 2026-11-24); whether
+  the brief reads events through it is still open.
+- `lab dash`: Rush's launchd job reads as failed whenever his last tick exited non-zero
+  (one network timeout does it). Keep that on the top line, or only after two failed
+  ticks in a row?
 - Morning brief runs daily; the desktop task is weekdays only. Keep daily?
 - Morning brief re-shows Rush's three oldest drafts every day until acted on. Keep, or
   show each draft once?

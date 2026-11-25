@@ -73,6 +73,7 @@ evals/                 Go runner, stages (fixtures + bar), contestants
 analytics/             dbt-duckdb project: raw eval samples → staging → marts
 light_labs/orchestration/  Dagster: landing assets + the dbt project, jobs, sensors
 light_labs/radar/      Relationship Radar: a toolset for robots, data in ~/.relationship-radar
+light_labs/dash/       `lab dash`: PJ's terminal dashboard (no model, read-only but for task checkboxes)
 tests/                 unit tests (no network, no models)
 ops/                   launchd jobs (Rush, Roll, Dagster, Ollama), Dagster instance config, GitHub settings
 var/                   runtime state, results and the lab database; git-ignored
@@ -156,6 +157,10 @@ such as Hermes: `uv run lab mcp`. Hermes runs it from a deployed commit (`lab de
 [--ref <branch>]`; `lab git land` redeploys main). Setup and config:
 [docs/hermes.md](docs/hermes.md). Claude desktop and Claude Code are registered against the same server
 (same doc). The morning brief is Rush's own: `lab brief` ([docs/brief.md](docs/brief.md)).
+
+`lab dash` is PJ's terminal dashboard: Claude Code sessions waiting on him, today's
+calendar and training session, the robots' queues, his tasks, the repo review queue and
+job health ([docs/dash.md](docs/dash.md)).
 
 Relationship Radar (`lab radar`): who to reach out to this week, from message and contact
 metadata. Setup, permissions and the privacy model: [docs/radar.md](docs/radar.md).

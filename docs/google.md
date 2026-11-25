@@ -11,6 +11,8 @@ Keychain (`light-labs-google-<robot>`):
 |---|---|---|
 | Rush | `gmail.readonly` | triage, summaries |
 | Roll | `gmail.modify` | archive and label (inbox cleanup) |
+| training | `calendar.freebusy`, `calendar.calendarlist.readonly` | busy blocks for the planner, never titles |
+| dash | `calendar.events.readonly`, `calendar.calendarlist.readonly` | today's events for `lab dash` ([dash.md](dash.md)); not a robot, no model reads them |
 
 ```
 lab google auth rush --account kellypj24@gmail.com    # browser opens; PJ signs in and approves

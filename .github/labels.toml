@@ -76,6 +76,11 @@ color = "fbca04"
 description = "Training logs and the weekly workout planner"
 paths = ["light_labs/training/", "docs/training.md", "docs/plans/training.md", "tests/test_training"]
 
+[areas.dash]
+color = "0e8a16"
+description = "lab dash, PJ's terminal dashboard"
+paths = ["light_labs/dash/", "docs/dash.md", "tests/test_dash"]
+
 [areas.skills]
 color = "d4c5f9"
 description = "Skills for Auto and the robots"
