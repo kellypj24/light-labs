@@ -46,6 +46,11 @@ class Paths:
         return self.home / "digests"
 
     @property
+    def page_digest(self) -> Path:
+        """The copy `lab radar page` serves: the shared render, so never a snippet."""
+        return self.home / "page" / "weekly-digest.md"
+
+    @property
     def logs(self) -> Path:
         return self.home / "logs"
 
@@ -75,7 +80,15 @@ class Paths:
 
     def ensure(self) -> None:
         """Create the private directories (0700): they hold who PJ talks to."""
-        for d in (self.home, self.inbox, self.contacts_dir, self.digests, self.logs, self.bin):
+        for d in (
+            self.home,
+            self.inbox,
+            self.contacts_dir,
+            self.digests,
+            self.page_digest.parent,
+            self.logs,
+            self.bin,
+        ):
             d.mkdir(parents=True, exist_ok=True)
             d.chmod(0o700)
 

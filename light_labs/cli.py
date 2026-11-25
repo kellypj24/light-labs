@@ -305,6 +305,7 @@ def rush_tick(args, store, rush):
         if not ok:
             store.journal(f"could not schedule the next wake: {detail}")
     _training(store, rush)  # before the board: an unreachable edge must not hold the plan
+    _radar(store, rush)
     client = Client()
     if not phone.wait_for_edge(lambda: client.inbox(rush.ACTOR)):
         store.journal("edge unreachable after waiting; tick skipped")
@@ -334,6 +335,22 @@ def _training(store, rush):
             store.journal(f"training: {line}")
     except Exception as e:  # noqa: BLE001 - the board and mail still run
         store.journal(f"training skipped: {e}")
+
+
+def _radar(store, rush):
+    """The link to Radar's weekly page (radar/notice.py), over Telegram. Rush reads a
+    date from the lab's var/ and never Radar's folder; iMessage is not used, so the link
+    travels the one channel PJ agreed to."""
+    if not rush.TELEGRAM_CHAT:
+        return
+    try:
+        from light_labs.radar import notice
+
+        _, send, _ = _phone(store, rush)
+        for line in notice.tick(send):
+            store.journal(f"radar: {line}")
+    except Exception as e:  # noqa: BLE001 - the board and mail still run
+        store.journal(f"radar skipped: {e}")
 
 
 def _mail(store, rush):

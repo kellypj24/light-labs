@@ -76,7 +76,7 @@ commit of `origin`, exported with `git archive` and installed with `uv sync --lo
 |---|---|---|
 | `lab` (`~/.light-labs/lab`) | Rush's hourly tick and phone page, the Workouts app, the Dagster daemon, Roll's chores (`ops/*.plist`) | The phone page and Workouts; the Dagster daemon unless a run is in progress. The tick and chores are a new process each time |
 | `hermes` (`~/.hermes/lab`) | Hermes's lab MCP server | `hermes gateway restart` |
-| `radar` (docs/radar.md) | Radar's scheduled sync and digest | none |
+| `radar` (docs/radar.md) | Radar's scheduled sync and digest, and its page | the page, when it is running |
 
 The `lab` jobs start `current/.venv/bin/lab` itself (its shebang names that release's
 interpreter). `uv run --project <target>/current` is not safe there: uv caches the

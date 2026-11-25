@@ -22,7 +22,7 @@ lab radar helper install       # LaunchAgent: daily 06:20 and on `lab radar sync
 lab radar sync
 lab radar bootstrap            # proposes circles; the first one fills an empty circles.yaml
 lab deploy radar               # the release the scheduled jobs run (origin/main)
-lab radar schedule install     # LaunchAgents: sync daily 06:30, weekly Friday 15:00
+lab radar schedule install     # LaunchAgents: sync daily 06:30, weekly Friday 15:00, the page
 lab radar doctor               # checks every permission and freshness, with fixes
 ```
 
@@ -34,6 +34,33 @@ origin/main with its locked environment (`lab deploy radar`), not a checkout: a 
 left checked out can't run at 06:30, and nothing is resolved or installed at run time.
 `lab git land` redeploys it after a merge; `lab radar doctor` warns when a LaunchAgent
 still points at a checkout.
+
+## The page
+
+The weekly picks reach PJ's phone as a page on the tailnet, not as a message: a Telegram
+bot chat is stored by Telegram, readable there, and would hold names, circles and
+birthdays.
+
+| Part | What it does |
+|---|---|
+| `lab radar weekly` | Also writes `page/weekly-digest.md` (0600), the same render as the shared digest, so never a snippet. Leaves `var/radar/ready.json` in the lab's var/ holding the digest's date and nothing else |
+| `lab radar page` | Serves that one file on `127.0.0.1:8789`, read-only: GET `/` and no other route, no form, no database connection. A LaunchAgent from `schedule install` keeps it running on the release; a deploy restarts it |
+| Rush's hourly tick | Texts "Weekly picks are ready." and `RADAR_URL` over Telegram, once per new date in the marker (`radar/notice.py`). Rush reads the date and never Radar's folder. Without `RADAR_URL`, or without Telegram, nothing is sent |
+
+Access is Workouts' (`core/tailnet.py`): the page answers only this Mac's tailnet name
+and PJ's tailnet login, which `tailscale serve` adds to each request. Names are
+HTML-escaped and the page loads nothing from anywhere (`default-src 'none'`).
+
+Publish it once, after `schedule install`:
+
+```
+tailscale serve --bg --http 8081 http://127.0.0.1:8789
+# .env
+RADAR_URL=http://<mac>.<tailnet>.ts.net:8081
+```
+
+It needs the Mac awake and the phone on the tailnet. The page shows the latest digest
+only; earlier ones stay in `digests/`.
 
 `lab radar person "<name>"` shows one person's identities and timeline.
 `lab radar sync --source addressbook` runs one source.
@@ -144,7 +171,8 @@ Identity resolution has four steps, in order:
   reads them, then they are deleted. A snippets build (`helper build --snippets`) adds
   the preview of the newest message per chat, direction and sender, never the history.
   Anything running as you can start the helper and read its export.
-- **What leaves the machine:** nothing by default. With `share_digest: true` in
+- **What leaves the machine:** nothing by default. The page (above) is read over the
+  tailnet by PJ's own devices, and Rush's text carries a link, not a name. With `share_digest: true` in
   `config.yaml`, `weekly` also writes the shared digest (`weekly-digest.md` in the Google
   Drive folder, or `output_dir`); installing Drive for Desktop alone shares nothing. It has names, circles, days since contact, birthdays, reasons and openers, and
   it is read by Google and by the cloud Claude task. Snippets never go in it. They appear
@@ -153,8 +181,8 @@ Identity resolution has four steps, in order:
   from strangers (email display names, LinkedIn). The digest puts them on one line,
   escapes Markdown, caps their length, and its header tells the reader to treat them as
   data, not instructions.
-- **Wipe:** `lab radar purge` deletes the database, exports, digests, logs, review file and the
-  shared digest. `--all` also deletes your config; `lab radar helper uninstall` and
+- **Wipe:** `lab radar purge` deletes the database, exports, digests, the page's copy and Rush's
+  marker, logs, review file and the shared digest. `--all` also deletes your config; `lab radar helper uninstall` and
   `lab radar schedule uninstall` remove the helper and the LaunchAgents. Remove the FDA entry in Settings by hand.
 
 ## Adding a source
@@ -193,8 +221,9 @@ Because interactions are keyed by identity, a merge or split never rewrites hist
   (claude-toolkit) blocks shell commands that name the folder or print its data
   (`lab radar person`). Both are speed bumps for an honest session, not a sandbox.
 - **Data:** the data stays in `~/.relationship-radar/radar.duckdb`, not `var/lab.duckdb`.
-  Dagster doesn't touch it, and it never feeds the marts.
-- **Robots:** Rush delivering the weekly picks is the next step. A robot that drafts
+  Dagster doesn't touch it, and it never feeds the marts. The one Radar file in var/ is
+  `radar/ready.json`, a date.
+- **Robots:** Rush texts the link to the weekly page and reads no Radar data. A robot that drafts
   openers in PJ's voice is an idea issue.
-- **Tests:** `tests/test_radar.py` and `tests/test_radar_helper.py` use synthetic fixtures
+- **Tests:** `tests/test_radar.py`, `tests/test_radar_page.py` and `tests/test_radar_helper.py` use synthetic fixtures
   in `tests/fixtures/radar/`. The Swift tests run on macOS only. `just check` runs both.

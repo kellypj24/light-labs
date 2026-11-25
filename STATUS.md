@@ -80,7 +80,12 @@ _Updated 2026-11-24._
   live (#120–#122): the scheduled jobs run the `lab deploy radar` release, the helper
   has a build record (`doctor` fails a mismatched cdhash), a snippets build exports only
   the newest message per chat and sender, the shared digest is off unless
-  `share_digest: true`. `lab radar doctor` passes. Run Radar commands with `uv run lab
+  `share_digest: true`. `lab radar doctor` passes. The weekly picks are a read-only
+  tailnet page (`lab radar page`, 127.0.0.1:8789 behind `tailscale serve`, Workouts'
+  access checks); `weekly` leaves a date in `var/radar/ready.json` and Rush's tick texts
+  the link (`RADAR_URL`), never a name. Built, not yet switched on: after the merge PJ
+  runs `lab radar schedule install`, the `tailscale serve` line in docs/radar.md, and
+  sets `RADAR_URL` in `.env`. Run Radar commands with `uv run lab
   radar ...` from the checkout: the bare `lab` tool install is unlocked (DuckDB 1.5.6,
   can't read the 2.0 database).
 - `lab dash` (`light_labs/dash`, docs/dash.md): PJ's terminal dashboard. Live Claude
@@ -109,7 +114,8 @@ _Updated 2026-11-24._
 2. `dependabot-merge` fight (mega-man, proto-14b, bass) once the backlog is through and
    the stage is re-generated; bar 0.95 and zero false yeses, per tier, patch first.
 3. #71 Roll lands Auto's PRs by risk tier, shadow mode first.
-4. Radar: Rush delivers the weekly picks (Telegram), the first robot tie-in. Slice 2
+4. Radar: switch the page on (above) and check it on the phone against real data, which
+   no Claude session can do. Slice 2
    LinkedIn export, slice 3 Gmail (`gmail.metadata`) and Calendar (`calendar.readonly`),
    asked before requesting scopes. Left from the security review, all low:
    `digest.safe()` strips Markdown but an 80-character name still fits an instruction,
@@ -173,7 +179,8 @@ _Updated 2026-11-24._
 - Radar's shared digest is off by default (`share_digest: true` in its config turns it
   on; installing Drive for Desktop alone shares nothing). It would carry names, circles
   and birthdays to Google and a cloud Claude task, which the `radar` gate rule forbids
-  elsewhere: decide before turning it on or sending picks over Telegram.
+  elsewhere: decide before turning it on. Picks over Telegram is decided (2026-11-25):
+  no, a tailnet page and a link.
 - Radar helper: the binary, approved copy and build record are writable by code running
   as PJ. Install the binary root-owned (needs sudo) so only the FDA grant and a root
   path stand between a swap and Messages? Not built.
