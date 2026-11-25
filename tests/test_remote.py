@@ -217,7 +217,9 @@ class RemoteTest(unittest.TestCase):
         location = e.exception.headers["Location"]
         e.exception.close()
         self.assertRegex(location, r"^/after/[A-Za-z0-9_-]{8,}$")
-        self.assertNotIn("t1", location)  # nothing from the request reaches the header
+        # Nothing from the request reaches the header: it is /after/ and a token the page
+        # minted. (Not `assertNotIn("t1", location)`: a random token can spell "t1".)
+        self.assertIn(location.removeprefix("/after/"), self.remote.after)
         code, body = self.call(location)
         self.assertEqual(code, 200)
         self.assertIn('<div class="flash">Posted</div>', body)
