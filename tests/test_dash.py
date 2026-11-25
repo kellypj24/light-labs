@@ -736,6 +736,25 @@ class ReviewTest(unittest.TestCase):
         )  # fmt: skip
         self.assertEqual(rows[-1]["title"], "fix the thing")
 
+    def test_a_failing_canary_is_its_own_row_after_everything_else(self):
+        status = {"open_prs": [], "ci_failing": {
+            "kellypj24/scouter": ["Python next"],
+            "kellypj24/recoup": ["CI", "python next"],
+        }}  # fmt: skip
+        watched = {"kellypj24/scouter", "kellypj24/recoup"}
+        with mock.patch.object(review.mcp_server, "github_status", return_value=status), \
+                mock.patch.object(review.mcp_server, "_gh", lambda *a, **kw: []):  # fmt: skip
+            rows = review.fetch(watched=watched)
+            with mock.patch.dict(os.environ, {"DASH_CANARIES": "nightly"}):
+                strict = review.fetch(watched=watched)
+        self.assertEqual(
+            [(r["kind"], r["repo"], r["title"], r["detail"]) for r in rows],
+            [("ci", "recoup", "main is red", "CI"),
+             ("canary", "recoup", "python next is failing", ""),
+             ("canary", "scouter", "Python next is failing", "")],
+        )  # fmt: skip
+        self.assertEqual([r["kind"] for r in strict], ["ci", "ci"])
+
     def test_repo_names_default_to_pjs_account(self):
         with mock.patch.dict(os.environ, {"DASH_REPOS": "scouter, someone/else"}):
             self.assertEqual(review.repos(), {"kellypj24/scouter", "someone/else"})
