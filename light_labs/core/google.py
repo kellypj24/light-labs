@@ -14,6 +14,8 @@ permissions:
     brief     calendar.events.readonly   today's events for the morning brief; titles
                                          stay on the Mac (agents/rush/brief.py)
               calendar.calendarlist.readonly
+    dash      calendar.events.readonly   today's events with titles, for `lab dash`
+              calendar.calendarlist.readonly
 
 `lab google auth <robot>` runs the installed-app flow: a loopback listener on 127.0.0.1,
 PKCE, the browser for PJ's sign-in and consent. PJ types his password into Google only.
@@ -21,6 +23,9 @@ PKCE, the browser for PJ's sign-in and consent. PJ types his password into Googl
 Gmail here has no send method on purpose: nothing in the lab sends email. Calendar has
 no events method on purpose: the training planner sees busy blocks, not what they are.
 Events, for the `brief` sign-in only, reads them and has no method that writes.
+`dash` reads them through EventCalendar, which refuses every sign-in but
+EVENT_READERS. `dash` is not a robot: it is PJ's terminal dashboard, which calls no
+model, so the titles it reads are shown to PJ and go nowhere else.
 """
 
 import base64
@@ -48,6 +53,10 @@ SCOPES = {
         "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     ],
     "brief": [
+        "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    ],
+    "dash": [
         "https://www.googleapis.com/auth/calendar.events.readonly",
         "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     ],
@@ -306,6 +315,15 @@ class Gmail:
             )  # fmt: skip
 
 
+# Sign-ins allowed to read events (titles, links, PJ's own RSVP). Never a robot: an event
+# on the family calendar is other people's data, and a robot's prompt may reach Claude.
+EVENT_READERS = {"dash"}
+EVENT_FIELDS = (
+    "nextPageToken,items(id,status,summary,start,end,htmlLink,hangoutLink,location,"
+    "attendees(self,responseStatus))"
+)
+
+
 class Calendar:
     """Free/busy for one sign-in: calendar names and ids, and busy intervals. There is no
     events method: titles, attendees and notes are never fetched."""
@@ -405,6 +423,36 @@ class Events(Calendar):
                     "title": e.get("summary") or "(no title)",
                     "where": e.get("location") or e.get("hangoutLink") or "",
                 })  # fmt: skip
+            token = page.get("nextPageToken")
+            if not token:
+                return out
+
+
+class EventCalendar(Calendar):
+    """Calendar plus the events themselves, for EVENT_READERS only. Attendees other than
+    PJ and notes are never fetched."""
+
+    def __init__(self, robot, account, **kw):
+        if robot not in EVENT_READERS:
+            raise PermissionError(f"{robot} may not read calendar events")
+        super().__init__(robot, account, **kw)
+
+    def events(self, cid, start, end):
+        """Events on calendar `cid` overlapping start ≤ t < end (aware datetimes), in
+        start order, recurring ones expanded. Only EVENT_FIELDS are asked for."""
+        out, token = [], None
+        while True:
+            page = self.call(
+                f"calendars/{urllib.parse.quote(cid, safe='')}/events",
+                timeMin=start.isoformat(),
+                timeMax=end.isoformat(),
+                singleEvents="true",
+                orderBy="startTime",
+                maxResults=250,
+                fields=EVENT_FIELDS,
+                **({"pageToken": token} if token else {}),
+            )
+            out += page.get("items", [])
             token = page.get("nextPageToken")
             if not token:
                 return out
